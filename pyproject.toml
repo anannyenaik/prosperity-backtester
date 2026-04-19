@@ -1,0 +1,23 @@
+[project]
+name = "r1mcbt"
+version = "0.1.0"
+description = "Monte Carlo backtester for Round 1 (ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT)"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []  # stdlib only for runtime
+
+[project.optional-dependencies]
+analysis = ["pandas>=2.0", "numpy>=1.24"]
+
+[project.scripts]
+r1mcbt = "r1bt.__main__:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["r1bt", "r1bt.*"]
+
+[tool.setuptools.package-data]
+r1bt = ["calibration.json"]

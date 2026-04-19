@@ -1,0 +1,1030 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>r1mcbt team dashboard</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --surface: #ffffff;
+      --surface-2: #eef3f8;
+      --line: #d9e2ec;
+      --line-2: #c7d3df;
+      --text: #182230;
+      --muted: #5c6978;
+      --accent: #0f766e;
+      --accent-2: #2563eb;
+      --good: #16784f;
+      --bad: #b42336;
+      --warn: #946200;
+      --shadow: 0 14px 34px rgba(21, 32, 43, .10);
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      min-height: 100vh;
+    }
+    header {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 28px 24px 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: end;
+    }
+    h1 {
+      margin: 0;
+      font-size: 34px;
+      letter-spacing: 0;
+      font-weight: 780;
+    }
+    .subtitle { color: var(--muted); margin-top: 8px; max-width: 920px; line-height: 1.55; }
+    .header-badges, .pill-row, .tab-row, .run-list { display: flex; gap: 10px; flex-wrap: wrap; }
+    .badge, .tab, .run-pill {
+      padding: 9px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1;
+    }
+    .tab, .run-pill { cursor: pointer; transition: .18s ease; user-select: none; }
+    .tab.active, .run-pill.active { color: var(--text); border-color: #7fc8be; background: #dff6f1; }
+    .layout { max-width: 1600px; margin: 0 auto; padding: 0 24px 44px; }
+    .shell { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 18px; }
+    .sidebar, .content-card, .drop, .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .sidebar { padding: 16px; align-self: start; position: sticky; top: 16px; }
+    .content { min-width: 0; }
+    .drop {
+      padding: 20px;
+      margin-bottom: 16px;
+      cursor: pointer;
+      text-align: center;
+      color: var(--muted);
+      border-style: dashed;
+      background: #fbfdff;
+    }
+    .drop strong { color: var(--text); }
+    .stack { display: grid; gap: 16px; }
+    .controls {
+      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    label { display:block; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+    select, input, button {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--line-2);
+      background: #ffffff;
+      color: var(--text);
+      font: inherit;
+    }
+    button { cursor: pointer; }
+    .grid { display:grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap:16px; }
+    .card { padding: 18px; min-width: 0; }
+    .span-3 { grid-column: span 3; }
+    .span-4 { grid-column: span 4; }
+    .span-5 { grid-column: span 5; }
+    .span-6 { grid-column: span 6; }
+    .span-7 { grid-column: span 7; }
+    .span-8 { grid-column: span 8; }
+    .span-12 { grid-column: span 12; }
+    .eyebrow { color: var(--muted); text-transform: uppercase; letter-spacing: .12em; font-size: 12px; margin-bottom: 10px; }
+    .metric { font-size: 34px; font-weight: 780; letter-spacing: 0; }
+    .metric.good { color: var(--good); }
+    .metric.bad { color: var(--bad); }
+    .mini { color: var(--muted); font-size: 13px; line-height: 1.5; }
+    canvas { width: 100% !important; height: 320px; max-height: 360px; cursor: crosshair; }
+    .chart-tooltip {
+      position: fixed;
+      z-index: 50;
+      pointer-events: none;
+      min-width: 150px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--line-2);
+      background: #ffffff;
+      color: var(--text);
+      box-shadow: var(--shadow);
+      font-size: 12px;
+      line-height: 1.45;
+      opacity: 0;
+      transform: translate(10px, 10px);
+      transition: opacity .08s ease;
+    }
+    .table-wrap { overflow:auto; border-radius: 8px; border: 1px solid var(--line); }
+    table { width:100%; border-collapse: collapse; font-size:13px; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align:left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; background: var(--surface-2); }
+    tr:hover td { background: #f8fbfe; }
+    .kv { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+    .kv div { padding: 10px 12px; border-radius: 8px; background: #fbfdff; border: 1px solid var(--line); }
+    .kv strong { display:block; font-size: 12px; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+    .empty { color: var(--muted); text-align:center; padding: 28px 18px; }
+    .section-title { font-size: 18px; font-weight: 700; margin: 0 0 14px; }
+    .hidden { display:none !important; }
+    .help { font-size: 12px; color: var(--muted); margin-top: 8px; }
+    .split { display:flex; justify-content:space-between; gap:16px; align-items:center; }
+    @media (max-width: 1180px) {
+      .shell { grid-template-columns: 1fr; }
+      .sidebar { position: static; }
+      .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .span-3,.span-4,.span-5,.span-6,.span-7,.span-8,.span-12 { grid-column: span 12; }
+    }
+    @media (max-width: 760px) {
+      header, .layout { padding-left: 14px; padding-right: 14px; }
+      .controls { grid-template-columns: 1fr; }
+      h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>r1mcbt Round 1 research cockpit</h1>
+      <div class="subtitle">Replay, Monte Carlo, calibration, optimisation and behaviour analysis for ASH_COATED_OSMIUM and INTARIAN_PEPPER_ROOT. Load one or more dashboard bundles and inspect them like a research product, not a static report.</div>
+    </div>
+    <div class="header-badges">
+      <div class="badge">Replay</div>
+      <div class="badge">Monte Carlo</div>
+      <div class="badge">Calibration</div>
+      <div class="badge">Optimisation</div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="drop" id="dropZone">
+      <strong>Drop one or more dashboard.json files here</strong><br />
+      or click to load multiple run bundles for side-by-side analysis
+      <input id="fileInput" type="file" accept="application/json,.json" multiple hidden />
+    </div>
+
+    <div class="shell">
+      <aside class="sidebar stack">
+        <div>
+          <div class="eyebrow">Loaded runs</div>
+          <div id="runList" class="run-list"></div>
+          <div class="help">Load multiple replay, Monte Carlo, calibration or optimisation bundles. The compare view can contrast them directly.</div>
+        </div>
+        <div>
+          <div class="eyebrow">Tabs</div>
+          <div id="tabRow" class="tab-row">
+            <div class="tab active" data-tab="overview">Overview</div>
+            <div class="tab" data-tab="replay">Replay</div>
+            <div class="tab" data-tab="montecarlo">Monte Carlo</div>
+            <div class="tab" data-tab="calibration">Calibration</div>
+            <div class="tab" data-tab="optimization">Optimisation</div>
+            <div class="tab" data-tab="compare">Compare</div>
+          </div>
+        </div>
+        <div>
+          <div class="eyebrow">Run notes</div>
+          <div id="activeMeta" class="kv"></div>
+        </div>
+      </aside>
+
+      <main class="content">
+        <div class="content-card controls">
+          <div>
+            <label for="activeRun">Active run</label>
+            <select id="activeRun"></select>
+          </div>
+          <div>
+            <label for="compareRun">Compare against</label>
+            <select id="compareRun"></select>
+          </div>
+          <div>
+            <label for="productSelect">Product</label>
+            <select id="productSelect">
+              <option value="ASH_COATED_OSMIUM">ASH_COATED_OSMIUM</option>
+              <option value="INTARIAN_PEPPER_ROOT">INTARIAN_PEPPER_ROOT</option>
+            </select>
+          </div>
+          <div>
+            <label for="sampleSelect">Sample session</label>
+            <select id="sampleSelect"><option value="">Auto</option></select>
+          </div>
+          <div>
+            <label for="rangeSelect">Timestamp window</label>
+            <select id="rangeSelect">
+              <option value="all">Full run</option>
+              <option value="start">First 20%</option>
+              <option value="middle">Middle 20%</option>
+              <option value="end">Last 20%</option>
+            </select>
+          </div>
+        </div>
+
+        <section id="view-overview" class="stack"></section>
+        <section id="view-replay" class="stack hidden"></section>
+        <section id="view-montecarlo" class="stack hidden"></section>
+        <section id="view-calibration" class="stack hidden"></section>
+        <section id="view-optimization" class="stack hidden"></section>
+        <section id="view-compare" class="stack hidden"></section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      runs: [],
+      activeRunName: null,
+      compareRunName: null,
+      activeTab: 'overview',
+      charts: new Map(),
+    };
+
+    const els = {
+      dropZone: document.getElementById('dropZone'),
+      fileInput: document.getElementById('fileInput'),
+      runList: document.getElementById('runList'),
+      tabRow: document.getElementById('tabRow'),
+      activeRun: document.getElementById('activeRun'),
+      compareRun: document.getElementById('compareRun'),
+      productSelect: document.getElementById('productSelect'),
+      sampleSelect: document.getElementById('sampleSelect'),
+      rangeSelect: document.getElementById('rangeSelect'),
+      activeMeta: document.getElementById('activeMeta'),
+      views: {
+        overview: document.getElementById('view-overview'),
+        replay: document.getElementById('view-replay'),
+        montecarlo: document.getElementById('view-montecarlo'),
+        calibration: document.getElementById('view-calibration'),
+        optimization: document.getElementById('view-optimization'),
+        compare: document.getElementById('view-compare'),
+      }
+    };
+
+    const formatNum = (v, digits = 2) => v == null || Number.isNaN(Number(v)) ? '-' : Number(v).toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits });
+    const formatInt = (v) => v == null || Number.isNaN(Number(v)) ? '-' : Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
+    const html = String.raw;
+
+    class MiniChart {
+      static tooltip = null;
+
+      constructor(ctx, config) {
+        this.ctx = ctx;
+        this.canvas = ctx.canvas;
+        this.config = config;
+        this.hitPoints = [];
+        this.onMove = this.onMove.bind(this);
+        this.onLeave = this.onLeave.bind(this);
+        this.canvas.addEventListener('mousemove', this.onMove);
+        this.canvas.addEventListener('mouseleave', this.onLeave);
+        this.resizeHandler = () => this.draw();
+        window.addEventListener('resize', this.resizeHandler, { passive: true });
+        this.draw();
+      }
+
+      destroy() {
+        this.canvas.removeEventListener('mousemove', this.onMove);
+        this.canvas.removeEventListener('mouseleave', this.onLeave);
+        window.removeEventListener('resize', this.resizeHandler);
+        this.hideTooltip();
+      }
+
+      setupCanvas() {
+        const rect = this.canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const width = Math.max(320, Math.floor(rect.width || this.canvas.parentElement.clientWidth || 320));
+        const height = Math.max(280, Math.floor(rect.height || 320));
+        if (this.canvas.width !== width * dpr || this.canvas.height !== height * dpr) {
+          this.canvas.width = width * dpr;
+          this.canvas.height = height * dpr;
+        }
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        this.width = width;
+        this.height = height;
+      }
+
+      theme() {
+        return {
+          text: '#182230',
+          muted: '#5c6978',
+          grid: '#d9e2ec',
+          axis: '#9aa8b6',
+          palette: ['#0f766e', '#2563eb', '#16784f', '#946200', '#b42336', '#64748b'],
+        };
+      }
+
+      dataSets() {
+        return (this.config.data?.datasets || []).map((dataset, index) => ({
+          ...dataset,
+          colour: dataset.borderColor || dataset.backgroundColor || this.theme().palette[index % this.theme().palette.length],
+          fill: dataset.backgroundColor || dataset.borderColor || this.theme().palette[index % this.theme().palette.length],
+          chartType: dataset.type || this.config.type || 'line',
+        }));
+      }
+
+      normalisePoint(value, label, index) {
+        if (value && typeof value === 'object' && 'x' in value && 'y' in value) {
+          return { x: Number(value.x), y: Number(value.y), label: value.x };
+        }
+        const xFromLabel = Number(label);
+        return { x: Number.isFinite(xFromLabel) ? xFromLabel : index, y: Number(value), label };
+      }
+
+      collectPoints() {
+        const labels = this.config.data?.labels || [];
+        const sets = this.dataSets();
+        const pointsBySet = sets.map((dataset) => {
+          const data = dataset.data || [];
+          return data.map((value, index) => this.normalisePoint(value, labels[index], index))
+            .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+        });
+        return { sets, pointsBySet, points: pointsBySet.flat() };
+      }
+
+      bounds(points) {
+        if (!points.length) return null;
+        let xmin = Math.min(...points.map(point => point.x));
+        let xmax = Math.max(...points.map(point => point.x));
+        let ymin = Math.min(...points.map(point => point.y));
+        let ymax = Math.max(...points.map(point => point.y));
+        if (xmin === xmax) { xmin -= 1; xmax += 1; }
+        if (ymin === ymax) { ymin -= 1; ymax += 1; }
+        const yPad = Math.max(1, (ymax - ymin) * 0.08);
+        ymin -= yPad;
+        ymax += yPad;
+        if (ymin > 0) ymin = 0;
+        if (ymax < 0) ymax = 0;
+        return { xmin, xmax, ymin, ymax };
+      }
+
+      project(point, bounds, plot) {
+        const x = plot.left + ((point.x - bounds.xmin) / (bounds.xmax - bounds.xmin)) * plot.width;
+        const y = plot.top + (1 - ((point.y - bounds.ymin) / (bounds.ymax - bounds.ymin))) * plot.height;
+        return { x, y };
+      }
+
+      format(value) {
+        if (!Number.isFinite(Number(value))) return '-';
+        return Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+      }
+
+      drawAxes(bounds, plot) {
+        const ctx = this.ctx;
+        const theme = this.theme();
+        ctx.strokeStyle = theme.grid;
+        ctx.lineWidth = 1;
+        ctx.fillStyle = theme.muted;
+        ctx.font = '12px Inter, system-ui, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i <= 4; i += 1) {
+          const value = bounds.ymin + (bounds.ymax - bounds.ymin) * (i / 4);
+          const y = plot.top + plot.height - plot.height * (i / 4);
+          ctx.beginPath();
+          ctx.moveTo(plot.left, y);
+          ctx.lineTo(plot.left + plot.width, y);
+          ctx.stroke();
+          ctx.fillText(this.format(value), plot.left - 8, y);
+        }
+        if (bounds.ymin < 0 && bounds.ymax > 0) {
+          const zero = this.project({ x: bounds.xmin, y: 0 }, bounds, plot).y;
+          ctx.strokeStyle = '#b8c4d0';
+          ctx.beginPath();
+          ctx.moveTo(plot.left, zero);
+          ctx.lineTo(plot.left + plot.width, zero);
+          ctx.stroke();
+        }
+        ctx.strokeStyle = theme.axis;
+        ctx.beginPath();
+        ctx.moveTo(plot.left, plot.top);
+        ctx.lineTo(plot.left, plot.top + plot.height);
+        ctx.lineTo(plot.left + plot.width, plot.top + plot.height);
+        ctx.stroke();
+      }
+
+      drawLegend(sets) {
+        const ctx = this.ctx;
+        ctx.font = '12px Inter, system-ui, sans-serif';
+        ctx.textBaseline = 'top';
+        let x = 74;
+        let y = 14;
+        for (const dataset of sets) {
+          if (!dataset.label) continue;
+          ctx.fillStyle = dataset.colour;
+          ctx.fillRect(x, y + 3, 12, 3);
+          ctx.fillStyle = '#182230';
+          ctx.fillText(dataset.label, x + 18, y);
+          x += Math.min(220, ctx.measureText(dataset.label).width + 44);
+          if (x > this.width - 150) {
+            x = 74;
+            y += 18;
+          }
+        }
+      }
+
+      drawBars(sets, pointsBySet, bounds, plot) {
+        const labels = this.config.data?.labels || [];
+        const groupCount = Math.max(1, labels.length || Math.max(...pointsBySet.map(points => points.length), 1));
+        const activeSets = sets.filter(dataset => dataset.chartType === 'bar');
+        const groupWidth = plot.width / groupCount;
+        const barWidth = Math.max(2, Math.min(24, groupWidth / Math.max(1, activeSets.length) - 2));
+        const zeroY = this.project({ x: bounds.xmin, y: 0 }, bounds, plot).y;
+        activeSets.forEach((dataset, setIndex) => {
+          const points = pointsBySet[sets.indexOf(dataset)] || [];
+          this.ctx.fillStyle = dataset.fill;
+          points.forEach((point, index) => {
+            const x = plot.left + index * groupWidth + (groupWidth - barWidth * activeSets.length) / 2 + setIndex * barWidth;
+            const y = this.project(point, bounds, plot).y;
+            const top = Math.min(y, zeroY);
+            const height = Math.max(1, Math.abs(zeroY - y));
+            this.ctx.fillRect(x, top, barWidth, height);
+            this.hitPoints.push({ x: x + barWidth / 2, y, dataset: dataset.label, value: point.y, label: point.label });
+          });
+        });
+      }
+
+      drawLines(sets, pointsBySet, bounds, plot) {
+        sets.forEach((dataset, setIndex) => {
+          if (dataset.chartType === 'bar') return;
+          const points = (pointsBySet[setIndex] || []).slice().sort((a, b) => a.x - b.x);
+          const projected = points.map(point => ({ ...point, ...this.project(point, bounds, plot) }));
+          if (!projected.length) return;
+          const showLine = dataset.chartType !== 'scatter' && dataset.showLine !== false;
+          this.ctx.strokeStyle = dataset.colour;
+          this.ctx.fillStyle = dataset.colour;
+          this.ctx.lineWidth = 2;
+          if (showLine) {
+            this.ctx.beginPath();
+            projected.forEach((point, index) => {
+              if (index === 0) this.ctx.moveTo(point.x, point.y);
+              else this.ctx.lineTo(point.x, point.y);
+            });
+            this.ctx.stroke();
+          }
+          const pointRadius = dataset.chartType === 'scatter' || dataset.showLine === false ? 3 : 2;
+          projected.forEach(point => {
+            this.ctx.beginPath();
+            this.ctx.arc(point.x, point.y, pointRadius, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.hitPoints.push({ x: point.x, y: point.y, dataset: dataset.label, value: point.y, label: point.label });
+          });
+        });
+      }
+
+      drawEmpty() {
+        this.ctx.clearRect(0, 0, this.width, this.height);
+        this.ctx.fillStyle = '#5c6978';
+        this.ctx.font = '14px Inter, system-ui, sans-serif';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText('No chart data for this selection', this.width / 2, this.height / 2);
+      }
+
+      draw() {
+        this.setupCanvas();
+        this.hitPoints = [];
+        const { sets, pointsBySet, points } = this.collectPoints();
+        this.ctx.clearRect(0, 0, this.width, this.height);
+        if (!points.length) {
+          this.drawEmpty();
+          return;
+        }
+        const plot = { left: 72, top: 42, width: this.width - 92, height: this.height - 78 };
+        const bounds = this.bounds(points);
+        this.drawAxes(bounds, plot);
+        if ((this.config.type || 'line') === 'bar') this.drawBars(sets, pointsBySet, bounds, plot);
+        this.drawLines(sets, pointsBySet, bounds, plot);
+        this.drawLegend(sets);
+      }
+
+      tooltip() {
+        if (!MiniChart.tooltip) {
+          MiniChart.tooltip = document.createElement('div');
+          MiniChart.tooltip.className = 'chart-tooltip';
+          document.body.appendChild(MiniChart.tooltip);
+        }
+        return MiniChart.tooltip;
+      }
+
+      onMove(event) {
+        if (!this.hitPoints.length) return;
+        const rect = this.canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        let best = null;
+        let bestDistance = Infinity;
+        for (const point of this.hitPoints) {
+          const distance = Math.hypot(point.x - x, point.y - y);
+          if (distance < bestDistance) {
+            best = point;
+            bestDistance = distance;
+          }
+        }
+        if (!best || bestDistance > 28) {
+          this.hideTooltip();
+          return;
+        }
+        const tip = this.tooltip();
+        tip.innerHTML = `<strong>${best.dataset || 'Series'}</strong><br>${best.label ?? ''}<br>${this.format(best.value)}`;
+        tip.style.left = `${event.clientX}px`;
+        tip.style.top = `${event.clientY}px`;
+        tip.style.opacity = '1';
+      }
+
+      onLeave() {
+        this.hideTooltip();
+      }
+
+      hideTooltip() {
+        if (MiniChart.tooltip) MiniChart.tooltip.style.opacity = '0';
+      }
+    }
+
+    function card(span, eyebrow, title, subtitle = '') {
+      return `<div class="card ${span}"><div class="eyebrow">${eyebrow}</div><div class="metric">${title}</div><div class="mini">${subtitle}</div></div>`;
+    }
+
+    function metricCard(span, eyebrow, value, subtitle = '', tone = '') {
+      return `<div class="card ${span}"><div class="eyebrow">${eyebrow}</div><div class="metric ${tone}">${value}</div><div class="mini">${subtitle}</div></div>`;
+    }
+
+    function panel(span, title, inner) {
+      return `<div class="card ${span}"><div class="section-title">${title}</div>${inner}</div>`;
+    }
+
+    function tableFromRows(rows, preferred = []) {
+      if (!rows || !rows.length) return `<div class="empty">No rows available for this view.</div>`;
+      const headers = [...preferred, ...Object.keys(rows.reduce((acc, row) => Object.assign(acc, row), {})).filter(k => !preferred.includes(k))];
+      const body = rows.map(row => `<tr>${headers.map(h => `<td>${renderCell(row[h])}</td>`).join('')}</tr>`).join('');
+      return `<div class="table-wrap"><table><thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div>`;
+    }
+
+    function renderCell(value) {
+      if (value == null) return '-';
+      if (typeof value === 'number') return Math.abs(value) >= 1000 ? formatNum(value) : formatNum(value, 3);
+      if (typeof value === 'object') return `<code>${JSON.stringify(value)}</code>`;
+      return String(value);
+    }
+
+    function selectWindow(rows) {
+      if (!rows || !rows.length) return [];
+      if (els.rangeSelect.value === 'all') return rows;
+      const n = rows.length;
+      const chunk = Math.max(1, Math.floor(n * 0.2));
+      if (els.rangeSelect.value === 'start') return rows.slice(0, chunk);
+      if (els.rangeSelect.value === 'middle') {
+        const start = Math.max(0, Math.floor((n - chunk) / 2));
+        return rows.slice(start, start + chunk);
+      }
+      return rows.slice(-chunk);
+    }
+
+    function getActiveRun() {
+      return state.runs.find(r => r.name === state.activeRunName) || state.runs[0] || null;
+    }
+
+    function getCompareRun() {
+      return state.runs.find(r => r.name === state.compareRunName) || null;
+    }
+
+    function destroyCharts() {
+      for (const chart of state.charts.values()) chart.destroy();
+      state.charts.clear();
+    }
+
+    function makeRunName(payload, fallback) {
+      return payload?.meta?.runName || payload?.runName || fallback;
+    }
+
+    function products() {
+      return ['ASH_COATED_OSMIUM', 'INTARIAN_PEPPER_ROOT'];
+    }
+
+    async function readFiles(files) {
+      for (const file of files) {
+        const text = await file.text();
+        const payload = JSON.parse(text);
+        const name = makeRunName(payload, file.name);
+        const existing = state.runs.find(r => r.name === name);
+        if (existing) Object.assign(existing, { payload, fileName: file.name });
+        else state.runs.push({ name, payload, fileName: file.name });
+      }
+      if (!state.activeRunName && state.runs.length) state.activeRunName = state.runs[0].name;
+      if (!state.compareRunName && state.runs.length > 1) state.compareRunName = state.runs[1].name;
+      refreshControls();
+      render();
+    }
+
+    function refreshControls() {
+      els.runList.innerHTML = state.runs.map(run => `<div class="run-pill ${run.name === state.activeRunName ? 'active' : ''}" data-run="${run.name}">${run.name}</div>`).join('');
+      const options = state.runs.map(run => `<option value="${run.name}">${run.name}</option>`).join('');
+      els.activeRun.innerHTML = options;
+      els.compareRun.innerHTML = `<option value="">None</option>${options}`;
+      els.activeRun.value = state.activeRunName || '';
+      els.compareRun.value = state.compareRunName || '';
+      const active = getActiveRun();
+      const sampleRuns = active?.payload?.monteCarlo?.sampleRuns || [];
+      els.sampleSelect.innerHTML = `<option value="">Auto</option>${sampleRuns.map(run => `<option value="${run.runName}">${run.runName}</option>`).join('')}`;
+      const meta = active?.payload?.meta || {};
+      els.activeMeta.innerHTML = [
+        ['Run', meta.runName || '-'],
+        ['Trader', meta.traderName || '-'],
+        ['Type', active?.payload?.type || '-'],
+        ['Fill model', meta.fillModel?.name || '-'],
+        ['Mode', meta.mode || '-'],
+        ['Created', meta.createdAt || '-'],
+      ].map(([k,v]) => `<div><strong>${k}</strong>${v}</div>`).join('');
+      [...els.runList.querySelectorAll('.run-pill')].forEach(node => node.onclick = () => { state.activeRunName = node.dataset.run; refreshControls(); render(); });
+    }
+
+    function chart(id, config) {
+      const canvas = document.getElementById(id);
+      if (!canvas) return;
+      const existing = state.charts.get(id);
+      if (existing) existing.destroy();
+      const c = new MiniChart(canvas.getContext('2d'), config);
+      state.charts.set(id, c);
+    }
+
+    function filteredProductRows(rows, product) {
+      return selectWindow((rows || []).filter(row => row.product === product));
+    }
+
+    function renderOverview(active) {
+      const payload = active.payload;
+      const summary = payload.summary || {};
+      const mc = payload.monteCarlo?.summary || null;
+      const validation = payload.validation || {};
+      const product = els.productSelect.value;
+      const productSummary = summary.per_product?.[product] || {};
+      const behaviour = payload.behaviour?.per_product?.[product] || {};
+      const cards = [
+        metricCard('span-3', 'Final PnL', formatNum(summary.final_pnl), 'End-of-run mark to market', summary.final_pnl >= 0 ? 'good' : 'bad'),
+        metricCard('span-3', 'Max drawdown', formatNum(summary.max_drawdown), 'Peak-to-trough total MTM drawdown', 'bad'),
+        metricCard('span-3', 'Fill count', formatInt(summary.fill_count), 'Executed fills across both products'),
+        metricCard('span-3', 'Limit breaches', formatInt(summary.limit_breaches), 'Clamped orders or fill attempts', summary.limit_breaches ? 'bad' : 'good'),
+      ].join('');
+
+      const runCards = [
+        metricCard('span-4', `${product} MTM`, formatNum(productSummary.final_mtm), `Realised ${formatNum(productSummary.realised)} · Unrealised ${formatNum(productSummary.unrealised)}`, productSummary.final_mtm >= 0 ? 'good' : 'bad'),
+        metricCard('span-4', `${product} cap usage`, formatNum((behaviour.cap_usage_ratio || 0) * 100, 1) + '%', `Peak |position| ${formatInt(behaviour.peak_abs_position)} of 80`),
+        metricCard('span-4', `${product} fill markout +5`, formatNum(behaviour.average_fill_markout_5), 'Signed five-tick markout versus analysis fair'),
+      ].join('');
+
+      const extraBlocks = [];
+      if (mc) {
+        extraBlocks.push(metricCard('span-4', 'MC mean', formatNum(mc.mean), `P05 ${formatNum(mc.p05)} · ES05 ${formatNum(mc.expected_shortfall_05)}`));
+        extraBlocks.push(metricCard('span-4', 'MC positive rate', formatNum((mc.positive_rate || 0) * 100, 1) + '%', `Std ${formatNum(mc.std)} · mean DD ${formatNum(mc.mean_max_drawdown)}`));
+        extraBlocks.push(metricCard('span-4', 'MC sessions', formatInt(mc.session_count), 'Synthetic robustness sessions in this bundle'));
+      }
+      if (validation && Object.keys(validation).length) {
+        extraBlocks.push(metricCard('span-4', 'Live profit error', formatNum(validation.profit_error), `Path RMSE ${formatNum(validation.path_rmse)}`, validation.profit_error > 0 ? 'good' : 'bad'));
+        extraBlocks.push(metricCard('span-4', 'Position L1 error', formatInt(validation.position_l1_error), `Fill count error ${formatInt(validation.fill_count_error)}`));
+      }
+
+      const issueRows = (payload.datasetReports || []).map(row => ({
+        day: row.day,
+        timestamps: row.validation?.timestamps,
+        issue_score: row.validation?.issue_score,
+        missing_products: Object.keys(row.validation?.missing_products || {}).length,
+        crossed_books: row.validation?.crossed_book_rows,
+        one_sided_books: row.validation?.one_sided_book_rows,
+      }));
+      const assumptionRows = [
+        ...(payload.assumptions?.exact || []).map(item => ({ type: 'exact', assumption: item })),
+        ...(payload.assumptions?.approximate || []).map(item => ({ type: 'approximate', assumption: item })),
+      ];
+
+      els.views.overview.innerHTML = `<div class="grid">${cards}${runCards}${extraBlocks.join('')}
+        ${panel('span-8', 'Run summary', `<div class="kv">
+          <div><strong>Dominant risk product</strong>${summary.behaviour?.dominant_risk_product || '-'}</div>
+          <div><strong>Dominant turnover product</strong>${summary.behaviour?.dominant_turnover_product || '-'}</div>
+          <div><strong>Fair methods</strong>${(summary.fair_value?.per_product?.[product]?.methods || []).join(', ') || '-'}</div>
+          <div><strong>Average spread</strong>${formatNum(summary.fair_value?.per_product?.[product]?.mean_spread)}</div>
+        </div>`) }
+        ${panel('span-4', 'Dataset integrity', tableFromRows(issueRows, ['day','timestamps','issue_score','missing_products','crossed_books','one_sided_books']))}
+        ${panel('span-12', 'Exact versus approximate', tableFromRows(assumptionRows, ['type','assumption']))}
+      </div>`;
+    }
+
+    function renderReplay(active) {
+      const payload = active.payload;
+      const product = els.productSelect.value;
+      const pnl = filteredProductRows(payload.pnlSeries || [], product);
+      const inv = filteredProductRows(payload.inventorySeries || [], product);
+      const fair = filteredProductRows(payload.fairValueSeries || [], product);
+      const fills = filteredProductRows(payload.fills || [], product);
+      const behaviourSeries = filteredProductRows(payload.behaviourSeries || [], product);
+
+      els.views.replay.innerHTML = `<div class="grid">
+        ${panel('span-8', 'PnL, realised and unrealised', `<canvas id="replayPnl"></canvas>`) }
+        ${panel('span-4', 'Behaviour diagnostics', tableFromRows([
+          payload.behaviour?.per_product?.[product] || {}
+        ])) }
+        ${panel('span-6', 'Inventory and cap usage', `<canvas id="replayInventory"></canvas>`) }
+        ${panel('span-6', 'Fair value, mid and fills', `<canvas id="replayFair"></canvas>`) }
+        ${panel('span-6', 'Behaviour series', `<canvas id="replayBehaviour"></canvas>`) }
+        ${panel('span-6', 'Largest fills', tableFromRows((fills || []).slice(0, 16), ['day','timestamp','side','price','quantity','kind','markout_1','markout_5','signed_edge_to_analysis_fair']))}
+      </div>`;
+
+      chart('replayPnl', {
+        type: 'line',
+        data: {
+          labels: pnl.map(r => r.timestamp),
+          datasets: [
+            { label: 'MTM', data: pnl.map(r => r.mtm), borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.18)', tension: .15 },
+            { label: 'Realised', data: pnl.map(r => r.realised), borderColor: '#16784f', backgroundColor: 'rgba(22,120,79,.18)', tension: .15 },
+            { label: 'Unrealised', data: pnl.map(r => r.unrealised), borderColor: '#946200', backgroundColor: 'rgba(148,98,0,.18)', tension: .15 },
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#182230' }}} }
+      });
+
+      chart('replayInventory', {
+        type: 'line',
+        data: {
+          labels: inv.map(r => r.timestamp),
+          datasets: [
+            { label: 'Position', data: inv.map(r => r.position), borderColor: '#0f766e', tension: .15 },
+            { label: 'Position ratio %', data: behaviourSeries.map(r => (r.abs_position_ratio || 0) * 100), borderColor: '#b42336', tension: .15, yAxisID: 'y1' },
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { ticks: { color: '#182230' } }, y1: { position: 'right', ticks: { color: '#182230' } } }, plugins: { legend: { labels: { color: '#182230' }}} }
+      });
+
+      const fillScatter = fills.map(row => ({ x: row.timestamp, y: row.price }));
+      chart('replayFair', {
+        type: 'line',
+        data: {
+          labels: fair.map(r => r.timestamp),
+          datasets: [
+            { label: 'Analysis fair', data: fair.map(r => r.analysis_fair), borderColor: '#2563eb', tension: .15 },
+            { label: 'Mid', data: fair.map(r => r.mid), borderColor: '#946200', tension: .15 },
+            { label: 'Fill price', data: fillScatter, showLine: false, type: 'scatter', borderColor: '#16784f', backgroundColor: '#16784f' },
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#182230' }}} }
+      });
+
+      chart('replayBehaviour', {
+        type: 'bar',
+        data: {
+          labels: behaviourSeries.map(r => r.timestamp),
+          datasets: [
+            { label: 'Order count', data: behaviourSeries.map(r => r.order_count), backgroundColor: 'rgba(37,99,235,.55)' },
+            { label: 'Fill count', data: behaviourSeries.map(r => r.fill_count), backgroundColor: 'rgba(22,120,79,.55)' },
+            { label: 'Net fill qty', data: behaviourSeries.map(r => r.net_fill_qty), backgroundColor: 'rgba(148,98,0,.55)' },
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { color: '#182230', maxTicksLimit: 10 } }, y: { ticks: { color: '#182230' } } }, plugins: { legend: { labels: { color: '#182230' }}} }
+      });
+    }
+
+    function selectedSampleRun(active) {
+      const sampleRuns = active.payload?.monteCarlo?.sampleRuns || [];
+      if (!sampleRuns.length) return null;
+      const chosen = els.sampleSelect.value;
+      return sampleRuns.find(run => run.runName === chosen) || sampleRuns[0];
+    }
+
+    function renderMonteCarlo(active) {
+      const mc = active.payload.monteCarlo;
+      if (!mc) {
+        els.views.montecarlo.innerHTML = `<div class="card span-12"><div class="empty">This bundle does not contain Monte Carlo results.</div></div>`;
+        return;
+      }
+      const sample = selectedSampleRun(active);
+      const product = els.productSelect.value;
+      const bands = mc.fairValueBands?.analysisFair?.[product] || [];
+      els.views.montecarlo.innerHTML = `<div class="grid">
+        ${metricCard('span-3', 'Mean', formatNum(mc.summary?.mean), 'Session PnL average')}
+        ${metricCard('span-3', 'P05', formatNum(mc.summary?.p05), 'Downside percentile')}
+        ${metricCard('span-3', 'Expected shortfall', formatNum(mc.summary?.expected_shortfall_05), 'Average of worst 5%')}
+        ${metricCard('span-3', 'Positive rate', formatNum((mc.summary?.positive_rate || 0) * 100, 1) + '%', `Std ${formatNum(mc.summary?.std)}`)}
+        ${panel('span-6', 'Session distribution', `<canvas id="mcHistogram"></canvas>`) }
+        ${panel('span-6', 'Fair path bands', `<canvas id="mcBands"></canvas>`) }
+        ${panel('span-8', 'Sample run board', sample ? `<div class="kv">
+          <div><strong>Run</strong>${sample.runName}</div>
+          <div><strong>Final PnL</strong>${formatNum(sample.summary?.final_pnl)}</div>
+          <div><strong>Fill count</strong>${formatInt(sample.summary?.fill_count)}</div>
+          <div><strong>Max drawdown</strong>${formatNum(sample.summary?.max_drawdown)}</div>
+        </div><canvas id="mcSample"></canvas>` : `<div class="empty">No sample paths saved.</div>`) }
+        ${panel('span-4', 'Worst / best sessions', tableFromRows((mc.sessions || []).slice().sort((a,b) => (a.final_pnl || 0) - (b.final_pnl || 0)).slice(0,5).concat((mc.sessions || []).slice().sort((a,b) => (b.final_pnl || 0) - (a.final_pnl || 0)).slice(0,5)), ['run_name','final_pnl','limit_breaches']))}
+      </div>`;
+      const sessionPnls = (mc.sessions || []).map(r => r.final_pnl);
+      chart('mcHistogram', {
+        type: 'bar',
+        data: {
+          labels: (mc.sessions || []).map(r => r.run_name.split('_').slice(-1)[0]),
+          datasets: [{ label: 'Final PnL', data: sessionPnls, backgroundColor: 'rgba(37,99,235,.65)' }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { x: { ticks: { color: '#182230', maxTicksLimit: 12 } }, y: { ticks: { color: '#182230' } } }, plugins: { legend: { labels: { color: '#182230' }}} }
+      });
+      chart('mcBands', {
+        type: 'line',
+        data: {
+          labels: bands.map(r => r.timestamp),
+          datasets: [
+            { label: 'P10', data: bands.map(r => r.p10), borderColor: '#b42336', tension: .15 },
+            { label: 'P50', data: bands.map(r => r.p50), borderColor: '#2563eb', tension: .15 },
+            { label: 'P90', data: bands.map(r => r.p90), borderColor: '#16784f', tension: .15 },
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#182230' }}} }
+      });
+      if (sample) {
+        const samplePnl = filteredProductRows(sample.pnlSeries || [], product);
+        chart('mcSample', {
+          type: 'line',
+          data: {
+            labels: samplePnl.map(r => r.timestamp),
+            datasets: [{ label: `${product} MTM`, data: samplePnl.map(r => r.mtm), borderColor: '#0f766e', tension: .15 }]
+          },
+          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#182230' }}} }
+        });
+      }
+    }
+
+    function renderCalibration(active) {
+      const calibration = active.payload.calibration;
+      if (!calibration) {
+        els.views.calibration.innerHTML = `<div class="card span-12"><div class="empty">This bundle does not contain calibration results.</div></div>`;
+        return;
+      }
+      const grid = calibration.grid || [];
+      const best = calibration.best || {};
+      const diagnostics = calibration.diagnostics || {};
+      const byFillModel = Object.entries(diagnostics.by_fill_model || {}).map(([fill_model, row]) => ({ fill_model, ...row }));
+      const productDiagnostics = Object.entries(diagnostics.per_product || {}).map(([product, row]) => ({ product, ...row }));
+      const profitBias = diagnostics.profit_bias_counts || {};
+      els.views.calibration.innerHTML = `<div class="grid">
+        ${metricCard('span-3', 'Best score', formatNum(best.score), 'Lower is better')}
+        ${metricCard('span-3', 'Profit error', formatNum(best.profit_error), 'Simulated minus live profit', best.profit_error > 0 ? 'good' : 'bad')}
+        ${metricCard('span-3', 'Path RMSE', formatNum(best.path_rmse), 'Live total PnL path error')}
+        ${metricCard('span-3', 'Dominant error', best.dominant_error_source || '-', `Profit ${best.profit_bias || '-'} / fills ${best.fill_bias || '-'}`)}
+        ${panel('span-6', 'Calibration frontier', `<canvas id="calibrationScatter"></canvas>`) }
+        ${panel('span-6', 'Optimism and pessimism', `<canvas id="calibrationBias"></canvas>`) }
+        ${panel('span-5', 'Best candidate', `<div class="kv">${Object.entries(best).slice(0,12).map(([k,v]) => `<div><strong>${k}</strong>${renderCell(v)}</div>`).join('')}</div>`) }
+        ${panel('span-7', 'Per-product calibration', tableFromRows(productDiagnostics, ['product','mean_abs_pnl_error','mean_path_rmse','best_path_rmse']))}
+        ${panel('span-12', 'Fill-model summary', tableFromRows(byFillModel, ['fill_model','candidate_count','best_score','mean_score','mean_profit_error','mean_path_rmse']))}
+        ${panel('span-12', 'Calibration grid', tableFromRows(grid.slice(0, 24), ['fill_model','passive_fill_scale','adverse_selection_ticks','latency_ticks','missed_fill_additive','score','profit_error','path_rmse','position_l1_error']))}
+      </div>`;
+      chart('calibrationScatter', {
+        type: 'scatter',
+        data: {
+          datasets: [{
+            label: 'Calibration candidates',
+            data: grid.map(r => ({ x: r.path_rmse, y: r.profit_error })),
+            backgroundColor: 'rgba(37,99,235,.7)',
+            borderColor: '#2563eb'
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'Path RMSE', color: '#182230' }, ticks: { color: '#182230' } }, y: { title: { display: true, text: 'Profit error', color: '#182230' }, ticks: { color: '#182230' } } }, plugins: { legend: { labels: { color: '#182230' }}} }
+      });
+      chart('calibrationBias', {
+        type: 'bar',
+        data: {
+          labels: ['optimistic', 'neutral', 'pessimistic'],
+          datasets: [{ label: 'Candidates', data: [profitBias.optimistic || 0, profitBias.neutral || 0, profitBias.pessimistic || 0], backgroundColor: 'rgba(148,98,0,.65)' }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
+
+    function renderOptimization(active) {
+      const optimization = active.payload.optimization;
+      if (!optimization) {
+        els.views.optimization.innerHTML = `<div class="card span-12"><div class="empty">This bundle does not contain optimisation results.</div></div>`;
+        return;
+      }
+      const rows = optimization.rows || [];
+      const diagnostics = optimization.diagnostics || {};
+      els.views.optimization.innerHTML = `<div class="grid">
+        ${metricCard('span-3', 'Best score', formatNum(rows[0]?.score), rows[0]?.variant || '-')}
+        ${metricCard('span-3', 'Best replay PnL', formatNum(rows[0]?.replay_final_pnl), 'Historical replay')}
+        ${metricCard('span-3', 'Best MC P05', formatNum(rows[0]?.mc_p05), 'Downside percentile')}
+        ${metricCard('span-3', 'Score gap', formatNum(diagnostics.score_gap_to_second), `Stable ${diagnostics.most_stable_variant || '-'}`)}
+        ${panel('span-6', 'Variant scores', `<canvas id="optScore"></canvas>`) }
+        ${panel('span-6', 'Replay versus downside', `<canvas id="optReplayVsP05"></canvas>`) }
+        ${panel('span-12', 'Optimisation frontier', tableFromRows(diagnostics.frontier || [], ['variant','score','replay_final_pnl','mc_p05','mc_expected_shortfall_05','mc_std']))}
+        ${panel('span-12', 'Optimisation table', tableFromRows(rows, ['variant','score','replay_final_pnl','mc_p05','mc_expected_shortfall_05','mc_std','mc_mean_drawdown']))}
+      </div>`;
+      chart('optScore', {
+        type: 'bar',
+        data: { labels: rows.map(r => r.variant), datasets: [{ label: 'Score', data: rows.map(r => r.score), backgroundColor: 'rgba(15,118,110,.7)' }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#182230' }}} }
+      });
+      chart('optReplayVsP05', {
+        type: 'scatter',
+        data: { datasets: [{ label: 'Variants', data: rows.map(r => ({ x: r.replay_final_pnl, y: r.mc_p05 })), backgroundColor: 'rgba(22,120,79,.7)' }] },
+        options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: 'Replay final PnL', color: '#182230' }, ticks: { color: '#182230' } }, y: { title: { display: true, text: 'MC P05', color: '#182230' }, ticks: { color: '#182230' } } }, plugins: { legend: { labels: { color: '#182230' }}} }
+      });
+    }
+
+    function buildComparisonRows() {
+      const rows = [];
+      for (const run of state.runs) {
+        const payload = run.payload;
+        rows.push({
+          run: run.name,
+          type: payload.type,
+          trader: payload.meta?.traderName,
+          final_pnl: payload.summary?.final_pnl,
+          max_drawdown: payload.summary?.max_drawdown,
+          fill_count: payload.summary?.fill_count,
+          order_count: payload.summary?.order_count,
+          mc_mean: payload.monteCarlo?.summary?.mean,
+          mc_p05: payload.monteCarlo?.summary?.p05,
+          calib_score: payload.calibration?.best?.score,
+          opt_best_score: payload.optimization?.rows?.[0]?.score,
+        });
+      }
+      return rows;
+    }
+
+    function renderCompare(active) {
+      const compareRows = active.payload.comparison || buildComparisonRows();
+      const against = getCompareRun();
+      const primary = getActiveRun();
+      let deltaBlock = '<div class="empty">Load another run to see side-by-side deltas.</div>';
+      if (against && primary) {
+        const a = primary.payload.summary || {};
+        const b = against.payload.summary || {};
+        deltaBlock = `<div class="kv">
+          <div><strong>Primary run</strong>${primary.name}</div>
+          <div><strong>Compare run</strong>${against.name}</div>
+          <div><strong>Change final PnL</strong>${formatNum((a.final_pnl || 0) - (b.final_pnl || 0))}</div>
+          <div><strong>Change max drawdown</strong>${formatNum((a.max_drawdown || 0) - (b.max_drawdown || 0))}</div>
+          <div><strong>Change fill count</strong>${formatInt((a.fill_count || 0) - (b.fill_count || 0))}</div>
+          <div><strong>Change order count</strong>${formatInt((a.order_count || 0) - (b.order_count || 0))}</div>
+        </div>`;
+      }
+      els.views.compare.innerHTML = `<div class="grid">
+        ${panel('span-5', 'Loaded run deltas', deltaBlock)}
+        ${panel('span-7', 'Run table', tableFromRows(compareRows, ['run','type','trader','final_pnl','max_drawdown','fill_count','mc_mean','mc_p05','calib_score','opt_best_score']))}
+        ${panel('span-12', 'Run comparison chart', `<canvas id="runCompareChart"></canvas>`) }
+        ${panel('span-12', 'Internal comparison rows', tableFromRows(active.payload.comparison || [], ['trader','final_pnl','max_drawdown','fill_count','pepper_cap_usage','pepper_markout_5']))}
+      </div>`;
+      chart('runCompareChart', {
+        type: 'bar',
+        data: {
+          labels: compareRows.map(row => row.run || row.trader),
+          datasets: [
+            { label: 'Final PnL', data: compareRows.map(row => row.final_pnl || 0), backgroundColor: 'rgba(37,99,235,.65)' },
+            { label: 'MC P05', data: compareRows.map(row => row.mc_p05 || 0), backgroundColor: 'rgba(180,35,54,.55)' },
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
+
+    function render() {
+      destroyCharts();
+      Object.entries(els.views).forEach(([name, node]) => node.classList.toggle('hidden', name !== state.activeTab));
+      [...els.tabRow.querySelectorAll('.tab')].forEach(tab => tab.classList.toggle('active', tab.dataset.tab === state.activeTab));
+      const active = getActiveRun();
+      if (!active) {
+        for (const view of Object.values(els.views)) view.innerHTML = `<div class="card span-12"><div class="empty">Load a dashboard bundle to begin.</div></div>`;
+        return;
+      }
+      renderOverview(active);
+      renderReplay(active);
+      renderMonteCarlo(active);
+      renderCalibration(active);
+      renderOptimization(active);
+      renderCompare(active);
+    }
+
+    els.dropZone.addEventListener('click', () => els.fileInput.click());
+    els.fileInput.addEventListener('change', ev => readFiles(ev.target.files));
+    els.dropZone.addEventListener('dragover', ev => { ev.preventDefault(); els.dropZone.style.borderColor = '#0f766e'; });
+    els.dropZone.addEventListener('dragleave', () => { els.dropZone.style.borderColor = '#d9e2ec'; });
+    els.dropZone.addEventListener('drop', ev => {
+      ev.preventDefault();
+      els.dropZone.style.borderColor = '#d9e2ec';
+      readFiles(ev.dataTransfer.files);
+    });
+    els.tabRow.addEventListener('click', ev => {
+      const tab = ev.target.closest('.tab');
+      if (!tab) return;
+      state.activeTab = tab.dataset.tab;
+      render();
+    });
+    els.activeRun.addEventListener('change', () => { state.activeRunName = els.activeRun.value; refreshControls(); render(); });
+    els.compareRun.addEventListener('change', () => { state.compareRunName = els.compareRun.value || null; render(); });
+    [els.productSelect, els.sampleSelect, els.rangeSelect].forEach(node => node.addEventListener('change', render));
+
+    render();
+  </script>
+</body>
+</html>

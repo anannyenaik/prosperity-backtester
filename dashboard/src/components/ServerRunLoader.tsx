@@ -1,0 +1,87 @@
+import { useState } from 'react'
+import { RefreshCw, Server } from 'lucide-react'
+import { clsx } from 'clsx'
+import { useStore, type ServerRunMeta } from '../store'
+import type { DashboardPayload } from '../types'
+import { fmtDate, fmtNum } from '../lib/format'
+
+export function ServerRunLoader() {
+  const { serverRuns, setServerRuns, loadRun } = useStore()
+  const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
+
+  async function fetchRuns() {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/runs')
+      if (res.ok) {
+        const data = await res.json()
+        setServerRuns(data as ServerRunMeta[])
+        setOpen(true)
+      }
+    } catch {
+      setOpen(true)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadFromServer(run: ServerRunMeta) {
+    const res = await fetch(`/api/run/${encodeURIComponent(run.path)}`)
+    if (res.ok) {
+      const payload = (await res.json()) as DashboardPayload
+      loadRun(payload, run.name)
+    }
+  }
+
+  return (
+    <div className="mt-4">
+      <button
+        onClick={fetchRuns}
+        disabled={loading}
+        className="subtle-button inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+      >
+        {loading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
+        Load from local server
+      </button>
+
+      {open && serverRuns.length > 0 && (
+        <div className="mt-3 overflow-hidden rounded-lg border border-border bg-bg/45">
+          <div className="hud-label border-b border-border bg-white/[0.03] px-4 py-3 text-muted">
+            Available bundles ({serverRuns.length})
+          </div>
+          <div className="max-h-72 overflow-y-auto divide-y divide-border">
+            {serverRuns.map((run) => (
+              <button
+                key={run.path}
+                onClick={() => loadFromServer(run)}
+                className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-accent/5"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate font-display text-xs font-semibold uppercase tracking-[0.08em] text-txt">
+                    {run.name}
+                  </span>
+                  <span className="hud-label mt-1 flex gap-2 text-muted">
+                    <span>{run.type}</span>
+                    <span>{fmtDate(run.createdAt)}</span>
+                  </span>
+                </span>
+                {run.finalPnl != null && (
+                  <span className={clsx('font-mono text-xs', run.finalPnl >= 0 ? 'text-good' : 'text-bad')}>
+                    {fmtNum(run.finalPnl)}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {open && serverRuns.length === 0 && (
+        <div className="mt-3 rounded-lg border border-border bg-white/[0.025] px-4 py-3 text-sm text-muted">
+          No dashboard bundles were found under the served directory.
+        </div>
+      )}
+    </div>
+  )
+}

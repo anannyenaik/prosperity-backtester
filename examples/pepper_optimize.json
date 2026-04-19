@@ -1,0 +1,44 @@
+{
+  "name": "pepper_trend_optimize",
+  "trader": "examples/trader_round1_v9.py",
+  "days": [
+    0
+  ],
+  "fill_model": "base",
+  "perturbation": {
+    "latency_ticks": 0,
+    "passive_fill_scale": 1.0,
+    "pepper_slope_scale": 1.0
+  },
+  "mc_sessions": 6,
+  "mc_sample_sessions": 2,
+  "mc_seed": 20260418,
+  "mc_workers": 1,
+  "score_weights": {
+    "replay": 1.0,
+    "mc_mean": 0.35,
+    "mc_p05": 0.6,
+    "mc_std": -0.25,
+    "limit_breaches": -100.0
+  },
+  "variants": [
+    {
+      "name": "trend_0p0010",
+      "overrides": {
+        "PARAMS.INTARIAN_PEPPER_ROOT.trend_slope": 0.001
+      }
+    },
+    {
+      "name": "trend_0p0015",
+      "overrides": {
+        "PARAMS.INTARIAN_PEPPER_ROOT.trend_slope": 0.0015
+      }
+    },
+    {
+      "name": "trend_0p0020",
+      "overrides": {
+        "PARAMS.INTARIAN_PEPPER_ROOT.trend_slope": 0.002
+      }
+    }
+  ]
+}
