@@ -7,20 +7,23 @@ import { EmptyState } from '../components/EmptyState'
 import { KVGrid } from '../components/KVGrid'
 import { ScatterPlot } from '../charts/ScatterPlot'
 import { PageHeader } from '../components/PageHeader'
+import { BundleBadge } from '../components/BundleBadge'
 import { fmtNum, fmtInt, colorForValue } from '../lib/format'
+import { getTabAvailability } from '../lib/bundles'
 import type { OptimizationRow } from '../types'
 
 export function Optimization() {
   const { getActiveRun } = useStore()
   const run = getActiveRun()
+  const availability = getTabAvailability(run?.payload, 'optimize')
   const opt = run?.payload.optimization
 
-  if (!opt) {
+  if (!run || !availability.supported || !opt) {
     return (
       <EmptyState
-        icon={<Cpu className="w-10 h-10" />}
-        title="No optimization data"
-        message="Run `python -m r1bt optimize` to generate parameter sweep results."
+        icon={<Cpu className="h-10 w-10" />}
+        title={availability.title}
+        message={availability.message}
       />
     )
   }
@@ -70,6 +73,7 @@ export function Optimization() {
         title="Parameter"
         accent="frontier"
         description="Ranked variants, replay-vs-robustness trade-offs, downside winners and stability diagnostics."
+        meta={<BundleBadge payload={run.payload} />}
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

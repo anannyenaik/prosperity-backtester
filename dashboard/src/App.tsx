@@ -52,19 +52,19 @@ export function App() {
 
 function LandingScreen() {
   return (
-    <div className="mx-auto grid min-h-[calc(100vh-132px)] w-full max-w-[1380px] items-center gap-8 px-4 pb-12 md:px-7 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.82fr)]">
-      <section className="min-w-0">
-        <div className="hud-label chapter-rule mb-5 text-accent">PROSPERITY LAB / ROUND 2</div>
-        <h1 className="font-display max-w-[780px] text-[3rem] font-extrabold uppercase leading-[0.9] tracking-normal text-txt md:text-[4.8rem]">
+    <div className="mx-auto grid min-h-[calc(100vh-132px)] w-full max-w-[1380px] items-center gap-8 px-4 py-10 md:px-7 md:py-12 lg:grid-cols-[minmax(0,0.98fr)_minmax(380px,0.78fr)] lg:items-stretch lg:gap-12 xl:gap-14">
+      <section className="flex min-w-0 flex-col justify-center lg:pr-4">
+        <div className="hud-label chapter-rule mb-4 text-accent">PROSPERITY LAB / ROUND 2</div>
+        <h1 className="font-display max-w-[760px] text-[2.9rem] font-extrabold uppercase leading-[0.88] tracking-normal text-txt md:text-[4.15rem] lg:text-[3.55rem] xl:text-[4.4rem] 2xl:text-[4.5rem]">
           <span className="block">Round 2</span>
           <span className="block">research</span>
-          <em className="font-serif block font-light normal-case tracking-normal text-accent-2">decision deck</em>
+          <em className="font-serif block text-[0.74em] font-light normal-case leading-none tracking-normal text-accent-2">decision deck</em>
         </h1>
-        <p className="mt-6 max-w-2xl text-xl leading-9 text-txt-soft">
+        <p className="mt-7 max-w-[640px] text-lg leading-8 text-txt-soft md:text-xl md:leading-9">
           Load replay, Monte Carlo, calibration, comparison, optimisation or MAF scenario bundles and inspect the run as a trading lab instrument.
         </p>
 
-        <div className="mt-8 grid max-w-3xl grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="mt-9 grid max-w-[700px] grid-cols-1 gap-3 sm:grid-cols-3">
           {[
             { icon: <Radar className="h-4 w-4" />, label: 'Replay', value: 'Path diagnostics' },
             { icon: <Database className="h-4 w-4" />, label: 'MAF', value: 'Access scenarios' },
@@ -79,7 +79,7 @@ function LandingScreen() {
         </div>
       </section>
 
-      <section className="glass-panel rounded-lg p-5">
+      <section className="glass-panel flex w-full flex-col justify-between rounded-lg p-5 lg:max-w-[590px] lg:justify-self-end lg:self-stretch">
         <div className="mb-4 flex items-start justify-between gap-4 border-b border-border pb-4">
           <div>
             <div className="hud-label text-accent-2">Bundle intake</div>

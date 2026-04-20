@@ -63,7 +63,7 @@ export function BarGroupChart({
   if (!data.length) {
     return (
       <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: AXIS_TEXT, fontSize: 13 }}>
-        No data
+        Data not present in this bundle
       </div>
     )
   }

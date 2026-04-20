@@ -15,6 +15,7 @@ import type React from 'react'
 import { useStore } from '../store'
 import type { TabId } from '../types'
 import { fmtDate, truncateStr } from '../lib/format'
+import { getTabAvailability, interpretBundle } from '../lib/bundles'
 
 interface Tab {
   id: TabId
@@ -50,6 +51,8 @@ export function NavBar() {
   } = useStore()
 
   const activeRun = runs.find((run) => run.id === activeRunId) ?? runs[0]
+  const compareRun = runs.find((run) => run.id === compareRunId) ?? null
+  const activeBundle = activeRun ? interpretBundle(activeRun.payload) : null
 
   return (
     <nav className="fixed left-0 right-0 top-0 z-40 border-b border-border bg-bg/82 backdrop-blur-2xl">
@@ -114,7 +117,7 @@ export function NavBar() {
                   onChange={(e) => setCompareRun(e.target.value || null)}
                   className="rounded-lg border border-border bg-surface-2 px-3 py-2 font-mono text-xs text-txt focus:border-accent/45 focus:outline-none"
                 >
-                  <option value="">None</option>
+                  <option value="">No compare run</option>
                   {runs.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name}
@@ -128,21 +131,30 @@ export function NavBar() {
           <div className="mt-3 flex items-center gap-1 overflow-x-auto border-t border-border pt-3">
             {TABS.map((tab) => {
               const isActive = activeTab === tab.id
+              const availability = getTabAvailability(activeRun?.payload, tab.id, {
+                comparePayload: compareRun?.payload,
+                sameCompareRun: Boolean(activeRun && compareRun && activeRun.id === compareRun.id),
+              })
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
+                  title={availability.supported ? availability.message : availability.title}
                   className={clsx(
                     'group flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs transition-all duration-500 ease-observatory',
                     isActive
                       ? 'bg-accent/12 text-accent'
                       : 'text-muted hover:bg-white/[0.035] hover:text-txt',
+                    !availability.supported && !isActive && 'opacity-45',
                     tab.group === 'product' && !isActive && 'opacity-75',
                   )}
                 >
                   <span className={clsx('hud-label', isActive ? 'text-accent-2' : 'text-steel')}>{tab.code}</span>
                   {tab.icon}
                   <span className="font-display font-semibold uppercase tracking-[0.08em]">{tab.label}</span>
+                  {!availability.supported && runs.length > 0 && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-warn/80" aria-hidden="true" />
+                  )}
                 </button>
               )
             })}
@@ -154,7 +166,8 @@ export function NavBar() {
           <div className="mt-2 truncate font-display text-xs font-semibold uppercase tracking-[0.08em] text-txt">
             {activeRun?.payload.meta?.runName ?? 'No run loaded'}
           </div>
-          <div className="hud-label mt-2 text-accent-2">{fmtDate(activeRun?.payload.meta?.createdAt)}</div>
+          <div className="hud-label mt-2 text-accent-2">{activeBundle?.badge ?? 'No bundle loaded'}</div>
+          <div className="hud-label mt-2 text-muted">{fmtDate(activeRun?.payload.meta?.createdAt)}</div>
         </div>
       </div>
     </nav>

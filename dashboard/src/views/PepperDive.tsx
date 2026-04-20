@@ -6,6 +6,7 @@ import { DataTable, type ColDef } from '../components/DataTable'
 import { KVGrid } from '../components/KVGrid'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
+import { BundleBadge } from '../components/BundleBadge'
 import { PnlChart } from '../charts/PnlChart'
 import { InventoryChart } from '../charts/InventoryChart'
 import { FairFillChart } from '../charts/FairFillChart'
@@ -13,6 +14,7 @@ import { HistogramChart } from '../charts/HistogramChart'
 import { BarGroupChart } from '../charts/BarGroupChart'
 import { buildPnlData, buildInventoryData, buildFairFillData, byProduct, buildMarkoutDist, computeCapStats } from '../lib/data'
 import { fmtNum, fmtInt, fmtPct, colorForValue } from '../lib/format'
+import { getTabAvailability, isFiniteNumber, numberOrNull } from '../lib/bundles'
 import type { FillRow, BehaviourPerProduct } from '../types'
 
 const PRODUCT = 'INTARIAN_PEPPER_ROOT'
@@ -20,19 +22,20 @@ const PRODUCT = 'INTARIAN_PEPPER_ROOT'
 export function PepperDive() {
   const { getActiveRun, timeWindow } = useStore()
   const run = getActiveRun()
+  const availability = getTabAvailability(run?.payload, 'pepper')
 
-  if (!run?.payload.pnlSeries?.length && !run?.payload.summary) {
+  if (!run || !availability.supported) {
     return (
       <EmptyState
-        icon={<FlameKindling className="w-10 h-10" />}
-        title="No replay data"
-        message="Load a replay bundle to see the Pepper deep dive."
+        icon={<FlameKindling className="h-10 w-10" />}
+        title={availability.title}
+        message={availability.message}
       />
     )
   }
 
   const { payload } = run
-  const behaviour = (payload.behaviour?.per_product?.[PRODUCT] ?? {}) as Partial<BehaviourPerProduct>
+  const behaviour = payload.behaviour?.per_product?.[PRODUCT] as Partial<BehaviourPerProduct> | undefined
   const productSummary = payload.summary?.per_product?.[PRODUCT]
 
   const pnlData = buildPnlData(payload.pnlSeries ?? [], PRODUCT, timeWindow)
@@ -58,17 +61,21 @@ export function PepperDive() {
   const edgeDist = buildMarkoutDist(pepFills, 'signed_edge_to_analysis_fair')
 
   // Adverse selection
-  const adversePassive = passiveFills.filter(
-    (f) => (f.side === 'buy' && (f.markout_1 ?? 0) < 0) || (f.side === 'sell' && (f.markout_1 ?? 0) > 0),
+  const passiveWithMarkout = passiveFills.filter((fill) => isFiniteNumber(fill.markout_1))
+  const adversePassive = passiveWithMarkout.filter(
+    (f) => (f.side === 'buy' && Number(f.markout_1) < 0) || (f.side === 'sell' && Number(f.markout_1) > 0),
   )
-  const adverseRate = passiveFills.length > 0 ? adversePassive.length / passiveFills.length : 0
+  const adverseRate = passiveWithMarkout.length > 0 ? adversePassive.length / passiveWithMarkout.length : null
 
   // Day-by-day PnL (from sessionRows)
   const sessionRows = payload.sessionRows ?? []
-  const dayRows = sessionRows.map((s) => {
-    const row = s as Record<string, unknown>
-    return { label: `Day ${row.day}`, pnl: (row.pepper_pnl as number) ?? 0 }
-  })
+  const dayRows = sessionRows
+    .map((s) => {
+      const row = s as Record<string, unknown>
+      const pnl = numberOrNull(row.pepper_pnl)
+      return pnl == null ? null : { label: `Day ${row.day}`, pnl }
+    })
+    .filter((row): row is { label: string; pnl: number } => row != null)
 
   // Side breakdown
   const sideData = [
@@ -103,29 +110,44 @@ export function PepperDive() {
         title="Directional"
         accent="exposure"
         description="Carry, cap pressure, fair path alignment, harvest behaviour and path sensitivity under replay and sampled MC."
+        meta={<BundleBadge payload={payload} />}
       />
 
-      {productSummary && (
+      {productSummary ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <MetricCard label="Pepper MTM" value={fmtNum(productSummary.final_mtm)} tone={colorForValue(productSummary.final_mtm)} sub={`Realised ${fmtNum(productSummary.realised)}`} />
           <MetricCard label="Final position" value={fmtInt(productSummary.final_position)} sub={`Unrealised ${fmtNum(productSummary.unrealised)}`} tone={Math.abs(productSummary.final_position) >= 80 ? 'warn' : 'neutral'} />
-          <MetricCard label="Time at cap" value={fmtPct(capStats.fracAtCap)} tone={capStats.fracAtCap > 0.1 ? 'bad' : capStats.fracAtCap > 0.04 ? 'warn' : 'good'} sub={`${fmtInt(capStats.ticksAtCap)} ticks`} />
-          <MetricCard label="Adverse rate" value={fmtPct(adverseRate)} tone={adverseRate > 0.4 ? 'bad' : adverseRate > 0.25 ? 'warn' : 'good'} sub="Passive fills with unfav mkt+1" />
+          <MetricCard label="Time at cap" value={fmtPct(capStats.total ? capStats.fracAtCap : null)} tone={!capStats.total ? 'neutral' : capStats.fracAtCap > 0.1 ? 'bad' : capStats.fracAtCap > 0.04 ? 'warn' : 'good'} sub={capStats.total ? `${fmtInt(capStats.ticksAtCap)} ticks` : 'Inventory series not present'} />
+          <MetricCard label="Adverse rate" value={fmtPct(adverseRate)} tone={adverseRate == null ? 'neutral' : adverseRate > 0.4 ? 'bad' : adverseRate > 0.25 ? 'warn' : 'good'} sub="Passive fills with unfav mkt+1" />
         </div>
+      ) : (
+        <Card title="Pepper summary">
+          <EmptyState title="Product summary not present" message="This bundle does not include a PEPPER replay summary." />
+        </Card>
       )}
 
-      {/* PnL chart */}
       <Card title="Pepper / PnL over time" subtitle="MTM and realised P&L per tick">
-        <PnlChart data={pnlData} height={300} />
+        {pnlData.length > 0 ? (
+          <PnlChart data={pnlData} height={300} />
+        ) : (
+          <EmptyState title="PnL series not present" message="This bundle does not include PEPPER PnL rows." />
+        )}
       </Card>
 
-      {/* Inventory + Fair/fills */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Card title="Pepper / Inventory" subtitle="Position path with +/-80 cap lines and cap shading">
-          <InventoryChart data={invData} height={260} />
+          {invData.length > 0 ? (
+            <InventoryChart data={invData} height={260} />
+          ) : (
+            <EmptyState title="Inventory series not present" message="This bundle does not include PEPPER inventory rows." />
+          )}
         </Card>
         <Card title="Pepper / Fair value and fills" subtitle="Analysis fair, mid price and fill markers">
-          <FairFillChart fair={fair} fills={fills} height={260} />
+          {fair.length > 0 || fills.length > 0 ? (
+            <FairFillChart fair={fair} fills={fills} height={260} />
+          ) : (
+            <EmptyState title="Fair value and fill rows not present" message="This bundle does not include PEPPER fair-value or fill rows." />
+          )}
         </Card>
       </div>
 
@@ -172,21 +194,25 @@ export function PepperDive() {
 
       {/* Behaviour diagnostics */}
       <Card title="Behaviour diagnostics">
-        <KVGrid
-          cols={3}
-          pairs={[
-            { label: 'Cap usage', value: fmtPct(behaviour.cap_usage_ratio ?? 0), tone: (behaviour.cap_usage_ratio ?? 0) > 0.6 ? 'warn' : 'neutral' },
-            { label: 'Peak position', value: fmtInt(behaviour.peak_abs_position), tone: (behaviour.peak_abs_position ?? 0) >= 80 ? 'bad' : 'neutral' },
-            { label: 'Time at cap', value: fmtPct(capStats.fracAtCap), tone: capStats.fracAtCap > 0.1 ? 'bad' : 'neutral' },
-            { label: 'Total fills', value: fmtInt(behaviour.total_fills) },
-            { label: 'Passive fills', value: fmtInt(behaviour.passive_fill_count) },
-            { label: 'Aggressive fills', value: fmtInt(behaviour.aggressive_fill_count) },
-            { label: 'Total buy qty', value: fmtInt(behaviour.total_buy_qty) },
-            { label: 'Total sell qty', value: fmtInt(behaviour.total_sell_qty) },
-            { label: 'Fill markout +1', value: fmtNum(behaviour.average_fill_markout_1), tone: colorForValue(behaviour.average_fill_markout_1) },
-            { label: 'Fill markout +5', value: fmtNum(behaviour.average_fill_markout_5), tone: colorForValue(behaviour.average_fill_markout_5) },
-          ]}
-        />
+        {behaviour ? (
+          <KVGrid
+            cols={3}
+            pairs={[
+              { label: 'Cap usage', value: fmtPct(behaviour.cap_usage_ratio), tone: numberOrNull(behaviour.cap_usage_ratio) != null && Number(behaviour.cap_usage_ratio) > 0.6 ? 'warn' : 'neutral' },
+              { label: 'Peak position', value: fmtInt(behaviour.peak_abs_position), tone: numberOrNull(behaviour.peak_abs_position) != null && Number(behaviour.peak_abs_position) >= 80 ? 'bad' : 'neutral' },
+              { label: 'Time at cap', value: fmtPct(capStats.total ? capStats.fracAtCap : null), tone: capStats.total && capStats.fracAtCap > 0.1 ? 'bad' : 'neutral' },
+              { label: 'Total fills', value: fmtInt(behaviour.total_fills) },
+              { label: 'Passive fills', value: fmtInt(behaviour.passive_fill_count) },
+              { label: 'Aggressive fills', value: fmtInt(behaviour.aggressive_fill_count) },
+              { label: 'Total buy qty', value: fmtInt(behaviour.total_buy_qty) },
+              { label: 'Total sell qty', value: fmtInt(behaviour.total_sell_qty) },
+              { label: 'Fill markout +1', value: fmtNum(behaviour.average_fill_markout_1), tone: colorForValue(behaviour.average_fill_markout_1) },
+              { label: 'Fill markout +5', value: fmtNum(behaviour.average_fill_markout_5), tone: colorForValue(behaviour.average_fill_markout_5) },
+            ]}
+          />
+        ) : (
+          <EmptyState title="Behaviour summary not present" message="This bundle does not include PEPPER behaviour metrics." />
+        )}
       </Card>
 
       {/* All Pepper fills */}
@@ -196,6 +222,7 @@ export function PepperDive() {
           cols={fillCols}
           maxRows={30}
           striped
+          emptyMsg="PEPPER fill rows are not present in this bundle."
         />
       </Card>
     </div>

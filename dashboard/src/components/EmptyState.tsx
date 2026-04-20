@@ -9,7 +9,7 @@ interface Props {
   className?: string
 }
 
-export function EmptyState({ icon, title = 'No data', message, action, className }: Props) {
+export function EmptyState({ icon, title = 'Data not present', message, action, className }: Props) {
   return (
     <div className={clsx('flex flex-col items-center justify-center gap-3 px-6 py-12 text-center', className)}>
       {icon && <div className="text-accent opacity-65">{icon}</div>}

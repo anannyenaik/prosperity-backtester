@@ -798,6 +798,7 @@ def run_market_session(
         inventory_series=inventory_series,
         pnl_series=pnl_series,
         fair_value_series=fair_rows,
+        include_series=capture_full_output,
     )
     total_series = {}
     for row in pnl_series:

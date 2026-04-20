@@ -6,23 +6,26 @@ import { DataTable, type ColDef } from '../components/DataTable'
 import { KVGrid } from '../components/KVGrid'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
+import { BundleBadge } from '../components/BundleBadge'
 import { ScatterPlot } from '../charts/ScatterPlot'
 import { BarGroupChart } from '../charts/BarGroupChart'
 import { fmtNum, fmtInt, colorForValue } from '../lib/format'
+import { getTabAvailability } from '../lib/bundles'
 import { FILL_MODEL_COLORS } from '../charts/theme'
 import type { CalibrationCandidate } from '../types'
 
 export function Calibration() {
   const { getActiveRun } = useStore()
   const run = getActiveRun()
+  const availability = getTabAvailability(run?.payload, 'calibration')
   const calibration = run?.payload.calibration
 
-  if (!calibration) {
+  if (!run || !availability.supported || !calibration) {
     return (
       <EmptyState
-        icon={<Target className="w-10 h-10" />}
-        title="No calibration data"
-        message="Run `python -m r1bt calibrate` with a live export to see calibration results."
+        icon={<Target className="h-10 w-10" />}
+        title={availability.title}
+        message={availability.message}
       />
     )
   }
@@ -85,6 +88,7 @@ export function Calibration() {
         title="Simulator"
         accent="alignment"
         description="Grid-search candidates, live-vs-sim bias, per-product mismatch and the parameters that reduce error."
+        meta={<BundleBadge payload={run.payload} />}
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

@@ -65,7 +65,7 @@ export function DataTable<T extends object>({
   maxRows = 100,
   striped = true,
   className,
-  emptyMsg = 'No rows',
+  emptyMsg = 'Rows are not present in this bundle.',
 }: Props<T>) {
   const [sortKey, setSortKey] = useState<string | null>(null)
   const [sortAsc, setSortAsc] = useState(true)

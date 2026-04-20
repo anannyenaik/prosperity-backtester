@@ -1,3 +1,4 @@
+import type React from 'react'
 import { Activity } from 'lucide-react'
 import { useStore } from '../store'
 import { MetricCard } from '../components/MetricCard'
@@ -7,18 +8,19 @@ import { DataTable, type ColDef } from '../components/DataTable'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { ProductToggle } from '../components/ProductToggle'
+import { BundleBadge } from '../components/BundleBadge'
 import { fmtNum, fmtInt, fmtPct, fmtDate, colorForValue } from '../lib/format'
-import { PRODUCT_LABELS, type Product } from '../types'
+import { getComparisonRows, interpretBundle, isFiniteNumber, numberOrNull } from '../lib/bundles'
+import { POSITION_LIMIT, PRODUCT_LABELS, type DashboardPayload, type Product } from '../types'
 
 export function Overview() {
-  const { getActiveRun, getCompareRun, activeProduct } = useStore()
+  const { getActiveRun, activeProduct } = useStore()
   const run = getActiveRun()
-  const compare = getCompareRun()
 
   if (!run) {
     return (
       <EmptyState
-        icon={<Activity className="w-10 h-10" />}
+        icon={<Activity className="h-10 w-10" />}
         title="No run loaded"
         message="Load a dashboard.json bundle to begin analysis."
       />
@@ -26,16 +28,10 @@ export function Overview() {
   }
 
   const { payload } = run
-  const summary = payload.summary
-  const mc = payload.monteCarlo?.summary
+  const bundle = interpretBundle(payload)
   const meta = payload.meta
-  const access = meta?.accessScenario ?? summary?.access_scenario
-  const behaviour = payload.behaviour?.per_product?.[activeProduct]
-  const productSummary = summary?.per_product?.[activeProduct]
-  const productLabel = PRODUCT_LABELS[activeProduct as Product] ?? activeProduct
-  const cmp = compare?.payload
+  const access = meta?.accessScenario ?? payload.summary?.access_scenario
 
-  // Dataset integrity rows
   const datasetRows = (payload.datasetReports ?? []).map((r) => ({
     day: r.day,
     timestamps: r.validation?.timestamps,
@@ -44,12 +40,6 @@ export function Overview() {
     one_sided: r.validation?.one_sided_book_rows,
     source: r.metadata?.source ?? r.validation?.source ?? 'historical',
   }))
-
-  // Assumptions rows
-  const assumptionRows = [
-    ...(payload.assumptions?.exact ?? []).map((a) => ({ type: 'exact', item: a })),
-    ...(payload.assumptions?.approximate ?? []).map((a) => ({ type: 'approx', item: a })),
-  ]
 
   const datasetCols: ColDef<(typeof datasetRows)[0]>[] = [
     { key: 'day', header: 'Day', fmt: 'int', width: 60 },
@@ -60,105 +50,38 @@ export function Overview() {
     { key: 'source', header: 'Source', fmt: 'str' },
   ]
 
+  const mafCost = numberOrNull(payload.summary?.maf_cost) ?? numberOrNull(access?.maf_cost)
+
   return (
     <div className="space-y-5">
       <PageHeader
-        kicker="Overview / run observatory"
+        kicker="Overview / bundle observatory"
         title="Strategy state"
         accent="at a glance"
-        description="Run metadata, data integrity, assumptions and the first-pass signals that decide where to inspect next."
+        description="Bundle-aware run metadata, integrity checks and the metrics that are genuinely present in the loaded dashboard JSON."
+        meta={<BundleBadge payload={payload} />}
         action={<ProductToggle />}
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <MetricCard
-          label="Final PnL"
-          value={fmtNum(summary?.final_pnl ?? 0)}
-          sub={`Max DD ${fmtNum(summary?.max_drawdown ?? 0)}`}
-          tone={colorForValue(summary?.final_pnl)}
-          delta={cmp?.summary ? `vs ${fmtNum((summary?.final_pnl ?? 0) - (cmp.summary.final_pnl ?? 0))}` : undefined}
-          deltaTone={colorForValue((summary?.final_pnl ?? 0) - (cmp?.summary?.final_pnl ?? 0))}
-        />
-        <MetricCard
-          label="Fill count"
-          value={fmtInt(summary?.fill_count)}
-          sub={`Orders ${fmtInt(summary?.order_count)}`}
-        />
-        <MetricCard
-          label="Limit breaches"
-          value={fmtInt(summary?.limit_breaches ?? 0)}
-          tone={summary?.limit_breaches ? 'bad' : 'good'}
-          sub="Batch-dropped order groups"
-        />
-        <MetricCard
-          label="Run type"
-          value={payload.type ?? '-'}
-          sub={fmtDate(meta?.createdAt)}
-          tone="neutral"
-        />
-      </div>
+      {renderBundleOverview(payload, activeProduct)}
 
-      {/* MC summary if present */}
-      {mc && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <MetricCard label="MC mean" value={fmtNum(mc.mean)} tone={colorForValue(mc.mean)} sub={`Sessions: ${fmtInt(mc.session_count)}`} />
-          <MetricCard label="MC P05" value={fmtNum(mc.p05)} tone={colorForValue(mc.p05)} sub={`ES05 ${fmtNum(mc.expected_shortfall_05)}`} />
-          <MetricCard label="Positive rate" value={fmtPct(mc.positive_rate)} tone={mc.positive_rate > 0.5 ? 'good' : 'warn'} sub={`Std ${fmtNum(mc.std)}`} />
-          <MetricCard label="Mean drawdown" value={fmtNum(mc.mean_max_drawdown)} tone="warn" sub={`Range ${fmtNum(mc.min)} / ${fmtNum(mc.max)}`} />
-        </div>
-      )}
-
-      {/* Product detail row */}
-      {productSummary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <MetricCard
-            label={`${productLabel} MTM`}
-            value={fmtNum(productSummary.final_mtm)}
-            tone={colorForValue(productSummary.final_mtm)}
-            sub={`Realised ${fmtNum(productSummary.realised)}`}
-          />
-          <MetricCard
-            label={`${productLabel} position`}
-            value={fmtInt(productSummary.final_position)}
-            sub={`Cap ${fmtNum((Math.abs(productSummary.final_position) / 80) * 100, 0)}%`}
-            tone={Math.abs(productSummary.final_position) >= 80 ? 'warn' : 'neutral'}
-          />
-          {behaviour && (
-            <>
-              <MetricCard
-                label="Cap usage ratio"
-                value={fmtPct(behaviour.cap_usage_ratio)}
-                tone={behaviour.cap_usage_ratio > 0.6 ? 'warn' : 'neutral'}
-                sub={`Peak pos ${fmtInt(behaviour.peak_abs_position)}`}
-              />
-              <MetricCard
-                label="Fill markout +5"
-                value={fmtNum(behaviour.average_fill_markout_5)}
-                tone={colorForValue(behaviour.average_fill_markout_5)}
-                sub="Avg 5-tick signed edge"
-              />
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Run metadata + dataset integrity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card title="Run metadata">
           <KVGrid
             cols={2}
             pairs={[
+              { label: 'Bundle type', value: bundle.badge, tone: 'accent' },
               { label: 'Run name', value: meta?.runName },
               { label: 'Trader', value: meta?.traderName },
               { label: 'Mode', value: meta?.mode },
-              { label: 'Round', value: meta?.round ?? 1 },
-              { label: 'Fill model', value: meta?.fillModel?.name },
-              { label: 'Access', value: access?.name ?? 'no_access' },
-              { label: 'MAF cost', value: fmtNum(summary?.maf_cost) },
+              { label: 'Round', value: meta?.round },
+              { label: 'Fill model', value: meta?.fillModel?.name ?? 'not available for this bundle type' },
+              { label: 'Access', value: access?.name ?? 'not available for this bundle type' },
+              { label: 'MAF cost', value: mafCost == null ? 'not available for this bundle type' : fmtNum(mafCost) },
               { label: 'Created', value: fmtDate(meta?.createdAt) },
               { label: 'Schema v', value: meta?.schemaVersion },
-              { label: 'Dominant risk', value: payload.behaviour?.summary?.dominant_risk_product },
-              { label: 'Dominant turnover', value: payload.behaviour?.summary?.dominant_turnover_product },
+              { label: 'Dominant risk', value: payload.behaviour?.summary?.dominant_risk_product ?? 'not available for this bundle type' },
+              { label: 'Dominant turnover', value: payload.behaviour?.summary?.dominant_turnover_product ?? 'not available for this bundle type' },
             ]}
           />
         </Card>
@@ -167,38 +90,214 @@ export function Overview() {
           {datasetRows.length > 0 ? (
             <DataTable rows={datasetRows} cols={datasetCols} striped />
           ) : (
-            <EmptyState title="No dataset reports" message="Replay bundles include dataset reports." />
+            <EmptyState
+              title="Dataset reports not available"
+              message={`${bundle.badge} does not include dataset report rows.`}
+            />
           )}
         </Card>
       </div>
 
-      {/* Exact vs approximate */}
       <Card title="Exact vs approximate assumptions">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <div className="text-good text-xs font-semibold uppercase tracking-wider mb-3">Exact</div>
-            <ul className="space-y-2">
-              {(payload.assumptions?.exact ?? []).map((a, i) => (
-                <li key={i} className="text-txt text-xs flex items-start gap-2">
-                  <span className="mt-0.5 text-good">OK</span>
-                  {a}
-                </li>
-              ))}
-            </ul>
+        {hasAssumptionNotes(payload) ? (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <AssumptionList title="Exact" tone="good" items={payload.assumptions?.exact ?? []} />
+            <AssumptionList title="Approximate" tone="warn" items={payload.assumptions?.approximate ?? []} />
           </div>
-          <div>
-            <div className="text-warn text-xs font-semibold uppercase tracking-wider mb-3">Approximate</div>
-            <ul className="space-y-2">
-              {(payload.assumptions?.approximate ?? []).map((a, i) => (
-                <li key={i} className="text-txt text-xs flex items-start gap-2">
-                  <span className="mt-0.5 text-warn">~</span>
-                  {a}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
+        ) : (
+          <EmptyState title="Assumption notes not available" message="This bundle does not include exact or approximate assumption notes." />
+        )}
       </Card>
     </div>
   )
+}
+
+function renderBundleOverview(payload: DashboardPayload, activeProduct: Product): React.ReactNode {
+  const bundle = interpretBundle(payload)
+
+  if (bundle.type === 'replay') return <ReplayOverview payload={payload} activeProduct={activeProduct} />
+  if (bundle.type === 'monte_carlo') return <MonteCarloOverview payload={payload} />
+  if (bundle.type === 'comparison') return <ComparisonOverview payload={payload} />
+  if (bundle.type === 'round2_scenarios') return <Round2Overview payload={payload} />
+  if (bundle.type === 'calibration') return <CalibrationOverview payload={payload} />
+  if (bundle.type === 'optimization') return <OptimizationOverview payload={payload} />
+
+  return (
+    <Card title="Bundle metrics">
+      <EmptyState title="Unknown bundle schema" message="The dashboard could not classify this bundle type confidently." />
+    </Card>
+  )
+}
+
+function ReplayOverview({ payload, activeProduct }: { payload: DashboardPayload; activeProduct: Product }) {
+  const summary = payload.summary
+  const productSummary = summary?.per_product?.[activeProduct]
+  const behaviour = payload.behaviour?.per_product?.[activeProduct]
+  const productLabel = PRODUCT_LABELS[activeProduct] ?? activeProduct
+  const cards: React.ReactNode[] = []
+
+  if (summary) {
+    cards.push(
+      <MetricCard key="final-pnl" label="Final PnL" value={fmtNum(summary.final_pnl)} sub={`Max DD ${fmtNum(summary.max_drawdown)}`} tone={colorForValue(summary.final_pnl)} />,
+      <MetricCard key="fills" label="Fill count" value={fmtInt(summary.fill_count)} sub={`Orders ${fmtInt(summary.order_count)}`} />,
+      <MetricCard key="breaches" label="Limit breaches" value={fmtInt(summary.limit_breaches)} tone={summary.limit_breaches > 0 ? 'bad' : 'good'} sub="Batch-dropped order groups" />,
+    )
+  }
+
+  if (productSummary) {
+    const capUsage = isFiniteNumber(productSummary.final_position)
+      ? Math.abs(productSummary.final_position) / POSITION_LIMIT
+      : null
+    cards.push(
+      <MetricCard key="product-mtm" label={`${productLabel} MTM`} value={fmtNum(productSummary.final_mtm)} tone={colorForValue(productSummary.final_mtm)} sub={`Realised ${fmtNum(productSummary.realised)}`} />,
+      <MetricCard key="product-position" label={`${productLabel} position`} value={fmtInt(productSummary.final_position)} sub={`Cap ${fmtPct(capUsage)}`} tone={capUsage != null && capUsage >= 1 ? 'warn' : 'neutral'} />,
+    )
+  }
+
+  if (behaviour) {
+    cards.push(
+      <MetricCard key="cap-usage" label="Cap usage ratio" value={fmtPct(behaviour.cap_usage_ratio)} tone={numberOrNull(behaviour.cap_usage_ratio) != null && Number(behaviour.cap_usage_ratio) > 0.6 ? 'warn' : 'neutral'} sub={`Peak pos ${fmtInt(behaviour.peak_abs_position)}`} />,
+      <MetricCard key="markout" label="Fill markout +5" value={fmtNum(behaviour.average_fill_markout_5)} tone={colorForValue(behaviour.average_fill_markout_5)} sub="Average 5-tick signed edge" />,
+    )
+  }
+
+  return cards.length ? (
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">{cards}</div>
+  ) : (
+    <Card title="Replay metrics">
+      <EmptyState title="Replay summary not available" message="This replay bundle does not include summary metrics." />
+    </Card>
+  )
+}
+
+function MonteCarloOverview({ payload }: { payload: DashboardPayload }) {
+  const summary = payload.monteCarlo?.summary
+  if (!summary) {
+    return (
+      <Card title="Monte Carlo metrics">
+        <EmptyState title="Monte Carlo summary not available" message="This monte_carlo bundle does not include `monteCarlo.summary`." />
+      </Card>
+    )
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <MetricCard label="MC mean" value={fmtNum(summary.mean)} tone={colorForValue(summary.mean)} sub={`Sessions ${fmtInt(summary.session_count)}`} />
+      <MetricCard label="MC P05" value={fmtNum(summary.p05)} tone={colorForValue(summary.p05)} sub={`ES05 ${fmtNum(summary.expected_shortfall_05)}`} />
+      <MetricCard label="MC median" value={fmtNum(summary.p50)} tone={colorForValue(summary.p50)} sub={`P95 ${fmtNum(summary.p95)}`} />
+      <MetricCard label="Positive rate" value={fmtPct(summary.positive_rate)} tone={summary.positive_rate > 0.5 ? 'good' : 'warn'} sub={`Std ${fmtNum(summary.std)}`} />
+    </div>
+  )
+}
+
+function ComparisonOverview({ payload }: { payload: DashboardPayload }) {
+  const rows = getComparisonRows(payload)
+  const diagnostics = payload.comparisonDiagnostics ?? {}
+  const winner = rows[0]
+  const gap = numberOrNull(diagnostics.gap_to_second)
+
+  return (
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <MetricCard label="Comparison rows" value={fmtInt(numberOrNull(diagnostics.row_count) ?? rows.length)} sub="Precomputed trader rows" />
+      <MetricCard label="Winner" value={String(diagnostics.winner ?? winner?.trader ?? 'not available')} sub={winner ? `PnL ${fmtNum(winner.final_pnl)}` : 'No row winner present'} tone="accent" />
+      <MetricCard label="Gap to second" value={fmtNum(gap)} tone={colorForValue(gap)} sub="Winner minus runner-up" />
+      <MetricCard label="Scenario count" value={fmtInt(numberOrNull(diagnostics.scenario_count))} sub={`MAF rows ${fmtInt(numberOrNull(diagnostics.maf_sensitive_rows))}`} />
+    </div>
+  )
+}
+
+function Round2Overview({ payload }: { payload: DashboardPayload }) {
+  const round2 = payload.round2
+  const scenarioRows = round2?.scenarioRows ?? []
+  const winnerRows = round2?.winnerRows ?? []
+  const bestRow = maxByNumber(scenarioRows, (row) => row.final_pnl)
+  const bestBreakEven = maxNumber(scenarioRows.map((row) => row.break_even_maf_vs_no_access))
+  const rankingShifts = winnerRows.filter((row) => row.ranking_changed_vs_no_access === true).length
+  const scenarioCount = new Set(scenarioRows.map((row) => row.scenario)).size
+
+  return (
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <MetricCard label="Scenarios" value={fmtInt(scenarioCount)} sub={`Rows ${fmtInt(scenarioRows.length)}`} />
+      <MetricCard label="Best net PnL" value={fmtNum(bestRow?.final_pnl)} tone={colorForValue(bestRow?.final_pnl)} sub={bestRow?.trader ?? 'No winning row'} />
+      <MetricCard label="Best break-even MAF" value={fmtNum(bestBreakEven)} tone={colorForValue(bestBreakEven)} sub="Access edge before fee" />
+      <MetricCard label="Ranking shifts" value={fmtInt(rankingShifts)} tone={rankingShifts > 0 ? 'warn' : 'neutral'} sub="Versus no-access baseline" />
+    </div>
+  )
+}
+
+function CalibrationOverview({ payload }: { payload: DashboardPayload }) {
+  const calibration = payload.calibration
+  const best = calibration?.best
+  const candidateCount = numberOrNull(calibration?.diagnostics?.candidate_count) ?? calibration?.grid?.length
+
+  return (
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <MetricCard label="Candidates" value={fmtInt(candidateCount)} sub="Calibration grid size" />
+      <MetricCard label="Best score" value={fmtNum(numberOrNull(best?.score))} sub="Lower is better" />
+      <MetricCard label="Profit error" value={fmtNum(numberOrNull(best?.profit_error))} tone={colorForValue(numberOrNull(best?.profit_error))} sub="Sim minus live profit" />
+      <MetricCard label="Path RMSE" value={fmtNum(numberOrNull(best?.path_rmse))} sub={String(best?.fill_model ?? 'Best model not available')} />
+    </div>
+  )
+}
+
+function OptimizationOverview({ payload }: { payload: DashboardPayload }) {
+  const opt = payload.optimization
+  const bestRow = opt?.rows?.[0]
+  const bestDownsideVariant = opt?.diagnostics?.best_downside_variant
+  const bestDownside = opt?.rows?.find((row) => row.variant === bestDownsideVariant)
+
+  return (
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <MetricCard label="Variants tested" value={fmtInt(opt?.diagnostics?.variant_count ?? opt?.rows?.length)} sub="Parameter combinations" />
+      <MetricCard label="Best score" value={fmtNum(bestRow?.score)} sub={bestRow?.variant ?? 'Best variant not available'} />
+      <MetricCard label="Best replay PnL" value={fmtNum(bestRow?.replay_final_pnl)} tone={colorForValue(bestRow?.replay_final_pnl)} sub={opt?.diagnostics?.best_replay_variant} />
+      <MetricCard label="Best P05" value={fmtNum(bestDownside?.mc_p05)} tone={colorForValue(bestDownside?.mc_p05)} sub={opt?.diagnostics?.best_downside_variant} />
+    </div>
+  )
+}
+
+function AssumptionList({ title, tone, items }: { title: string; tone: 'good' | 'warn'; items: string[] }) {
+  return (
+    <div>
+      <div className={tone === 'good' ? 'mb-3 text-xs font-semibold uppercase tracking-wider text-good' : 'mb-3 text-xs font-semibold uppercase tracking-wider text-warn'}>
+        {title}
+      </div>
+      {items.length ? (
+        <ul className="space-y-2">
+          {items.map((item, i) => (
+            <li key={i} className="flex items-start gap-2 text-xs text-txt">
+              <span className={tone === 'good' ? 'mt-0.5 text-good' : 'mt-0.5 text-warn'}>{tone === 'good' ? 'OK' : '~'}</span>
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="text-sm text-muted">not available for this bundle type</div>
+      )}
+    </div>
+  )
+}
+
+function hasAssumptionNotes(payload: DashboardPayload): boolean {
+  return Boolean(payload.assumptions?.exact?.length || payload.assumptions?.approximate?.length)
+}
+
+function maxNumber(values: unknown[]): number | null {
+  const clean = values.map(numberOrNull).filter((value): value is number => value != null)
+  if (!clean.length) return null
+  return Math.max(...clean)
+}
+
+function maxByNumber<T>(rows: T[], getValue: (row: T) => unknown): T | null {
+  let best: T | null = null
+  let bestValue: number | null = null
+  for (const row of rows) {
+    const value = numberOrNull(getValue(row))
+    if (value == null) continue
+    if (bestValue == null || value > bestValue) {
+      best = row
+      bestValue = value
+    }
+  }
+  return best
 }

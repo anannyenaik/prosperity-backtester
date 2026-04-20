@@ -6,32 +6,35 @@ import { DataTable, type ColDef } from '../components/DataTable'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { ProductToggle } from '../components/ProductToggle'
+import { BundleBadge } from '../components/BundleBadge'
 import { HistogramChart } from '../charts/HistogramChart'
 import { PathBandsChart } from '../charts/PathBandsChart'
 import { PnlChart } from '../charts/PnlChart'
 import { buildHistogram, buildBands, buildPnlData } from '../lib/data'
 import { fmtNum, fmtInt, fmtPct, colorForValue } from '../lib/format'
+import { getTabAvailability, isFiniteNumber } from '../lib/bundles'
 import type { McSession, Product } from '../types'
 
 export function MonteCarlo() {
   const { getActiveRun, activeProduct, sampleRunName, setSampleRun } = useStore()
   const run = getActiveRun()
+  const availability = getTabAvailability(run?.payload, 'montecarlo')
   const mc = run?.payload.monteCarlo
 
-  if (!mc) {
+  if (!run || !availability.supported || !mc) {
     return (
       <EmptyState
-        icon={<Sliders className="w-10 h-10" />}
-        title="No Monte Carlo data"
-        message="Load a Monte Carlo bundle to see robustness analysis."
+        icon={<Sliders className="h-10 w-10" />}
+        title={availability.title}
+        message={availability.message}
       />
     )
   }
 
-  const { summary, sessions, sampleRuns, fairValueBands } = mc
+  const { summary, sessions = [], sampleRuns = [], fairValueBands } = mc
   const product = activeProduct as Product
 
-  const sessionPnls = sessions.map((s) => s.final_pnl)
+  const sessionPnls = sessions.map((s) => s.final_pnl).filter(isFiniteNumber)
   const histData = buildHistogram(sessionPnls)
 
   const bandData = buildBands(fairValueBands?.analysisFair?.[product] ?? [])
@@ -66,6 +69,7 @@ export function MonteCarlo() {
         title="Path stress"
         accent="distribution"
         description="Distribution, downside, path bands and saved sample sessions for robustness decisions."
+        meta={<BundleBadge payload={run.payload} />}
         action={<ProductToggle />}
       />
 
@@ -79,13 +83,21 @@ export function MonteCarlo() {
       {/* Distribution + path bands */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Card title="Session PnL distribution" subtitle="Final PnL across all simulated sessions">
-          <HistogramChart data={histData} referenceAt={0} height={280} />
+          {histData.length > 0 ? (
+            <HistogramChart data={histData} referenceAt={0} height={280} />
+          ) : (
+            <EmptyState title="Session PnL rows not present" message="This Monte Carlo bundle does not include session-level final PnL rows." />
+          )}
         </Card>
         <Card
           title={`Fair value bands / ${activeProduct === 'ASH_COATED_OSMIUM' ? 'Osmium' : 'Pepper'}`}
           subtitle="P10/P50/P90 across synthetic sessions"
         >
-          <PathBandsChart data={bandData} height={280} />
+          {bandData.length > 0 ? (
+            <PathBandsChart data={bandData} height={280} />
+          ) : (
+            <EmptyState title="Fair-value bands not present" message="This Monte Carlo bundle does not include fair-value bands for the selected product." />
+          )}
         </Card>
       </div>
 
@@ -101,7 +113,7 @@ export function MonteCarlo() {
             <option value="">Auto (best)</option>
             {sampleRuns.map((r) => (
               <option key={r.runName} value={r.runName}>
-                {r.runName.split('_').slice(-1)[0]} / {fmtNum(r.summary?.final_pnl ?? 0)}
+                {r.runName.split('_').slice(-1)[0]} / {fmtNum(r.summary?.final_pnl)}
               </option>
             ))}
           </select>
@@ -134,7 +146,7 @@ export function MonteCarlo() {
 
       {/* Worst / best table */}
       <Card title="Extreme sessions" subtitle="5 worst and 5 best sessions">
-        <DataTable rows={extremeSessions} cols={sessionCols} maxRows={10} striped />
+        <DataTable rows={extremeSessions} cols={sessionCols} maxRows={10} striped emptyMsg="Session rows are not present in this Monte Carlo bundle." />
       </Card>
 
       {/* Per-product MC summary */}
@@ -150,7 +162,7 @@ export function MonteCarlo() {
                   {(['mean', 'min', 'max'] as const).map((k) => (
                     <div key={k}>
                       <div className="text-muted uppercase tracking-wide mb-0.5">{k}</div>
-                      <div className={`font-bold font-mono ${(stats[k] ?? 0) >= 0 ? 'text-good' : 'text-bad'}`}>
+                      <div className={`font-bold font-mono ${colorForValue(stats[k]) === 'good' ? 'text-good' : colorForValue(stats[k]) === 'bad' ? 'text-bad' : 'text-txt-soft'}`}>
                         {fmtNum(stats[k])}
                       </div>
                     </div>

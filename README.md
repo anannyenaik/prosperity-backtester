@@ -182,10 +182,80 @@ Key outputs:
 - `round2_maf_sensitivity.csv`
 - dashboard `Round 2` tab
 
+## Round 2 all-in-one research bundle
+
+Use `round2_all_in_one_research_bundle` as the shared output folder for serious Round 2 study. It should collect every bundle needed to compare scripts, inspect risk and make an upload decision without guessing which file answers which question.
+
+Recommended contents:
+
+- Replay bundles for each strategy: inspect one script at full detail. Use these for total PnL, per-product PnL, realised/unrealised/MTM paths, fills, orders, inventory, max drawdown, cap usage, behaviour summaries and markout metrics.
+- Compare bundle: rank scripts under one fixed replay assumption. Use this for the clean head-to-head table and first-pass winner.
+- Round 2 scenario bundle: test the same scripts across no-access, extra-access and MAF assumptions. Use `round2_winners.csv` for scenario winners and `round2_maf_sensitivity.csv` for fee sensitivity.
+- Targeted Monte Carlo bundles: stress the leading scripts on synthetic paths. Use mean, median and P05 to check robustness rather than relying on one replay print.
+- Optional calibration bundle: tune or validate fill assumptions against live exports when useful export data exists.
+
+How to read the outputs:
+
+- Total PnL: final net result after any MAF deduction.
+- Per-product PnL: identifies whether the edge comes from OSMIUM, PEPPER or both.
+- Realised, unrealised and MTM: separates closed trades, open inventory value and full mark-to-market path.
+- Fills and orders: shows execution quality and activity level; high orders with low fills can mean passive quoting is not converting.
+- Inventory and cap usage: shows how much position risk the script takes and whether it sits near limits.
+- Max drawdown: largest peak-to-trough loss in the run.
+- Behaviour and markout metrics: checks whether fills are favourable after 1 or 5 ticks, and whether quote placement is helping.
+- Scenario winners: shows which script wins under each Round 2 access/MAF assumption.
+- MAF sensitivity: shows how much fee a script can absorb before access is no longer worth it.
+- Monte Carlo mean, median and P05: mean is average robustness, median is typical run, P05 is downside risk.
+
+Dashboard mapping:
+
+- Replay bundles feed the Overview, Replay, product dive, Inspect and behaviour views.
+- Compare bundles feed the Comparison view.
+- Round 2 scenario bundles feed the Round 2 view and comparison-style tables. Replay-specific tabs can be empty because scenario bundles contain aggregate rows, not a full tick-by-tick session.
+- Monte Carlo bundles feed the Monte Carlo view.
+- Calibration bundles feed the Calibration view.
+
+Recommended workflow:
+
+1. Inspect replay bundles for each script and check PnL source, inventory, drawdown, fills and limit breaches.
+2. Inspect the compare bundle for the direct ranking under one fixed assumption.
+3. Inspect the scenario bundle for winner stability across access quality and MAF levels.
+4. Inspect Monte Carlo bundles for mean, median, P05 and drawdown robustness.
+5. Pick the script that wins broadly, survives downside checks and has acceptable inventory/execution behaviour.
+
+How to judge a winner:
+
+- Prefer scripts that win across scenarios, not only one setting.
+- Prefer robust mean and median performance with a tolerable P05, not one lucky replay print.
+- Use this local backtester for ranking, risk diagnosis and decision support, not exact website PnL prediction.
+
+Round 2 limitations:
+
+- The MAF cutoff is website-only because other teams' bids are not known.
+- Extra-access usefulness is approximate locally.
+- Passive fills, queue position and same-price priority are approximate.
+
+Template note: [docs/bundle_templates/round2_all_in_one_research_bundle/README.md](docs/bundle_templates/round2_all_in_one_research_bundle/README.md) is a compact README for the bundle folder itself.
+
 See [docs/ROUND2.md](docs/ROUND2.md) for the gap analysis, design plan, scenario fields and limitations.
 See [docs/CALIBRATED_RESEARCH.md](docs/CALIBRATED_RESEARCH.md) for the calibrated fill, slippage, noise, scenario and validation workflow.
 
 ## Dashboard
+
+The dashboard is bundle-aware. It reads the bundle `type` from `dashboard.json` first, then falls back to the actual payload sections when older or partial bundles are loaded. Tabs intentionally show a compatibility message instead of zero-valued cards when the loaded bundle does not contain the required schema.
+
+Dashboard compatibility:
+
+- Overview: works for every recognised bundle and only shows metrics present in that bundle.
+- Replay: requires a `replay` bundle with top-level replay series.
+- Inspect, Osmium and Pepper: require replay-style per-tick series such as PnL, inventory, fair value, fills or orders.
+- Monte Carlo: requires a `monte_carlo` bundle with `monteCarlo.summary`.
+- Calibration: requires a `calibration` bundle.
+- Comparison: works with `comparison` bundles, compatible `round2_scenarios` comparison diagnostics, or two distinct loaded replay summaries.
+- Optimisation: requires an `optimization` bundle.
+- Round 2: requires a `round2_scenarios` bundle.
+
+If a tab is unavailable, that is usually intentional: for example, a Round 2 scenario bundle contains aggregate scenario rows, not per-tick replay data, while a Monte Carlo bundle contains distribution and sample-path data, not a top-level replay summary.
 
 Build the dashboard once:
 
@@ -315,6 +385,7 @@ The important distinction is that Monte Carlo `analysis_fair` is the simulator l
 
 ```bash
 python -m pytest -q
+npm test --prefix dashboard
 npm run build --prefix dashboard
 ```
 

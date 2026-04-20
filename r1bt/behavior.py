@@ -111,14 +111,19 @@ def analyse_behaviour(
     inventory_series: Sequence[Dict[str, object]],
     pnl_series: Sequence[Dict[str, object]],
     fair_value_series: Sequence[Dict[str, object]],
+    include_series: bool = True,
 ) -> Dict[str, object]:
     per_product: Dict[str, Dict[str, object]] = {}
-    behaviour_series = build_behaviour_series(
-        orders=orders,
-        fills=fills,
-        inventory_series=inventory_series,
-        pnl_series=pnl_series,
-        fair_value_series=fair_value_series,
+    behaviour_series = (
+        build_behaviour_series(
+            orders=orders,
+            fills=fills,
+            inventory_series=inventory_series,
+            pnl_series=pnl_series,
+            fair_value_series=fair_value_series,
+        )
+        if include_series
+        else []
     )
 
     for product in PRODUCTS:
@@ -208,9 +213,25 @@ def analyse_behaviour(
             else:
                 regime_counts["flat"] += 1
 
-        position_ratios = [float(row.get("abs_position_ratio", 0.0)) for row in product_behaviour]
-        order_bursts = [int(row.get("order_count", 0)) for row in product_behaviour]
-        fill_bursts = [int(row.get("fill_count", 0)) for row in product_behaviour]
+        if include_series:
+            position_ratios = [float(row.get("abs_position_ratio", 0.0)) for row in product_behaviour]
+            order_bursts = [int(row.get("order_count", 0)) for row in product_behaviour]
+            fill_bursts = [int(row.get("fill_count", 0)) for row in product_behaviour]
+        else:
+            position_ratios = [
+                abs(int(row.get("position", 0))) / position_limit
+                for row in product_inventory
+            ]
+            order_count_by_tick: Dict[tuple[int, int], int] = {}
+            for row in product_orders:
+                key = (int(row["day"]), int(row["timestamp"]))
+                order_count_by_tick[key] = order_count_by_tick.get(key, 0) + 1
+            fill_count_by_tick: Dict[tuple[int, int], int] = {}
+            for row in product_fills:
+                key = (int(row["day"]), int(row["timestamp"]))
+                fill_count_by_tick[key] = fill_count_by_tick.get(key, 0) + 1
+            order_bursts = list(order_count_by_tick.values())
+            fill_bursts = list(fill_count_by_tick.values())
 
         per_product[product] = {
             "order_count": len(product_orders),

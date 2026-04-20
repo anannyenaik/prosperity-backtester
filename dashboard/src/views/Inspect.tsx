@@ -8,6 +8,7 @@ import { KVGrid } from '../components/KVGrid'
 import { MetricCard } from '../components/MetricCard'
 import { PageHeader } from '../components/PageHeader'
 import { ProductToggle } from '../components/ProductToggle'
+import { BundleBadge } from '../components/BundleBadge'
 import { FairFillChart } from '../charts/FairFillChart'
 import { InventoryChart } from '../charts/InventoryChart'
 import { PnlChart } from '../charts/PnlChart'
@@ -20,7 +21,8 @@ import {
   rowsAround,
 } from '../lib/data'
 import { colorForValue, fmtInt, fmtNum, fmtPct, fmtPrice, fmtTimestamp } from '../lib/format'
-import type { FairValueRow, FillRow, InventoryRow, OrderRow, PnlRow, Product } from '../types'
+import { getTabAvailability, numberOrNull } from '../lib/bundles'
+import type { FillRow, OrderRow, Product } from '../types'
 
 const RADIUS_OPTIONS = [25, 75, 150, 400]
 
@@ -46,13 +48,14 @@ export function Inspect() {
   const [cursorIndex, setCursorIndex] = useState(0)
   const [radius, setRadius] = useState(75)
   const run = getActiveRun()
+  const availability = getTabAvailability(run?.payload, 'inspect')
 
-  if (!run?.payload.pnlSeries?.length) {
+  if (!run || !availability.supported || !run.payload.pnlSeries?.length) {
     return (
       <EmptyState
         icon={<Radar className="h-10 w-10" />}
-        title="No inspectable replay path"
-        message="Load a replay or sampled Monte Carlo bundle with per-tick series to use inspect mode."
+        title={availability.supported ? 'PnL series not present' : availability.title}
+        message={availability.supported ? 'This bundle has replay-style data, but not the PnL rows needed for inspect mode.' : availability.message}
       />
     )
   }
@@ -87,9 +90,9 @@ export function Inspect() {
   const inventoryData = buildInventoryDataFromRows(windowInventoryRows)
   const fairFillData = buildFairFillDataFromRows(windowFairRows, windowFillRows)
 
-  const startPnl = windowPnlRows[0]?.mtm ?? selected?.mtm ?? 0
-  const endPnl = windowPnlRows[windowPnlRows.length - 1]?.mtm ?? selected?.mtm ?? 0
-  const windowPnlDelta = endPnl - startPnl
+  const startPnl = numberOrNull(windowPnlRows[0]?.mtm ?? selected?.mtm)
+  const endPnl = numberOrNull(windowPnlRows[windowPnlRows.length - 1]?.mtm ?? selected?.mtm)
+  const windowPnlDelta = startPnl != null && endPnl != null ? endPnl - startPnl : null
   const buyQty = windowFillRows.filter((fill) => fill.side === 'buy').reduce((acc, fill) => acc + fill.quantity, 0)
   const sellQty = windowFillRows.filter((fill) => fill.side === 'sell').reduce((acc, fill) => acc + fill.quantity, 0)
   const passiveCount = windowFillRows.filter((fill) => fill.kind === 'passive_approx').length
@@ -97,7 +100,7 @@ export function Inspect() {
   const avgEdge = mean(windowFillRows.map((fill) => fill.signed_edge_to_analysis_fair))
   const avgMarkout5 = mean(windowFillRows.map((fill) => fill.markout_5))
   const nearCap = windowInventoryRows.filter((row) => Math.abs(row.position) >= 64).length
-  const nearCapRate = windowInventoryRows.length ? nearCap / windowInventoryRows.length : 0
+  const nearCapRate = windowInventoryRows.length ? nearCap / windowInventoryRows.length : null
 
   const fillCols: ColDef<FillRow>[] = [
     { key: 'day', header: 'Day', fmt: 'int', width: 56 },
@@ -133,6 +136,7 @@ export function Inspect() {
         title="Focused run"
         accent="analysis"
         description="A lab-grade slice view for fair, mid, fills, inventory and PnL around a selected timestamp."
+        meta={<BundleBadge payload={payload} />}
         action={<ProductToggle />}
       />
 
@@ -207,7 +211,7 @@ export function Inspect() {
                 { label: 'Tick', value: selected?.timestamp },
                 { label: 'Fair', value: fmtPrice(selectedFair?.analysis_fair as number | null | undefined), tone: 'accent' },
                 { label: 'Mid', value: fmtPrice(selectedFair?.mid as number | null | undefined) },
-                { label: 'Position', value: fmtInt(selected?.position), tone: Math.abs(selected?.position ?? 0) >= 80 ? 'warn' : 'neutral' },
+                { label: 'Position', value: fmtInt(selected?.position), tone: numberOrNull(selected?.position) != null && Math.abs(Number(selected?.position)) >= 80 ? 'warn' : 'neutral' },
               ]}
             />
           </Card>
@@ -218,7 +222,7 @@ export function Inspect() {
             <MetricCard label="Window PnL" value={fmtNum(windowPnlDelta)} tone={colorForValue(windowPnlDelta)} sub={`MTM now ${fmtNum(selected?.mtm)}`} />
             <MetricCard label="Fills" value={fmtInt(windowFillRows.length)} sub={`Buy ${fmtInt(buyQty)} / Sell ${fmtInt(sellQty)}`} />
             <MetricCard label="Avg edge" value={fmtNum(avgEdge)} tone={colorForValue(avgEdge)} sub={`M+5 ${fmtNum(avgMarkout5)}`} />
-            <MetricCard label="Near cap" value={fmtPct(nearCapRate)} tone={nearCapRate > 0.25 ? 'warn' : 'neutral'} sub={`${fmtInt(nearCap)} ticks near cap`} />
+            <MetricCard label="Near cap" value={fmtPct(nearCapRate)} tone={nearCapRate != null && nearCapRate > 0.25 ? 'warn' : 'neutral'} sub={`${fmtInt(nearCap)} ticks near cap`} />
           </div>
 
           <Card title="PnL guide rail" subtitle="MTM and realised PnL inside the selected timestamp window">

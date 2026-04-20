@@ -5,13 +5,16 @@ import { MetricCard } from '../components/MetricCard'
 import { DataTable, type ColDef } from '../components/DataTable'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
+import { BundleBadge } from '../components/BundleBadge'
 import { BarGroupChart } from '../charts/BarGroupChart'
 import { fmtNum, fmtInt, fmtPct, colorForValue } from '../lib/format'
+import { formatBool, getTabAvailability, numberOrNull } from '../lib/bundles'
 import type { Round2PairwiseRow, Round2ScenarioRow, Round2WinnerRow } from '../types'
 
 export function Round2() {
   const { getActiveRun } = useStore()
   const run = getActiveRun()
+  const availability = getTabAvailability(run?.payload, 'round2')
   const round2 = run?.payload.round2
   const meta = run?.payload.meta
   const access = meta?.accessScenario
@@ -21,19 +24,17 @@ export function Round2() {
   const mafRows = round2?.mafSensitivityRows ?? []
   const pairwiseRows = round2?.pairwiseRows ?? []
 
-  if (!round2 && !access && !run?.payload.summary?.access_scenario) {
+  if (!run || !availability.supported || !round2) {
     return (
       <EmptyState
-        icon={<Target className="w-10 h-10" />}
-        title="No Round 2 scenario data"
-        message="Load a Round 2 scenario bundle or a replay with access metadata."
+        icon={<Target className="h-10 w-10" />}
+        title={availability.title}
+        message={availability.message}
       />
     )
   }
 
-  const bestRow = scenarioRows.length
-    ? [...scenarioRows].sort((a, b) => (b.final_pnl ?? 0) - (a.final_pnl ?? 0))[0]
-    : null
+  const bestRow = maxByNumber(scenarioRows, (row) => row.final_pnl)
   const accessRows = scenarioRows.filter((row) => row.extra_access_enabled)
   const bestBreakEven = accessRows.reduce<number | null>((best, row) => {
     const value = row.break_even_maf_vs_no_access
@@ -41,7 +42,7 @@ export function Round2() {
     return best == null ? value : Math.max(best, value)
   }, null)
   const changedCount = winnerRows.filter((row) => row.ranking_changed_vs_no_access).length
-  const scenarioCount = new Set(scenarioRows.map((row) => row.scenario)).size || (access?.scenario_count as number | undefined) || 1
+  const scenarioCount = new Set(scenarioRows.map((row) => row.scenario)).size || numberOrNull(access?.scenario_count)
 
   const scenarioCols: ColDef<Round2ScenarioRow>[] = [
     { key: 'scenario', header: 'Scenario', fmt: 'str' },
@@ -87,10 +88,16 @@ export function Round2() {
   ]
 
   const mafChartRows = mafRows.slice(0, 24).map((row) => ({
-    label: `${row.trader} / ${fmtInt(row.maf_bid ?? 0)}`,
-    net: row.final_pnl ?? 0,
-    gross: row.gross_pnl_before_maf ?? row.final_pnl ?? 0,
-  }))
+    label: `${row.trader} / ${row.maf_bid == null ? 'MAF n/a' : fmtInt(row.maf_bid)}`,
+    net: row.final_pnl,
+    gross: row.gross_pnl_before_maf,
+  })).filter((row) => numberOrNull(row.net) != null)
+  const mafSeries = [
+    { key: 'net', name: 'Net', color: '#c7ab66' },
+    ...(mafChartRows.length > 0 && mafChartRows.every((row) => numberOrNull(row.gross) != null)
+      ? [{ key: 'gross', name: 'Gross', color: '#7de7ff' }]
+      : []),
+  ]
 
   const registry = round2?.assumptionRegistry
 
@@ -101,24 +108,25 @@ export function Round2() {
         title="Access"
         accent="scenarios"
         description="Net PnL, access value, MAF sensitivity, product contribution and ranking stability across explicit local assumptions."
+        meta={<BundleBadge payload={run.payload} />}
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard label="Scenarios" value={fmtInt(scenarioCount)} sub={`Round ${meta?.round ?? 2}`} />
-        <MetricCard label="Best net PnL" value={fmtNum(bestRow?.final_pnl ?? run?.payload.summary?.final_pnl)} tone={colorForValue(bestRow?.final_pnl ?? run?.payload.summary?.final_pnl)} sub={bestRow?.trader ?? access?.name ?? 'single run'} />
+        <MetricCard label="Best net PnL" value={fmtNum(bestRow?.final_pnl)} tone={colorForValue(bestRow?.final_pnl)} sub={bestRow?.trader ?? 'No winning row'} />
         <MetricCard label="Best break-even MAF" value={fmtNum(bestBreakEven)} tone={colorForValue(bestBreakEven)} sub="Access edge before fee" />
         <MetricCard label="Ranking shifts" value={fmtInt(changedCount)} tone={changedCount > 0 ? 'warn' : 'neutral'} sub="Versus no-access baseline" />
       </div>
 
-      {access && (
+      {access && Object.keys(access).length > 0 && (
         <Card title="Active access assumption">
           <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
             {[
-              ['Scenario', access.name ?? 'no_access'],
-              ['Contract won', access.contract_won ? 'yes' : 'no'],
+              ['Scenario', access.name ?? 'not available'],
+              ['Contract won', formatBool(access.contract_won)],
               ['MAF bid', fmtNum(access.maf_bid)],
               ['Expected extra quotes', fmtPct(access.expected_extra_quote_fraction)],
-              ['Mode', access.mode ?? 'none'],
+              ['Mode', access.mode ?? 'not available'],
             ].map(([label, value]) => (
               <div key={label} className="rounded-lg border border-border bg-surface-2 px-3 py-3">
                 <div className="hud-label text-muted">{label}</div>
@@ -146,10 +154,7 @@ export function Round2() {
           <BarGroupChart
             data={mafChartRows}
             labelKey="label"
-            series={[
-              { key: 'gross', name: 'Gross', color: '#7de7ff' },
-              { key: 'net', name: 'Net', color: '#c7ab66' },
-            ]}
+            series={mafSeries}
             colorByValue
             height={300}
           />
@@ -184,4 +189,18 @@ export function Round2() {
       )}
     </div>
   )
+}
+
+function maxByNumber<T>(rows: T[], getValue: (row: T) => unknown): T | null {
+  let best: T | null = null
+  let bestValue: number | null = null
+  for (const row of rows) {
+    const value = numberOrNull(getValue(row))
+    if (value == null) continue
+    if (bestValue == null || value > bestValue) {
+      best = row
+      bestValue = value
+    }
+  }
+  return best
 }

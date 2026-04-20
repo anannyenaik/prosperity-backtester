@@ -7,6 +7,7 @@ import { KVGrid } from '../components/KVGrid'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { ProductToggle } from '../components/ProductToggle'
+import { BundleBadge } from '../components/BundleBadge'
 import { PnlChart } from '../charts/PnlChart'
 import { InventoryChart } from '../charts/InventoryChart'
 import { FairFillChart } from '../charts/FairFillChart'
@@ -15,21 +16,22 @@ import {
   buildInventoryData,
   buildFairFillData,
   byProduct,
-  type FillPoint,
 } from '../lib/data'
 import { fmtNum, fmtInt, fmtPct, colorForValue } from '../lib/format'
+import { getTabAvailability, numberOrNull } from '../lib/bundles'
 import { PRODUCT_LABELS, type Product, type FillRow, type BehaviourPerProduct } from '../types'
 
 export function Replay() {
   const { getActiveRun, activeProduct, timeWindow } = useStore()
   const run = getActiveRun()
+  const availability = getTabAvailability(run?.payload, 'replay')
 
-  if (!run?.payload.pnlSeries?.length && !run?.payload.summary) {
+  if (!run || !availability.supported) {
     return (
       <EmptyState
-        icon={<BarChart2 className="w-10 h-10" />}
-        title="No replay data"
-        message="Load a replay bundle to see per-tick PnL, inventory and fill analysis."
+        icon={<BarChart2 className="h-10 w-10" />}
+        title={availability.title}
+        message={availability.message}
       />
     )
   }
@@ -37,7 +39,7 @@ export function Replay() {
   const { payload } = run
   const product = activeProduct as Product
   const productLabel = PRODUCT_LABELS[product]
-  const behaviour = (payload.behaviour?.per_product?.[product] ?? {}) as Partial<BehaviourPerProduct>
+  const behaviour = payload.behaviour?.per_product?.[product] as Partial<BehaviourPerProduct> | undefined
   const productSummary = payload.summary?.per_product?.[product]
 
   const pnlData = buildPnlData(payload.pnlSeries ?? [], product, timeWindow)
@@ -81,50 +83,68 @@ export function Replay() {
         title="Replay"
         accent="diagnostics"
         description="PnL, realised and unrealised contribution, inventory, fair value, fills and behaviour quality for the selected product."
+        meta={<BundleBadge payload={payload} />}
         action={<ProductToggle />}
       />
 
-      {productSummary && (
+      {productSummary ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <MetricCard label={`${productLabel} MTM`} value={fmtNum(productSummary.final_mtm)} tone={colorForValue(productSummary.final_mtm)} sub={`Realised ${fmtNum(productSummary.realised)}`} />
           <MetricCard label="Unrealised" value={fmtNum(productSummary.unrealised)} tone={colorForValue(productSummary.unrealised)} sub={`Pos ${productSummary.final_position}`} />
-          <MetricCard label="Cap usage" value={fmtPct(behaviour.cap_usage_ratio ?? 0)} tone={(behaviour.cap_usage_ratio ?? 0) > 0.6 ? 'warn' : 'neutral'} sub={`Peak ${fmtInt(behaviour.peak_abs_position ?? 0)}/80`} />
-          <MetricCard label="Markout +5" value={fmtNum(behaviour.average_fill_markout_5)} tone={colorForValue(behaviour.average_fill_markout_5)} sub="Avg signed edge" />
+          <MetricCard label="Cap usage" value={fmtPct(behaviour?.cap_usage_ratio)} tone={numberOrNull(behaviour?.cap_usage_ratio) != null && Number(behaviour?.cap_usage_ratio) > 0.6 ? 'warn' : 'neutral'} sub={`Peak ${fmtInt(behaviour?.peak_abs_position)}/80`} />
+          <MetricCard label="Markout +5" value={fmtNum(behaviour?.average_fill_markout_5)} tone={colorForValue(behaviour?.average_fill_markout_5)} sub="Avg signed edge" />
         </div>
+      ) : (
+        <Card title={`${productLabel} summary`}>
+          <EmptyState title="Product summary not present" message="This replay bundle does not include a per-product summary for the selected product." />
+        </Card>
       )}
 
-      {/* PnL chart */}
       <Card title={`${productLabel} / PnL over time`} subtitle="MTM and realised P&L per tick">
-        <PnlChart data={pnlData} height={300} />
+        {pnlData.length > 0 ? (
+          <PnlChart data={pnlData} height={300} />
+        ) : (
+          <EmptyState title="PnL series not present" message="This replay bundle does not include PnL rows for the selected product." />
+        )}
       </Card>
 
-      {/* Inventory + Fair/fills side by side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Card title={`${productLabel} / Inventory`} subtitle="Position path with +/-80 cap lines">
-          <InventoryChart data={invData} height={260} />
+          {invData.length > 0 ? (
+            <InventoryChart data={invData} height={260} />
+          ) : (
+            <EmptyState title="Inventory series not present" message="This replay bundle does not include inventory rows for the selected product." />
+          )}
         </Card>
         <Card title={`${productLabel} / Fair value and fills`} subtitle="Analysis fair, mid price and fill markers">
-          <FairFillChart fair={fair} fills={fills} height={260} />
+          {fair.length > 0 || fills.length > 0 ? (
+            <FairFillChart fair={fair} fills={fills} height={260} />
+          ) : (
+            <EmptyState title="Fair value and fill rows not present" message="This replay bundle does not include fair-value or fill rows for the selected product." />
+          )}
         </Card>
       </div>
 
-      {/* Behaviour diagnostics + per-day breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <Card title="Behaviour diagnostics">
-          <KVGrid
-            cols={2}
-            pairs={[
-              { label: 'Cap usage', value: fmtPct(behaviour.cap_usage_ratio ?? 0), tone: (behaviour.cap_usage_ratio ?? 0) > 0.6 ? 'warn' : 'neutral' },
-              { label: 'Peak position', value: fmtInt(behaviour.peak_abs_position), tone: (behaviour.peak_abs_position ?? 0) >= 80 ? 'bad' : 'neutral' },
-              { label: 'Total fills', value: fmtInt(behaviour.total_fills) },
-              { label: 'Passive fills', value: fmtInt(behaviour.passive_fill_count) },
-              { label: 'Aggressive fills', value: fmtInt(behaviour.aggressive_fill_count) },
-              { label: 'Fill markout +1', value: fmtNum(behaviour.average_fill_markout_1), tone: colorForValue(behaviour.average_fill_markout_1) },
-              { label: 'Fill markout +5', value: fmtNum(behaviour.average_fill_markout_5), tone: colorForValue(behaviour.average_fill_markout_5) },
-              { label: 'Total buy qty', value: fmtInt(behaviour.total_buy_qty) },
-              { label: 'Total sell qty', value: fmtInt(behaviour.total_sell_qty) },
-            ]}
-          />
+          {behaviour ? (
+            <KVGrid
+              cols={2}
+              pairs={[
+                { label: 'Cap usage', value: fmtPct(behaviour.cap_usage_ratio), tone: numberOrNull(behaviour.cap_usage_ratio) != null && Number(behaviour.cap_usage_ratio) > 0.6 ? 'warn' : 'neutral' },
+                { label: 'Peak position', value: fmtInt(behaviour.peak_abs_position), tone: numberOrNull(behaviour.peak_abs_position) != null && Number(behaviour.peak_abs_position) >= 80 ? 'bad' : 'neutral' },
+                { label: 'Total fills', value: fmtInt(behaviour.total_fills) },
+                { label: 'Passive fills', value: fmtInt(behaviour.passive_fill_count) },
+                { label: 'Aggressive fills', value: fmtInt(behaviour.aggressive_fill_count) },
+                { label: 'Fill markout +1', value: fmtNum(behaviour.average_fill_markout_1), tone: colorForValue(behaviour.average_fill_markout_1) },
+                { label: 'Fill markout +5', value: fmtNum(behaviour.average_fill_markout_5), tone: colorForValue(behaviour.average_fill_markout_5) },
+                { label: 'Total buy qty', value: fmtInt(behaviour.total_buy_qty) },
+                { label: 'Total sell qty', value: fmtInt(behaviour.total_sell_qty) },
+              ]}
+            />
+          ) : (
+            <EmptyState title="Behaviour summary not present" message="This replay bundle does not include behaviour metrics for the selected product." />
+          )}
         </Card>
 
         {sessionRows.length > 0 && (
@@ -134,9 +154,8 @@ export function Replay() {
         )}
       </div>
 
-      {/* Top fills table */}
       <Card title="Largest fills" subtitle={`${productLabel} / sorted by quantity`}>
-        <DataTable rows={topFills} cols={fillCols} maxRows={20} striped />
+        <DataTable rows={topFills} cols={fillCols} maxRows={20} striped emptyMsg="Fill rows are not present for this product." />
       </Card>
     </div>
   )
