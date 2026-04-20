@@ -35,7 +35,7 @@ function CustomTooltip({ active, payload, label }: any) {
       }}
     >
       <div style={{ color: AXIS_TEXT, marginBottom: 4, fontSize: 11 }}>t={label?.toLocaleString()}</div>
-      {[['P10', 'p10'], ['P25', 'p25'], ['P50 (median)', 'p50'], ['P75', 'p75'], ['P90', 'p90']].map(([lbl, key]) => {
+      {[['P10', 'p10'], ['P25', 'p25'], ['P50 (median)', 'p50'], ['P75', 'p75'], ['P90', 'p90'], ['Envelope min', 'envelopeMin'], ['Envelope max', 'envelopeMax']].map(([lbl, key]) => {
         const v = get(key)
         return v != null ? (
           <div key={key} style={{ display: 'flex', justifyContent: 'space-between', gap: 14 }}>
@@ -44,6 +44,9 @@ function CustomTooltip({ active, payload, label }: any) {
           </div>
         ) : null
       })}
+      {row.sessionCount != null && (
+        <div style={{ color: AXIS_TEXT, marginTop: 4, fontSize: 11 }}>sessions={row.sessionCount}</div>
+      )}
     </div>
   )
 }
@@ -64,6 +67,8 @@ export function PathBandsChart({ data, height = CHART_HEIGHT }: Props) {
     p25: d.p25,
     p75: d.p75,
     p90: d.p90,
+    envelopeMin: d.envelopeMin,
+    envelopeMax: d.envelopeMax,
     band_outer: [d.p10, d.p90] as [number, number],
     band_inner: [d.p25, d.p75] as [number, number],
     p50: d.p50,

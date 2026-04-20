@@ -17,10 +17,13 @@ export interface OutputProfileInfo {
   profile?: string
   max_series_rows_per_product?: number
   include_orders?: boolean
+  write_series_csvs?: boolean
   write_sample_path_files?: boolean
   write_session_manifests?: boolean
   write_child_bundles?: boolean
+  max_mc_path_rows_per_product?: number
   compact_json?: boolean
+  pretty_json?: boolean
 }
 
 export interface AccessScenarioInfo {
@@ -119,6 +122,36 @@ export interface OrderRow {
   analysis_fair: number | null
   signed_edge_to_analysis_fair: number | null
   access_scenario?: string
+  access_active?: boolean
+  access_extra_fraction?: number
+}
+
+export interface OrderIntentRow {
+  run_name?: string | null
+  day: number
+  timestamp: number
+  product: string
+  best_submitted_bid: number | null
+  best_submitted_ask: number | null
+  signed_submitted_quantity: number
+  aggressive_submitted_quantity: number
+  passive_submitted_quantity: number
+  quote_width: number | null
+  order_row_count: number
+  quote_update_count: number
+  buy_order_count: number
+  sell_order_count: number
+  one_sided: boolean
+  market_best_bid?: number | null
+  market_best_ask?: number | null
+  mid?: number | null
+  reference_fair?: number | null
+  analysis_fair?: number | null
+  mean_signed_edge_to_analysis_fair?: number | null
+  min_signed_edge_to_analysis_fair?: number | null
+  max_signed_edge_to_analysis_fair?: number | null
+  fill_regime?: string | null
+  access_scenario?: string | null
   access_active?: boolean
   access_extra_fraction?: number
 }
@@ -243,12 +276,24 @@ export interface McSessionSummary {
 }
 
 export interface FairBandPoint {
+  day?: number
   timestamp: number
+  bucketIndex?: number
+  bucketStartTimestamp?: number
+  bucketEndTimestamp?: number
+  bucketCount?: number
+  sessionCount?: number
+  p05?: number
   p10: number
   p25: number
   p50: number
   p75: number
   p90: number
+  p95?: number
+  min?: number
+  max?: number
+  envelopeMin?: number
+  envelopeMax?: number
 }
 
 export interface McSession {
@@ -275,6 +320,7 @@ export interface SampleRun {
   inventorySeries: InventoryRow[]
   pnlSeries: PnlRow[]
   fills: FillRow[]
+  orderIntent?: OrderIntentRow[]
   fairValueSeries: FairValueRow[]
   behaviour: BehaviourData
   behaviourSeries: BehaviourRow[]
@@ -284,10 +330,17 @@ export interface MonteCarloData {
   summary: McSessionSummary
   sessions: McSession[]
   sampleRuns: SampleRun[]
+  pathBands?: {
+    analysisFair?: Record<string, FairBandPoint[]>
+    mid?: Record<string, FairBandPoint[]>
+    inventory?: Record<string, FairBandPoint[]>
+    pnl?: Record<string, FairBandPoint[]>
+  }
   fairValueBands: {
     analysisFair: Record<string, FairBandPoint[]>
     mid: Record<string, FairBandPoint[]>
   }
+  pathBandMethod?: Record<string, unknown>
 }
 
 // Calibration
@@ -441,6 +494,7 @@ export interface DashboardPayload {
   validation: Record<string, unknown>
   summary?: Summary
   orders?: OrderRow[]
+  orderIntent?: OrderIntentRow[]
   fills?: FillRow[]
   inventorySeries?: InventoryRow[]
   pnlSeries?: PnlRow[]

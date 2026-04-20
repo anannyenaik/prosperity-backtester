@@ -72,7 +72,7 @@ def test_scenario_compare_bundle(tmp_path):
         "mc_sessions": 0,
     }
     config_path = tmp_path / "scenario_config.json"
-    config_path.write_text(json.dumps(config), encoding="utf-8")
+    config_path.write_text(json.dumps(config), encoding="utf-8-sig")
 
     result = run_scenario_compare_from_config(config_path, tmp_path / "scenario_out")
 

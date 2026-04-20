@@ -131,6 +131,7 @@ class SessionArtefacts:
     behaviour: Dict[str, object] = field(default_factory=dict)
     behaviour_series: List[Dict[str, object]] = field(default_factory=list)
     access_scenario: Dict[str, object] = field(default_factory=dict)
+    path_metrics: List[Dict[str, object]] = field(default_factory=list)
 
 
 class OrderSchedule:
@@ -495,6 +496,87 @@ def _record_series_row(timestamp: int, product: str, ledger: ProductLedger, snap
     }
     return pnl_row, inventory_row
 
+
+def _path_bucket_ranges(length: int, bucket_count: int) -> List[tuple[int, int]]:
+    if length <= 0:
+        return []
+    bucket_count = max(1, min(bucket_count, length))
+    ranges = []
+    start = 0
+    for bucket in range(bucket_count):
+        end = round((bucket + 1) * length / bucket_count)
+        end = max(start + 1, min(length, end))
+        ranges.append((start, end))
+        start = end
+    return ranges
+
+
+def _path_metric_rows(
+    *,
+    inventory_series: Sequence[Dict[str, object]],
+    pnl_series: Sequence[Dict[str, object]],
+    fair_rows: Sequence[Dict[str, object]],
+    max_rows_per_product: int,
+) -> List[Dict[str, object]]:
+    pnl_lookup = {(int(row["day"]), str(row["product"]), int(row["timestamp"])): row for row in pnl_series}
+    fair_lookup = {(int(row["day"]), str(row["product"]), int(row["timestamp"])): row for row in fair_rows}
+    by_product_day: Dict[tuple[str, int], List[Dict[str, object]]] = {}
+    for inv in inventory_series:
+        product = str(inv["product"])
+        day = int(inv["day"])
+        timestamp = int(inv["timestamp"])
+        pnl = pnl_lookup.get((day, product, timestamp), {})
+        fair = fair_lookup.get((day, product, timestamp), {})
+        by_product_day.setdefault((product, day), []).append({
+            "day": day,
+            "timestamp": timestamp,
+            "product": product,
+            "analysis_fair": fair.get("analysis_fair"),
+            "mid": fair.get("mid", inv.get("mid")),
+            "inventory": inv.get("position"),
+            "pnl": pnl.get("mtm"),
+        })
+
+    output: List[Dict[str, object]] = []
+    bucket_index_by_product = {product: 0 for product in PRODUCTS}
+    days_by_product: Dict[str, List[int]] = {}
+    for product, day in by_product_day:
+        days_by_product.setdefault(product, []).append(day)
+
+    for product in PRODUCTS:
+        days = sorted(set(days_by_product.get(product, [])))
+        if not days:
+            continue
+        per_day_limit = 0 if max_rows_per_product <= 0 else max(1, max_rows_per_product // len(days))
+        for day in days:
+            rows = sorted(by_product_day[(product, day)], key=lambda row: int(row["timestamp"]))
+            ranges = (
+                [(idx, idx + 1) for idx in range(len(rows))]
+                if per_day_limit <= 0 or len(rows) <= per_day_limit
+                else _path_bucket_ranges(len(rows), per_day_limit)
+            )
+            for start, end in ranges:
+                bucket_rows = rows[start:end]
+                last = dict(bucket_rows[-1])
+                last["bucket_index"] = bucket_index_by_product[product]
+                last["bucket_start_timestamp"] = bucket_rows[0]["timestamp"]
+                last["bucket_end_timestamp"] = bucket_rows[-1]["timestamp"]
+                last["bucket_count"] = len(bucket_rows)
+                for metric in ("analysis_fair", "mid", "inventory", "pnl"):
+                    values = [
+                        float(row[metric])
+                        for row in bucket_rows
+                        if row.get(metric) is not None
+                    ]
+                    if not values:
+                        continue
+                    last[f"{metric}_bucket_min"] = min(values)
+                    last[f"{metric}_bucket_max"] = max(values)
+                    last[f"{metric}_bucket_last"] = values[-1]
+                output.append(last)
+                bucket_index_by_product[product] += 1
+    return output
+
 def _apply_fill_markouts(
     fills_log: List[Dict[str, object]],
     fair_rows: Sequence[Dict[str, object]],
@@ -597,6 +679,8 @@ def run_market_session(
     run_name: str,
     mode: str,
     capture_full_output: bool = True,
+    capture_path_metrics: bool = False,
+    path_bucket_count: int = 800,
     access_scenario: AccessScenario | None = None,
 ) -> SessionArtefacts:
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
@@ -800,6 +884,16 @@ def run_market_session(
         fair_value_series=fair_rows,
         include_series=capture_full_output,
     )
+    path_metrics = (
+        _path_metric_rows(
+            inventory_series=inventory_series,
+            pnl_series=pnl_series,
+            fair_rows=fair_rows,
+            max_rows_per_product=max(0, int(path_bucket_count)),
+        )
+        if capture_path_metrics
+        else []
+    )
     total_series = {}
     for row in pnl_series:
         total_series.setdefault((int(row["day"]), int(row["timestamp"])), 0.0)
@@ -845,6 +939,7 @@ def run_market_session(
         behaviour=behaviour,
         behaviour_series=behaviour.get("series", []) if capture_full_output else [],
         access_scenario=access_scenario.to_dict(),
+        path_metrics=path_metrics,
     )
 
 

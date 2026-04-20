@@ -53,6 +53,7 @@ Responsibilities:
 - Apply perturbations, slippage, latency-like effects and adverse-selection assumptions.
 - Track cash, inventory, realised, unrealised and mark-to-market PnL.
 - Generate synthetic Monte Carlo market days.
+- Emit compact per-session path metrics for Monte Carlo all-session bands without returning full non-sample paths.
 
 ### Diagnostics
 
@@ -93,7 +94,9 @@ File:
 Responsibilities:
 
 - Build dashboard payloads.
-- Write CSV sidecars, manifests, sample paths and session manifests.
+- Apply event-aware light path compaction and compact order-intent summaries.
+- Aggregate Monte Carlo path bands from every session.
+- Write CSV sidecars, manifests, sample paths and session manifests according to output policy.
 - Append `run_registry.jsonl` entries.
 - Preserve exact and approximate assumption notes in output bundles.
 - Apply light/full storage profiles and safe retention for auto-generated runs.
@@ -122,13 +125,16 @@ The dashboard should consume bundle fields rather than reconstructing results fr
 - `assumptions`
 - `datasetReports`
 - workflow-specific payload sections
-- sidecar CSV files for review outside the dashboard
+- exact sidecar CSV files for summary, fills and aggregate tables
+- optional chart-series sidecar CSV files when requested
 
 When adding a workflow, prefer extending this bundle contract over adding a one-off report format.
 
 ## Design Choices
 
 - Python remains the backend because trader compatibility, debugging and config iteration matter more than raw throughput at current scale.
-- Monte Carlo output is intentionally sampled. Light mode keeps sampled runs in `dashboard.json`; full mode writes duplicate `sample_paths/` and per-session manifests for debugging.
+- Light mode is the day-to-day research profile. It keeps exact summaries and fills, compact paths, compact quote intent and all-session Monte Carlo path bands in `dashboard.json`.
+- Monte Carlo sampled runs are intentionally qualitative examples. Population path bands come from every session through bucketed path metrics.
+- Full mode is for local debugging. It writes raw order rows, full series sidecars and sampled path files, but child bundles require an explicit `--save-child-bundles`.
 - Round 2 is modelled as scenario analysis, not as a claim about hidden website mechanics.
 - The React dashboard is the primary review surface. The static dashboard is only a fallback.

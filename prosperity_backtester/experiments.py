@@ -40,7 +40,7 @@ def default_data_dir_for_round(round_number: int) -> Path:
 def _load_json_config(config_path: Path) -> Dict[str, object]:
     config_path = config_path.resolve()
     try:
-        payload = json.loads(config_path.read_text(encoding="utf-8"))
+        payload = json.loads(config_path.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
         raise ValueError(f"Invalid JSON config {config_path}: {exc}") from exc
     if not isinstance(payload, dict):
@@ -197,6 +197,8 @@ def _run_monte_carlo_session(task: Dict[str, object]) -> SessionArtefacts:
         run_name=f"{run_name}_session_{session_idx:04d}",
         mode="monte_carlo",
         capture_full_output=session_idx < sample_sessions,
+        capture_path_metrics=bool(task.get("capture_path_metrics", False)),
+        path_bucket_count=int(task.get("path_bucket_count", 800)),
         access_scenario=access_scenario,
     )
 
@@ -241,6 +243,8 @@ def run_monte_carlo(
             "days": tuple(days),
             "fill_model_name": fill_model_name,
             "fill_model_config_path": str(fill_model_config_path) if fill_model_config_path else None,
+            "capture_path_metrics": True,
+            "path_bucket_count": output_options.max_mc_path_rows_per_product,
         }
         for session_idx in range(sessions)
     ]

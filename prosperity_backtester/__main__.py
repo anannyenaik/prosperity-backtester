@@ -26,7 +26,7 @@ from .noise import resolve_noise_profile
 from .platform import PerturbationConfig
 from .round2 import AccessScenario
 from .server import serve_directory
-from .storage import OutputOptions, prune_old_auto_runs
+from .storage import OutputOptions, prune_old_auto_runs, validate_keep_count
 
 SUBCOMMANDS = {
     "replay",
@@ -50,9 +50,21 @@ def _timestamped_dir(root: Path, label: str) -> Path:
 
 
 def _output_options_from_args(args) -> OutputOptions:
-    return OutputOptions.from_profile(
-        getattr(args, "output_profile", "light"),
-        write_child_bundles=getattr(args, "save_child_bundles", None),
+    config = {"output_profile": getattr(args, "output_profile", None) or "light"}
+    save_child_bundles = getattr(args, "save_child_bundles", None)
+    if save_child_bundles is not None:
+        config["save_child_bundles"] = bool(save_child_bundles)
+    if getattr(args, "series_sidecars", None) is not None:
+        config["write_series_csvs"] = bool(args.series_sidecars)
+    if getattr(args, "pretty_json", None) is not None:
+        config["pretty_json"] = bool(args.pretty_json)
+    return OutputOptions.from_config(config)
+
+
+def _has_output_policy_override(args) -> bool:
+    return any(
+        getattr(args, name, None) is not None
+        for name in ("output_profile", "save_child_bundles", "series_sidecars", "pretty_json")
     )
 
 
@@ -66,13 +78,21 @@ def _auto_output_dir(args, label: str) -> tuple[Path, bool]:
 def _prune_after_auto_run(output_dir: Path, was_auto: bool, keep_runs: int) -> None:
     if not was_auto:
         return
-    removed = prune_old_auto_runs(output_dir.parent, keep_runs)
+    removed = prune_old_auto_runs(output_dir.parent, validate_keep_count(keep_runs))
     if removed:
         print(f"Pruned old auto backtest runs: {len(removed)}")
 
 
 def _days_arg(values: Sequence[str]) -> Sequence[int]:
     return tuple(int(v) for v in values)
+
+
+def _positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+        return validate_keep_count(parsed)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def _perturb_from_args(args) -> PerturbationConfig:
@@ -149,7 +169,9 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--output-profile", choices=["light", "full"], default=None, help="Bundle detail level. Default is light unless a config sets output_profile.")
         if child_bundles:
             subparser.add_argument("--save-child-bundles", action="store_true", default=None, help="Write per-variant/per-scenario child replay and Monte Carlo bundles")
-        subparser.add_argument("--keep-runs", type=int, default=30, help="When using the default backtests/ output root, keep this many timestamped runs")
+        subparser.add_argument("--series-sidecars", action="store_true", default=None, help="Write chart-series CSV sidecars. Full profile enables this by default.")
+        subparser.add_argument("--pretty-json", action="store_true", default=None, help="Write indented dashboard and manifest JSON for debugging")
+        subparser.add_argument("--keep-runs", type=_positive_int, default=30, help="When using the default backtests/ output root, keep this many timestamped runs")
 
     def add_shared(subparser):
         subparser.add_argument("trader", help="Trader python file")
@@ -240,7 +262,7 @@ def build_parser() -> argparse.ArgumentParser:
     derive_fill.add_argument("live_exports", nargs="+", help="One or more Prosperity live export .log/.json files")
     derive_fill.add_argument("--profile-name", default="empirical_live")
     derive_fill.add_argument("--output-dir", default=None)
-    derive_fill.add_argument("--keep-runs", type=int, default=30)
+    derive_fill.add_argument("--keep-runs", type=_positive_int, default=30)
 
     calibrate = sub.add_parser("calibrate", help="Grid-search fill assumptions against a live export")
     calibrate.add_argument("trader", help="Trader python file")
@@ -266,7 +288,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     clean = sub.add_parser("clean", help="Prune old timestamped backtest run directories")
     clean.add_argument("--dir", default=str(Path.cwd() / "backtests"))
-    clean.add_argument("--keep", type=int, default=30)
+    clean.add_argument("--keep", type=_positive_int, default=30)
 
     return parser
 
@@ -415,7 +437,7 @@ def main(argv: List[str] | None = None) -> None:
 
     if args.command == "sweep":
         output_dir, auto_output = _auto_output_dir(args, "sweep")
-        cli_options = _output_options_from_args(args) if args.output_profile is not None else None
+        cli_options = _output_options_from_args(args) if _has_output_policy_override(args) else None
         rows = run_sweep_from_config(Path(args.config).resolve(), output_dir, output_options=cli_options)
         print(f"Sweep variants: {len(rows)}")
         for row in rows:
@@ -426,7 +448,7 @@ def main(argv: List[str] | None = None) -> None:
 
     if args.command == "optimize":
         output_dir, auto_output = _auto_output_dir(args, "optimize")
-        cli_options = _output_options_from_args(args) if args.output_profile is not None or args.save_child_bundles is not None else None
+        cli_options = _output_options_from_args(args) if _has_output_policy_override(args) else None
         rows = run_optimize_from_config(Path(args.config).resolve(), output_dir, output_options=cli_options)
         print(f"Optimized variants: {len(rows)}")
         for row in rows[:5]:
@@ -437,7 +459,7 @@ def main(argv: List[str] | None = None) -> None:
 
     if args.command == "round2-scenarios":
         output_dir, auto_output = _auto_output_dir(args, "round2_scenarios")
-        cli_options = _output_options_from_args(args) if args.output_profile is not None or args.save_child_bundles is not None else None
+        cli_options = _output_options_from_args(args) if _has_output_policy_override(args) else None
         result = run_round2_scenario_compare_from_config(Path(args.config).resolve(), output_dir, output_options=cli_options)
         rows = result["scenario_rows"]
         winners = result["winner_rows"]
@@ -452,7 +474,7 @@ def main(argv: List[str] | None = None) -> None:
 
     if args.command == "scenario-compare":
         output_dir, auto_output = _auto_output_dir(args, "scenario_compare")
-        cli_options = _output_options_from_args(args) if args.output_profile is not None or args.save_child_bundles is not None else None
+        cli_options = _output_options_from_args(args) if _has_output_policy_override(args) else None
         result = run_scenario_compare_from_config(Path(args.config).resolve(), output_dir, output_options=cli_options)
         rows = result["scenario_rows"]
         robustness = result["robustness_rows"]
@@ -515,7 +537,7 @@ def main(argv: List[str] | None = None) -> None:
         return
 
     if args.command == "clean":
-        removed = prune_old_auto_runs(Path(args.dir), int(args.keep))
+        removed = prune_old_auto_runs(Path(args.dir), validate_keep_count(args.keep))
         print(f"Pruned old auto backtest runs: {len(removed)}")
         return
 

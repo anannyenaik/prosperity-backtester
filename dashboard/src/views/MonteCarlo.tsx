@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Sliders } from 'lucide-react'
 import { useStore } from '../store'
 import { Card } from '../components/Card'
@@ -15,8 +16,17 @@ import { fmtNum, fmtInt, fmtPct, colorForValue } from '../lib/format'
 import { getTabAvailability, isFiniteNumber } from '../lib/bundles'
 import type { McSession, Product } from '../types'
 
+const PATH_METRICS = [
+  ['analysisFair', 'Analysis fair'],
+  ['mid', 'Mid'],
+  ['inventory', 'Inventory'],
+  ['pnl', 'PnL'],
+] as const
+type PathMetric = (typeof PATH_METRICS)[number][0]
+
 export function MonteCarlo() {
   const { getActiveRun, activeProduct, sampleRunName, setSampleRun } = useStore()
+  const [pathMetric, setPathMetric] = useState<PathMetric>('analysisFair')
   const run = getActiveRun()
   const availability = getTabAvailability(run?.payload, 'montecarlo')
   const mc = run?.payload.monteCarlo
@@ -31,13 +41,15 @@ export function MonteCarlo() {
     )
   }
 
-  const { summary, sessions = [], sampleRuns = [], fairValueBands } = mc
+  const { summary, sessions = [], sampleRuns = [], fairValueBands, pathBands } = mc
   const product = activeProduct as Product
 
   const sessionPnls = sessions.map((s) => s.final_pnl).filter(isFiniteNumber)
   const histData = buildHistogram(sessionPnls)
 
-  const bandData = buildBands(fairValueBands?.analysisFair?.[product] ?? [])
+  const allBands = pathBands ?? { analysisFair: fairValueBands?.analysisFair, mid: fairValueBands?.mid }
+  const bandData = buildBands(allBands?.[pathMetric]?.[product] ?? [])
+  const bandSource = mc.pathBandMethod?.source === 'all_sessions' ? 'all sessions' : 'saved samples'
 
   // Sample run selector
   const selectedSample =
@@ -68,7 +80,7 @@ export function MonteCarlo() {
         kicker="Monte Carlo / robustness lab"
         title="Path stress"
         accent="distribution"
-        description="Distribution, downside, path bands and saved sample sessions for robustness decisions."
+        description="Distribution, downside, all-session path bands and saved sample sessions for robustness decisions."
         meta={<BundleBadge payload={run.payload} />}
         action={<ProductToggle />}
       />
@@ -90,8 +102,21 @@ export function MonteCarlo() {
           )}
         </Card>
         <Card
-          title={`Fair value bands / ${activeProduct === 'ASH_COATED_OSMIUM' ? 'Osmium' : 'Pepper'}`}
-          subtitle="P10/P50/P90 across synthetic sessions"
+          title={`${PATH_METRICS.find(([key]) => key === pathMetric)?.[1] ?? 'Path'} bands / ${activeProduct === 'ASH_COATED_OSMIUM' ? 'Osmium' : 'Pepper'}`}
+          subtitle={`P10/P50/P90 from ${bandSource}`}
+          action={
+            <select
+              value={pathMetric}
+              onChange={(event) => setPathMetric(event.target.value as PathMetric)}
+              className="bg-surface-2 border border-border text-xs text-txt rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-accent/40"
+            >
+              {PATH_METRICS.map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          }
         >
           {bandData.length > 0 ? (
             <PathBandsChart data={bandData} height={280} />

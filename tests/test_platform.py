@@ -54,13 +54,14 @@ def test_replay_with_live_export_bundle(tmp_path):
     assert dashboard["meta"]["schemaVersion"] == 3
     assert dashboard["meta"]["outputProfile"]["profile"] == "light"
     assert "orders" not in dashboard
+    assert dashboard["orderIntent"]
     assert dashboard["assumptions"]["exact"]
     assert (tmp_path / "run_registry.jsonl").is_file()
     assert not (tmp_path / "replay" / "orders.csv").exists()
     assert (tmp_path / "replay" / "fills.csv").is_file()
-    assert (tmp_path / "replay" / "fair_value_series.csv").is_file()
+    assert not (tmp_path / "replay" / "fair_value_series.csv").exists()
     assert (tmp_path / "replay" / "behaviour_summary.csv").is_file()
-    assert (tmp_path / "replay" / "behaviour_series.csv").is_file()
+    assert not (tmp_path / "replay" / "behaviour_series.csv").exists()
 
 
 def test_compare_and_monte_carlo(tmp_path):
@@ -94,10 +95,11 @@ def test_compare_and_monte_carlo(tmp_path):
     mc_dashboard = json.loads((tmp_path / "mc" / "dashboard.json").read_text(encoding="utf-8"))
     pepper_bands = mc_dashboard["monteCarlo"]["fairValueBands"]["analysisFair"]["INTARIAN_PEPPER_ROOT"]
     assert not pepper_bands or {"p10", "p25", "p50", "p75", "p90"}.issubset(pepper_bands[0])
+    assert mc_dashboard["monteCarlo"]["pathBandMethod"]["source"] == "all_sessions"
     assert mc_dashboard["meta"]["outputProfile"]["profile"] == "light"
     assert mc_dashboard["monteCarlo"]["sampleRuns"]
     assert not (tmp_path / "mc" / "sample_paths").exists()
-    assert (tmp_path / "mc" / "behaviour_series.csv").is_file()
+    assert not (tmp_path / "mc" / "behaviour_series.csv").exists()
 
 
 def test_full_output_profile_writes_debug_artifacts(tmp_path):

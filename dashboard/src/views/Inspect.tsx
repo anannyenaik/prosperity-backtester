@@ -22,7 +22,7 @@ import {
 } from '../lib/data'
 import { colorForValue, fmtInt, fmtNum, fmtPct, fmtPrice, fmtTimestamp } from '../lib/format'
 import { getTabAvailability, numberOrNull } from '../lib/bundles'
-import type { FillRow, OrderRow, Product } from '../types'
+import type { FillRow, OrderIntentRow, OrderRow, Product } from '../types'
 
 const RADIUS_OPTIONS = [25, 75, 150, 400]
 
@@ -69,7 +69,8 @@ export function Inspect() {
     const fair = sortedByTime(byProduct(payload.fairValueSeries ?? [], product))
     const fills = sortedByTime(byProduct(payload.fills ?? [], product))
     const orders = sortedByTime(byProduct(payload.orders ?? [], product))
-    return { pnl, inventory, fair, fills, orders }
+    const orderIntent = sortedByTime(byProduct(payload.orderIntent ?? [], product))
+    return { pnl, inventory, fair, fills, orders, orderIntent }
   }, [payload, product])
 
   const safeIndex = Math.max(0, Math.min(series.pnl.length - 1, cursorIndex))
@@ -82,7 +83,9 @@ export function Inspect() {
   const windowFairRows = inRange(series.fair, startTs, endTs)
   const windowFillRows = inRange(series.fills, startTs, endTs)
   const windowOrderRows = inRange(series.orders, startTs, endTs)
-  const ordersOmitted = payload.meta?.outputProfile?.include_orders === false && series.orders.length === 0
+  const windowOrderIntentRows = inRange(series.orderIntent, startTs, endTs)
+  const ordersCompacted = payload.meta?.outputProfile?.include_orders === false && series.orders.length === 0
+  const compactOrderRowCount = windowOrderIntentRows.reduce((acc, row) => acc + (row.order_row_count ?? 0), 0)
   const selectedFair =
     series.fair.find((row) => globalTs(row) === selectedTs) ??
     windowFairRows[Math.max(0, Math.floor(windowFairRows.length / 2))]
@@ -122,6 +125,19 @@ export function Inspect() {
     { key: 'order_role', header: 'Role', fmt: 'str' },
     { key: 'distance_to_touch', header: 'Dist', fmt: 'num', align: 'right' },
     { key: 'signed_edge_to_analysis_fair', header: 'Edge', fmt: 'num', align: 'right', tone: (v) => colorForValue(Number(v)) },
+  ]
+
+  const orderIntentCols: ColDef<OrderIntentRow>[] = [
+    { key: 'day', header: 'Day', fmt: 'int', width: 56 },
+    { key: 'timestamp', header: 'Tick', fmt: 'int' },
+    { key: 'best_submitted_bid', header: 'Bid', fmt: 'num', digits: 0, align: 'right' },
+    { key: 'best_submitted_ask', header: 'Ask', fmt: 'num', digits: 0, align: 'right' },
+    { key: 'signed_submitted_quantity', header: 'Net qty', fmt: 'int', align: 'right', tone: (v) => colorForValue(Number(v)) },
+    { key: 'aggressive_submitted_quantity', header: 'Agg qty', fmt: 'int', align: 'right' },
+    { key: 'passive_submitted_quantity', header: 'Pass qty', fmt: 'int', align: 'right' },
+    { key: 'quote_width', header: 'Width', fmt: 'num', align: 'right' },
+    { key: 'order_row_count', header: 'Rows', fmt: 'int', align: 'right' },
+    { key: 'one_sided', header: 'One-sided', fmt: 'str' },
   ]
 
   const jumpTo = (target: 'start' | 'middle' | 'end') => {
@@ -194,7 +210,7 @@ export function Inspect() {
                 { label: 'Mode', value: payload.meta?.mode },
                 { label: 'Fill model', value: payload.meta?.fillModel?.name },
                 { label: 'Window rows', value: fmtInt(windowPnlRows.length) },
-                { label: 'Order rows', value: fmtInt(windowOrderRows.length) },
+                { label: 'Order rows', value: ordersCompacted ? `${fmtInt(compactOrderRowCount)} compacted` : fmtInt(windowOrderRows.length) },
               ]}
             />
           </Card>
@@ -246,7 +262,7 @@ export function Inspect() {
               {[
                 {
                   label: 'Execution density',
-                  value: ordersOmitted ? `${fmtInt(windowFillRows.length)} fills / orders compacted` : `${fmtInt(windowFillRows.length)} fills / ${fmtInt(windowOrderRows.length)} orders`,
+                  value: ordersCompacted ? `${fmtInt(windowFillRows.length)} fills / ${fmtInt(compactOrderRowCount)} compacted order rows` : `${fmtInt(windowFillRows.length)} fills / ${fmtInt(windowOrderRows.length)} orders`,
                   tone: 'text-accent',
                 },
                 {
@@ -290,9 +306,13 @@ export function Inspect() {
         <Card title="Window fills" subtitle="Exact rows available in the bundle for this selected slice">
           <DataTable rows={windowFillRows} cols={fillCols} maxRows={30} />
         </Card>
-        <Card title="Window orders" subtitle={ordersOmitted ? 'Run with --output-profile full to include submitted order rows' : 'Submitted orders around the same timestamp range'}>
-          {ordersOmitted ? (
-            <EmptyState title="Orders compacted" message="Light bundles omit submitted order rows to keep backtests small." />
+        <Card title={ordersCompacted ? 'Window quote summary' : 'Window orders'} subtitle={ordersCompacted ? 'Compact submitted quote intent for the same timestamp range' : 'Submitted orders around the same timestamp range'}>
+          {ordersCompacted ? (
+            windowOrderIntentRows.length ? (
+              <DataTable rows={windowOrderIntentRows} cols={orderIntentCols} maxRows={30} />
+            ) : (
+              <EmptyState title="No quote summary rows" message="No submitted quote intent fell inside this selected window." />
+            )
           ) : (
             <DataTable rows={windowOrderRows} cols={orderCols} maxRows={30} />
           )}

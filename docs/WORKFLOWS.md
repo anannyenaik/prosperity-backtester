@@ -30,13 +30,13 @@ The output ranks traders by replay PnL and writes `comparison.csv`.
 
 ## Monte Carlo
 
-Use Monte Carlo to check whether a replay winner is stable under sampled paths.
+Use Monte Carlo to check whether a replay winner is stable across synthetic sessions.
 
 ```bash
 python -m prosperity_backtester monte-carlo strategies/trader.py --name current --fill-mode empirical_baseline --noise-profile fitted --sessions 128 --sample-sessions 8
 ```
 
-Review mean, median, P05, expected shortfall, drawdown and limit breaches.
+Review mean, median, P05, expected shortfall, drawdown and limit breaches. The dashboard path bands are computed from all sessions; saved sample runs are examples for qualitative inspection.
 
 ## Sweep
 
@@ -107,13 +107,21 @@ Open `http://127.0.0.1:5555/`, load one or more bundles and use the available ta
 
 ## Storage-Efficient Runs
 
-The default output profile is light. It keeps summaries, fills, sampled path evidence and downsampled series while avoiding submitted order dumps, duplicated Monte Carlo sample files and child bundles under aggregate workflows.
+The default output profile is light. It keeps exact summaries, exact fills, compact quote intent, event-aware compact paths and all-session Monte Carlo path bands while avoiding submitted order dumps, duplicated chart-series sidecars, duplicated Monte Carlo sample files and child bundles under aggregate workflows.
 
 Use full output only for a debugging session:
 
 ```bash
 python -m prosperity_backtester replay strategies/trader.py --days 0 --output-profile full
-python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --save-child-bundles
+python -m prosperity_backtester monte-carlo strategies/trader.py --sessions 128 --sample-sessions 8 --output-profile full
 ```
 
-Default timestamped runs under `backtests/` keep the newest 30 runs. Use `--keep-runs` or `python -m prosperity_backtester clean --keep 30` to manage retention.
+Full mode no longer writes child bundles implicitly. Add `--save-child-bundles` to aggregate commands only when you need per-variant or per-scenario bundles:
+
+```bash
+python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --output-profile full --save-child-bundles
+```
+
+Use `--series-sidecars` when a script needs chart-series CSVs but raw orders and debug sample files are not needed.
+
+Default timestamped runs under `backtests/` keep the newest 30 runs. Use `--keep-runs` or `python -m prosperity_backtester clean --keep 30` to manage retention. Invalid keep counts fail instead of being treated as a no-op.

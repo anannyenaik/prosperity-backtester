@@ -2,7 +2,7 @@
 
 Every workflow writes a `dashboard.json` payload and supporting files. The dashboard uses the bundle `type` field first, then falls back to payload sections when older bundles are loaded.
 
-Bundles default to the light output profile. Light mode keeps dashboard-ready evidence and avoids duplicate debug artefacts. Full mode is available with `--output-profile full`.
+Bundles default to the light output profile. Light mode keeps dashboard-ready evidence, exact fills, compact quote intent and all-session Monte Carlo path bands while avoiding duplicate debug artefacts. Full mode is available with `--output-profile full`.
 
 ## Replay
 
@@ -15,13 +15,9 @@ Key files:
 - `run_summary.csv`
 - `session_summary.csv`
 - `fills.csv`
-- `inventory_series.csv`
-- `pnl_series.csv`
-- `fair_value_series.csv`
 - `behaviour_summary.csv`
-- `behaviour_series.csv`
 
-Full replay bundles also include `orders.csv`.
+Light replay paths live in `dashboard.json` as compact `inventorySeries`, `pnlSeries`, `fairValueSeries`, `behaviourSeries` and `orderIntent`. Full mode or `--series-sidecars` also writes the chart-series CSV sidecars and `order_intent.csv`. Full replay bundles also include raw `orders.csv`.
 
 Dashboard tabs: Overview, Alpha Lab, Replay, Inspect, Osmium, Pepper, Comparison when two replay bundles are loaded.
 
@@ -37,9 +33,9 @@ Dashboard tabs: Overview, Alpha Lab, Comparison.
 
 ## Monte Carlo
 
-Purpose: robustness distribution and sampled path review.
+Purpose: robustness distribution, all-session path bands and sampled path review.
 
-Light Monte Carlo bundles keep session distribution rows and sampled runs inside `dashboard.json`. Full mode also writes:
+Light Monte Carlo bundles keep session distribution rows, all-session `pathBands` and sampled runs inside `dashboard.json`. `pathBands` cover `analysisFair`, `mid`, `inventory` and `pnl`. Quantiles are exact across all sessions at retained bucket endpoints; omitted ticks contribute min/max envelopes. Full mode also writes:
 
 - `sample_paths/`
 - `sessions/`
@@ -100,7 +96,7 @@ Dashboard tabs: Overview, Alpha Lab, Round 2, Comparison.
 Some tabs are intentionally unavailable for some bundle types. For example:
 
 - Round 2 scenario bundles contain aggregate rows, not full tick-level replay paths.
-- Monte Carlo bundles contain distribution and sample-path data, not a top-level replay summary.
+- Monte Carlo bundles contain distribution, all-session path-band and sample-path data, not a top-level replay summary.
 - Calibration bundles contain grid candidates, not orders or fills for one final replay.
 
 Unavailable tabs should show a compatibility message rather than zero-valued metrics.

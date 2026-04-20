@@ -29,7 +29,7 @@ tests/                    Backend and dashboard adapter checks
 
 Generated research bundles are written to `backtests/` unless `--output-dir` is supplied. `backtests/`, local logs, virtual environments, caches and `dashboard/node_modules/` are ignored.
 
-Runs default to the lightweight output profile. Light bundles keep dashboard-ready summaries, fills and downsampled path data, while omitting heavy debug artefacts such as submitted order rows, duplicated Monte Carlo sample files and child bundles inside aggregate workflows. Use `--output-profile full` only for deep debugging. See [docs/OUTPUTS.md](docs/OUTPUTS.md).
+Runs default to the lightweight output profile. Light bundles keep exact summaries and fills, event-aware compact chart paths, compact submitted quote intent and all-session Monte Carlo path bands while avoiding raw order dumps, duplicated series sidecars, sampled path files and child bundles. Use `--output-profile full` only for deep debugging. See [docs/OUTPUTS.md](docs/OUTPUTS.md).
 
 ## Setup
 
@@ -198,15 +198,11 @@ Replay bundles:
 - `run_summary.csv`
 - `session_summary.csv`
 - `fills.csv`
-- `inventory_series.csv`
-- `pnl_series.csv`
-- `fair_value_series.csv`
 - `behaviour_summary.csv`
-- `behaviour_series.csv`
 
-Full replay bundles also include `orders.csv`.
+In light mode, `dashboard.json` is the canonical source for compact `inventorySeries`, `pnlSeries`, `fairValueSeries`, `behaviourSeries` and `orderIntent`. Full replay bundles also include full series CSV sidecars, `order_intent.csv` and raw `orders.csv`. Use `--series-sidecars` when you want chart-series CSVs without switching on every full-mode artefact.
 
-Monte Carlo light bundles add session distributions and sampled runs inside `dashboard.json`. Full Monte Carlo bundles also add:
+Monte Carlo light bundles add exact final distribution stats, all-session `pathBands` and sampled qualitative runs inside `dashboard.json`. The path-band quantiles are exact across all sessions at retained bucket endpoints; omitted ticks contribute min/max envelopes. Full Monte Carlo bundles also add:
 
 - `sample_paths/`
 - `sessions/`
@@ -238,7 +234,7 @@ Calibrated scenario bundles add:
 - `robustness_ranking.csv`
 - `scenario_pairwise_mc.csv`
 
-Every generated parent output directory receives `run_registry.jsonl`. Auto-generated timestamped runs under `backtests/` keep the newest 30 runs by default; custom `--output-dir` paths are never pruned automatically.
+Every generated parent output directory receives `run_registry.jsonl`. Auto-generated timestamped runs under `backtests/` keep the newest 30 runs by default, sorted by the timestamp in the folder name with `manifest.json` `created_at` as a fallback. Custom `--output-dir` paths are never pruned automatically.
 
 ## Interpreting Outputs
 
@@ -246,14 +242,17 @@ Every generated parent output directory receives `run_registry.jsonl`. Auto-gene
 - `gross_pnl_before_maf`: strategy PnL before a winning MAF fee is deducted.
 - `per_product`: source of PnL by product.
 - `realised`, `unrealised`, `mtm`: closed PnL, open inventory value and full mark-to-market value.
-- `fills` and `orders`: execution activity. High order count with low fills can indicate passive quotes are not converting.
-- `inventory_series`: position path and limit pressure.
+- `fills`: exact execution rows retained in light and full replay bundles.
+- `orderIntent`: compact submitted quote intent retained in light mode, including best submitted bid/ask, signed quantity, aggressive/passive quantity, quote width and one-sided flags.
+- `orders`: raw submitted order rows available in full mode.
+- `inventorySeries`: compact dashboard position path and limit pressure.
 - `max_drawdown`: largest peak-to-trough loss in the run.
 - `behaviour_summary`: cap usage, fill mix, markouts and product-level diagnostics.
-- `fair_value_series`: diagnostic fair-value proxy on historical replay and latent fair in Monte Carlo.
+- `fairValueSeries`: compact diagnostic fair-value proxy on historical replay and latent fair in Monte Carlo.
 - `round2_winners.csv`: scenario winners under each Round 2 assumption.
 - `round2_maf_sensitivity.csv`: access value before and after tested MAF levels.
 - Monte Carlo `mean`, `p50`, `p05` and expected shortfall: average, typical, downside and tail-risk evidence.
+- Monte Carlo `pathBands`: all-session analysis fair, mid, inventory and PnL quantiles for path diagnostics. Sampled runs remain examples, not the source of the bands.
 
 ## Config Files
 
@@ -274,6 +273,11 @@ Common fields:
 - `mc_sessions`, `mc_sample_sessions`, `mc_seed`, `mc_workers`: Monte Carlo controls.
 - `output_profile`: `light` or `full`.
 - `save_child_bundles`: keep per-variant or per-scenario child bundles for aggregate workflows.
+- `write_series_csvs` or `series_sidecars`: write chart-series CSV sidecars.
+- `max_series_rows_per_product`: light-mode compact path budget. `0` keeps every row.
+- `max_mc_path_rows_per_product`: Monte Carlo path-band bucket budget. `0` keeps every timestamp.
+- `pretty_json`: write indented JSON for debugging.
+- `compact_json`: force compact JSON.
 
 Useful starting points:
 

@@ -174,21 +174,35 @@ export function buildHistogram(values: number[], bins = 40): HistPoint[] {
 
 export interface BandPoint {
   ts: number
+  p05?: number
   p10: number
   p25: number
   p50: number
   p75: number
   p90: number
+  p95?: number
+  min?: number
+  max?: number
+  envelopeMin?: number
+  envelopeMax?: number
+  sessionCount?: number
 }
 
 export function buildBands(bands: FairBandPoint[]): BandPoint[] {
   return downsample(bands, 800).map((b) => ({
-    ts: b.timestamp,
+    ts: b.day == null ? b.timestamp : globalTs({ day: b.day, timestamp: b.timestamp }),
+    p05: b.p05,
     p10: b.p10,
     p25: b.p25 ?? b.p10,
     p50: b.p50,
     p75: b.p75 ?? b.p90,
     p90: b.p90,
+    p95: b.p95,
+    min: b.min,
+    max: b.max,
+    envelopeMin: b.envelopeMin,
+    envelopeMax: b.envelopeMax,
+    sessionCount: b.sessionCount,
   }))
 }
 
