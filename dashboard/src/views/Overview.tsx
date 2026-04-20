@@ -80,6 +80,7 @@ export function Overview() {
               { label: 'MAF cost', value: mafCost == null ? 'not available for this bundle type' : fmtNum(mafCost) },
               { label: 'Created', value: fmtDate(meta?.createdAt) },
               { label: 'Schema v', value: meta?.schemaVersion },
+              { label: 'Output', value: meta?.outputProfile?.profile ?? 'legacy' },
               { label: 'Dominant risk', value: payload.behaviour?.summary?.dominant_risk_product ?? 'not available for this bundle type' },
               { label: 'Dominant turnover', value: payload.behaviour?.summary?.dominant_turnover_product ?? 'not available for this bundle type' },
             ]}

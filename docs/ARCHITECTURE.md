@@ -88,6 +88,7 @@ Responsibilities:
 File:
 
 - `prosperity_backtester/reports.py`
+- `prosperity_backtester/storage.py`
 
 Responsibilities:
 
@@ -95,6 +96,7 @@ Responsibilities:
 - Write CSV sidecars, manifests, sample paths and session manifests.
 - Append `run_registry.jsonl` entries.
 - Preserve exact and approximate assumption notes in output bundles.
+- Apply light/full storage profiles and safe retention for auto-generated runs.
 
 ### Dashboard
 
@@ -127,6 +129,6 @@ When adding a workflow, prefer extending this bundle contract over adding a one-
 ## Design Choices
 
 - Python remains the backend because trader compatibility, debugging and config iteration matter more than raw throughput at current scale.
-- Monte Carlo output is intentionally sampled. Full per-tick paths are only saved for selected sample sessions.
+- Monte Carlo output is intentionally sampled. Light mode keeps sampled runs in `dashboard.json`; full mode writes duplicate `sample_paths/` and per-session manifests for debugging.
 - Round 2 is modelled as scenario analysis, not as a claim about hidden website mechanics.
 - The React dashboard is the primary review surface. The static dashboard is only a fallback.

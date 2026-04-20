@@ -11,9 +11,71 @@ from .fair_value import fair_path_bands
 from .metadata import PRODUCTS
 from .platform import SessionArtefacts, describe_series, summarise_monte_carlo_sessions, write_rows_csv
 from .round2 import ASSUMPTION_REGISTRY
+from .storage import OutputOptions
 
 
 DASHBOARD_SCHEMA_VERSION = 3
+DEFAULT_OUTPUT_OPTIONS = OutputOptions()
+
+
+def _json_text(payload: object, options: OutputOptions) -> str:
+    if options.json_indent is None:
+        return json.dumps(payload, separators=(",", ":"))
+    return json.dumps(payload, indent=options.json_indent)
+
+
+def _sample_evenly(rows: Sequence[Dict[str, object]], limit: int) -> List[Dict[str, object]]:
+    if limit <= 0 or len(rows) <= limit:
+        return [dict(row) for row in rows]
+    if limit == 1:
+        return [dict(rows[-1])]
+    indexes = {
+        min(len(rows) - 1, round(idx * (len(rows) - 1) / (limit - 1)))
+        for idx in range(limit)
+    }
+    return [dict(rows[idx]) for idx in sorted(indexes)]
+
+
+def _compact_series(rows: Sequence[Dict[str, object]], options: OutputOptions) -> List[Dict[str, object]]:
+    limit = int(options.max_series_rows_per_product)
+    if limit <= 0:
+        return [dict(row) for row in rows]
+    grouped: Dict[tuple[object, object], List[Dict[str, object]]] = {}
+    for row in rows:
+        grouped.setdefault((row.get("run_name"), row.get("product", "all")), []).append(row)
+    output: List[Dict[str, object]] = []
+    for key in sorted(grouped, key=lambda item: (str(item[0]), str(item[1]))):
+        output.extend(_sample_evenly(grouped[key], limit))
+    return output
+
+
+def _compact_replay_rows(artefact: SessionArtefacts, options: OutputOptions) -> Dict[str, List[Dict[str, object]]]:
+    return {
+        "orders": [dict(row) for row in artefact.orders] if options.include_orders else [],
+        "fills": [dict(row) for row in artefact.fills],
+        "inventorySeries": _compact_series(artefact.inventory_series, options),
+        "pnlSeries": _compact_series(artefact.pnl_series, options),
+        "fairValueSeries": _compact_series(artefact.fair_value_series, options),
+        "behaviourSeries": _compact_series(artefact.behaviour_series, options),
+    }
+
+
+def _compact_behaviour(behaviour: Dict[str, object]) -> Dict[str, object]:
+    return {key: value for key, value in behaviour.items() if key != "series"}
+
+
+def _sample_run_payload(result: SessionArtefacts, options: OutputOptions) -> Dict[str, object]:
+    rows = _compact_replay_rows(result, options)
+    return {
+        "runName": result.run_name,
+        "summary": result.summary,
+        "inventorySeries": rows["inventorySeries"],
+        "pnlSeries": rows["pnlSeries"],
+        "fills": rows["fills"],
+        "fairValueSeries": rows["fairValueSeries"],
+        "behaviour": _compact_behaviour(result.behaviour),
+        "behaviourSeries": rows["behaviourSeries"],
+    }
 
 
 def _mean(values: Sequence[float]) -> float | None:
@@ -204,7 +266,9 @@ def build_dashboard_payload(
     optimization_rows: List[Dict[str, object]] | None = None,
     round2: Dict[str, object] | None = None,
     scenario_analysis: Dict[str, object] | None = None,
+    output_options: OutputOptions | None = None,
 ) -> Dict[str, object]:
+    output_options = output_options or DEFAULT_OUTPUT_OPTIONS
     access_scenario = access_scenario or {}
     assumptions: Dict[str, object] = {
         "exact": [
@@ -243,6 +307,7 @@ def build_dashboard_payload(
             "fillModel": fill_model,
             "perturbations": perturbations,
             "accessScenario": access_scenario,
+            "outputProfile": output_options.to_manifest(),
             "createdAt": datetime.now(timezone.utc).isoformat(),
         },
         "products": list(PRODUCTS),
@@ -251,28 +316,21 @@ def build_dashboard_payload(
         "validation": validation or {},
     }
     if replay_result is not None:
+        rows = _compact_replay_rows(replay_result, output_options)
         payload["summary"] = replay_result.summary
         payload["sessionRows"] = replay_result.session_rows
-        payload["orders"] = replay_result.orders
-        payload["fills"] = replay_result.fills
-        payload["inventorySeries"] = replay_result.inventory_series
-        payload["pnlSeries"] = replay_result.pnl_series
-        payload["fairValueSeries"] = replay_result.fair_value_series
+        if output_options.include_orders:
+            payload["orders"] = rows["orders"]
+        payload["fills"] = rows["fills"]
+        payload["inventorySeries"] = rows["inventorySeries"]
+        payload["pnlSeries"] = rows["pnlSeries"]
+        payload["fairValueSeries"] = rows["fairValueSeries"]
         payload["fairValueSummary"] = replay_result.fair_value_summary
-        payload["behaviour"] = replay_result.behaviour
-        payload["behaviourSeries"] = replay_result.behaviour_series
+        payload["behaviour"] = _compact_behaviour(replay_result.behaviour)
+        payload["behaviourSeries"] = rows["behaviourSeries"]
     if monte_carlo_results is not None:
         sample_runs = [
-            {
-                "runName": result.run_name,
-                "summary": result.summary,
-                "inventorySeries": result.inventory_series,
-                "pnlSeries": result.pnl_series,
-                "fills": result.fills,
-                "fairValueSeries": result.fair_value_series,
-                "behaviour": result.behaviour,
-                "behaviourSeries": result.behaviour_series,
-            }
+            _sample_run_payload(result, output_options)
             for result in monte_carlo_results
             if result.inventory_series
         ]
@@ -320,19 +378,24 @@ def write_run_bundle(
     dashboard_payload: Dict[str, object],
     extra_csvs: Dict[str, List[Dict[str, object]]] | None = None,
     register: bool = True,
+    output_options: OutputOptions | None = None,
 ) -> None:
+    output_options = output_options or DEFAULT_OUTPUT_OPTIONS
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "dashboard.json").write_text(json.dumps(dashboard_payload, indent=2), encoding="utf-8")
+    (output_dir / "dashboard.json").write_text(_json_text(dashboard_payload, output_options), encoding="utf-8")
     if extra_csvs:
         for filename, rows in extra_csvs.items():
-            write_rows_csv(output_dir / filename, rows)
+            if rows or filename in {"run_summary.csv", "session_summary.csv", "comparison.csv", "optimization.csv", "calibration_grid.csv"}:
+                write_rows_csv(output_dir / filename, rows)
     if register:
         _write_registry_entry(output_dir, dashboard_payload)
 
 
-def write_manifest(output_dir: Path, manifest: Dict[str, object]) -> None:
+def write_manifest(output_dir: Path, manifest: Dict[str, object], output_options: OutputOptions | None = None) -> None:
+    output_options = output_options or DEFAULT_OUTPUT_OPTIONS
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    payload = {**manifest, "output_profile": output_options.to_manifest()}
+    (output_dir / "manifest.json").write_text(_json_text(payload, output_options), encoding="utf-8")
 
 
 def _manifest_base(artefact: SessionArtefacts) -> Dict[str, object]:
@@ -367,39 +430,45 @@ def write_replay_bundle(
     artefact: SessionArtefacts,
     dashboard_payload: Dict[str, object],
     register: bool = True,
+    output_options: OutputOptions | None = None,
 ) -> None:
+    output_options = output_options or DEFAULT_OUTPUT_OPTIONS
+    rows = _compact_replay_rows(artefact, output_options)
+    extra_csvs = {
+        "run_summary.csv": [{
+            "run_name": artefact.run_name,
+            "trader_name": artefact.trader_name,
+            "mode": artefact.mode,
+            "final_pnl": artefact.summary["final_pnl"],
+            "gross_pnl_before_maf": artefact.summary.get("gross_pnl_before_maf"),
+            "maf_cost": artefact.summary.get("maf_cost"),
+            "access_scenario": artefact.access_scenario.get("name"),
+            "fill_count": artefact.summary["fill_count"],
+            "order_count": artefact.summary.get("order_count"),
+            "limit_breaches": artefact.summary["limit_breaches"],
+            "max_drawdown": artefact.summary.get("max_drawdown"),
+        }],
+        "session_summary.csv": artefact.session_rows,
+        "fills.csv": rows["fills"],
+        "inventory_series.csv": rows["inventorySeries"],
+        "pnl_series.csv": rows["pnlSeries"],
+        "fair_value_series.csv": rows["fairValueSeries"],
+        "behaviour_summary.csv": [
+            {"product": product, **row}
+            for product, row in artefact.behaviour.get("per_product", {}).items()
+        ],
+        "behaviour_series.csv": rows["behaviourSeries"],
+    }
+    if output_options.include_orders:
+        extra_csvs["orders.csv"] = rows["orders"]
     write_run_bundle(
         output_dir,
         dashboard_payload,
-        extra_csvs={
-            "run_summary.csv": [{
-                "run_name": artefact.run_name,
-                "trader_name": artefact.trader_name,
-                "mode": artefact.mode,
-                "final_pnl": artefact.summary["final_pnl"],
-                "gross_pnl_before_maf": artefact.summary.get("gross_pnl_before_maf"),
-                "maf_cost": artefact.summary.get("maf_cost"),
-                "access_scenario": artefact.access_scenario.get("name"),
-                "fill_count": artefact.summary["fill_count"],
-                "order_count": artefact.summary.get("order_count"),
-                "limit_breaches": artefact.summary["limit_breaches"],
-                "max_drawdown": artefact.summary.get("max_drawdown"),
-            }],
-            "session_summary.csv": artefact.session_rows,
-            "orders.csv": artefact.orders,
-            "fills.csv": artefact.fills,
-            "inventory_series.csv": artefact.inventory_series,
-            "pnl_series.csv": artefact.pnl_series,
-            "fair_value_series.csv": artefact.fair_value_series,
-            "behaviour_summary.csv": [
-                {"product": product, **row}
-                for product, row in artefact.behaviour.get("per_product", {}).items()
-            ],
-            "behaviour_series.csv": artefact.behaviour_series,
-        },
+        extra_csvs=extra_csvs,
         register=register,
+        output_options=output_options,
     )
-    (output_dir / "manifest.json").write_text(json.dumps(_manifest_base(artefact), indent=2), encoding="utf-8")
+    write_manifest(output_dir, _manifest_base(artefact), output_options)
 
 
 def write_mc_bundle(
@@ -407,7 +476,9 @@ def write_mc_bundle(
     results: Sequence[SessionArtefacts],
     dashboard_payload: Dict[str, object],
     register: bool = True,
+    output_options: OutputOptions | None = None,
 ) -> None:
+    output_options = output_options or DEFAULT_OUTPUT_OPTIONS
     output_dir.mkdir(parents=True, exist_ok=True)
     run_rows = [
         {
@@ -435,60 +506,60 @@ def write_mc_bundle(
     behaviour_series_rows: List[Dict[str, object]] = []
     sample_dir = output_dir / "sample_paths"
     sessions_dir = output_dir / "sessions"
-    sample_dir.mkdir(exist_ok=True)
-    sessions_dir.mkdir(exist_ok=True)
+    if output_options.write_sample_path_files:
+        sample_dir.mkdir(exist_ok=True)
+    if output_options.write_session_manifests:
+        sessions_dir.mkdir(exist_ok=True)
     for result in results:
-        (sessions_dir / f"{result.run_name}.json").write_text(json.dumps(_manifest_base(result), indent=2), encoding="utf-8")
+        rows = _compact_replay_rows(result, output_options)
+        if output_options.write_session_manifests:
+            (sessions_dir / f"{result.run_name}.json").write_text(_json_text(_manifest_base(result), output_options), encoding="utf-8")
         if result.inventory_series:
-            sample_payload = {
-                "runName": result.run_name,
-                "summary": result.summary,
-                "inventorySeries": result.inventory_series,
-                "pnlSeries": result.pnl_series,
-                "fairValueSeries": result.fair_value_series,
-                "fills": result.fills,
-                "behaviour": result.behaviour,
-                "behaviourSeries": result.behaviour_series,
-            }
-            (sample_dir / f"{result.run_name}.json").write_text(json.dumps(sample_payload, indent=2), encoding="utf-8")
+            if output_options.write_sample_path_files:
+                (sample_dir / f"{result.run_name}.json").write_text(_json_text(_sample_run_payload(result, output_options), output_options), encoding="utf-8")
         for row in result.session_rows:
             session_rows.append({"run_name": result.run_name, **dict(row)})
-        for row in result.fills:
+        for row in rows["fills"]:
             fill_rows.append({"run_name": result.run_name, **dict(row)})
-        for row in result.orders:
-            order_rows.append({"run_name": result.run_name, **dict(row)})
-        for row in result.inventory_series:
+        if output_options.include_orders:
+            for row in rows["orders"]:
+                order_rows.append({"run_name": result.run_name, **dict(row)})
+        for row in rows["inventorySeries"]:
             inventory_rows.append({"run_name": result.run_name, **dict(row)})
-        for row in result.pnl_series:
+        for row in rows["pnlSeries"]:
             pnl_rows.append({"run_name": result.run_name, **dict(row)})
-        for row in result.fair_value_series:
+        for row in rows["fairValueSeries"]:
             fair_rows.append({"run_name": result.run_name, **dict(row)})
         for product, row in result.behaviour.get("per_product", {}).items():
             behaviour_rows.append({"run_name": result.run_name, "product": product, **row})
-        for row in result.behaviour_series:
+        for row in rows["behaviourSeries"]:
             behaviour_series_rows.append({"run_name": result.run_name, **dict(row)})
+    extra_csvs = {
+        "run_summary.csv": run_rows,
+        "session_summary.csv": session_rows,
+        "fills.csv": fill_rows,
+        "inventory_series.csv": inventory_rows,
+        "pnl_series.csv": pnl_rows,
+        "fair_value_series.csv": fair_rows,
+        "behaviour_summary.csv": behaviour_rows,
+        "behaviour_series.csv": behaviour_series_rows,
+    }
+    if output_options.include_orders:
+        extra_csvs["orders.csv"] = order_rows
     write_run_bundle(
         output_dir,
         dashboard_payload,
-        extra_csvs={
-            "run_summary.csv": run_rows,
-            "session_summary.csv": session_rows,
-            "fills.csv": fill_rows,
-            "orders.csv": order_rows,
-            "inventory_series.csv": inventory_rows,
-            "pnl_series.csv": pnl_rows,
-            "fair_value_series.csv": fair_rows,
-            "behaviour_summary.csv": behaviour_rows,
-            "behaviour_series.csv": behaviour_series_rows,
-        },
+        extra_csvs=extra_csvs,
         register=register,
+        output_options=output_options,
     )
-    (output_dir / "manifest.json").write_text(json.dumps({
+    write_manifest(output_dir, {
         "run_type": "monte_carlo",
         "run_count": len(results),
-        "sample_path_count": sum(1 for result in results if result.inventory_series),
+        "sample_run_count": sum(1 for result in results if result.inventory_series),
+        "saved_sample_path_count": sum(1 for result in results if result.inventory_series) if output_options.write_sample_path_files else 0,
         "schema_version": DASHBOARD_SCHEMA_VERSION,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "python_version": sys.version,
         "platform": py_platform.platform(),
-    }, indent=2), encoding="utf-8")
+    }, output_options)

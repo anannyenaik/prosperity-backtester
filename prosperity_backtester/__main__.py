@@ -26,6 +26,7 @@ from .noise import resolve_noise_profile
 from .platform import PerturbationConfig
 from .round2 import AccessScenario
 from .server import serve_directory
+from .storage import OutputOptions, prune_old_auto_runs
 
 SUBCOMMANDS = {
     "replay",
@@ -39,12 +40,35 @@ SUBCOMMANDS = {
     "round2-scenarios",
     "scenario-compare",
     "derive-fill-profile",
+    "clean",
 }
 
 
 def _timestamped_dir(root: Path, label: str) -> Path:
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     return root / f"{ts}_{label}"
+
+
+def _output_options_from_args(args) -> OutputOptions:
+    return OutputOptions.from_profile(
+        getattr(args, "output_profile", "light"),
+        write_child_bundles=getattr(args, "save_child_bundles", None),
+    )
+
+
+def _auto_output_dir(args, label: str) -> tuple[Path, bool]:
+    explicit = getattr(args, "output_dir", None)
+    if explicit:
+        return Path(explicit).resolve(), False
+    return _timestamped_dir(Path.cwd() / "backtests", label), True
+
+
+def _prune_after_auto_run(output_dir: Path, was_auto: bool, keep_runs: int) -> None:
+    if not was_auto:
+        return
+    removed = prune_old_auto_runs(output_dir.parent, keep_runs)
+    if removed:
+        print(f"Pruned old auto backtest runs: {len(removed)}")
 
 
 def _days_arg(values: Sequence[str]) -> Sequence[int]:
@@ -121,6 +145,12 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--access-missed-reduction", type=float, default=0.0)
         subparser.add_argument("--access-trade-volume-share", type=float, default=1.0)
 
+    def add_output_controls(subparser, *, child_bundles: bool = False):
+        subparser.add_argument("--output-profile", choices=["light", "full"], default=None, help="Bundle detail level. Default is light unless a config sets output_profile.")
+        if child_bundles:
+            subparser.add_argument("--save-child-bundles", action="store_true", default=None, help="Write per-variant/per-scenario child replay and Monte Carlo bundles")
+        subparser.add_argument("--keep-runs", type=int, default=30, help="When using the default backtests/ output root, keep this many timestamped runs")
+
     def add_shared(subparser):
         subparser.add_argument("trader", help="Trader python file")
         subparser.add_argument("--name", default=None, help="Display name for the trader")
@@ -144,6 +174,7 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--reentry-probability", type=float, default=1.0)
         subparser.add_argument("--inventory-limit-scale", type=float, default=1.0)
         subparser.add_argument("--scenario-name", default="cli")
+        add_output_controls(subparser)
         add_round_and_access(subparser)
 
     replay = sub.add_parser("replay", help="Replay one trader on historical data")
@@ -156,8 +187,8 @@ def build_parser() -> argparse.ArgumentParser:
     mc.add_argument("--sample-sessions", type=int, default=10)
     mc.add_argument("--seed", type=int, default=20260418)
     mc.add_argument("--workers", type=int, default=1, help="Parallel worker processes for Monte Carlo sessions")
-    mc.add_argument("--quick", action="store_true", help="Use quick preset: 64 sessions, 8 saved samples")
-    mc.add_argument("--heavy", action="store_true", help="Use heavy preset: 512 sessions, 32 saved samples")
+    mc.add_argument("--quick", action="store_true", help="Use quick preset: 64 sessions, 8 sampled runs")
+    mc.add_argument("--heavy", action="store_true", help="Use heavy preset: 512 sessions, 32 sampled runs")
 
     compare = sub.add_parser("compare", help="Compare multiple traders side by side on replay")
     compare.add_argument("traders", nargs="+", help="Trader python files")
@@ -182,28 +213,34 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--reentry-probability", type=float, default=1.0)
     compare.add_argument("--inventory-limit-scale", type=float, default=1.0)
     compare.add_argument("--scenario-name", default="cli")
+    add_output_controls(compare, child_bundles=True)
     add_round_and_access(compare)
 
     sweep = sub.add_parser("sweep", help="Run a named parameter sweep from JSON config")
     sweep.add_argument("config", help="Path to sweep JSON config")
     sweep.add_argument("--output-dir", default=None)
+    add_output_controls(sweep)
 
     optimize = sub.add_parser("optimize", help="Run replay + Monte Carlo parameter optimisation from JSON config")
     optimize.add_argument("config", help="Path to optimization JSON config")
     optimize.add_argument("--output-dir", default=None)
+    add_output_controls(optimize, child_bundles=True)
 
     round2 = sub.add_parser("round2-scenarios", help="Run a Round 2 MAF/access scenario comparison config")
     round2.add_argument("config", help="Path to Round 2 scenario JSON config")
     round2.add_argument("--output-dir", default=None)
+    add_output_controls(round2, child_bundles=True)
 
     scenario_compare = sub.add_parser("scenario-compare", help="Run calibrated baseline/stress/crash scenario comparisons")
     scenario_compare.add_argument("config", help="Path to research scenario JSON config")
     scenario_compare.add_argument("--output-dir", default=None)
+    add_output_controls(scenario_compare, child_bundles=True)
 
     derive_fill = sub.add_parser("derive-fill-profile", help="Derive an empirical fill profile from live export files")
     derive_fill.add_argument("live_exports", nargs="+", help="One or more Prosperity live export .log/.json files")
     derive_fill.add_argument("--profile-name", default="empirical_live")
     derive_fill.add_argument("--output-dir", default=None)
+    derive_fill.add_argument("--keep-runs", type=int, default=30)
 
     calibrate = sub.add_parser("calibrate", help="Grid-search fill assumptions against a live export")
     calibrate.add_argument("trader", help="Trader python file")
@@ -213,6 +250,7 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument("--live-export", required=True)
     calibrate.add_argument("--output-dir", default=None)
     calibrate.add_argument("--quick", action="store_true", help="Use a smaller calibration grid for fast local iteration")
+    add_output_controls(calibrate, child_bundles=True)
     add_round_and_access(calibrate)
 
     inspect = sub.add_parser("inspect", help="Print a concise dataset inspection report")
@@ -225,6 +263,10 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--dir", default=str(Path(__file__).resolve().parent.parent))
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=5555)
+
+    clean = sub.add_parser("clean", help="Prune old timestamped backtest run directories")
+    clean.add_argument("--dir", default=str(Path.cwd() / "backtests"))
+    clean.add_argument("--keep", type=int, default=30)
 
     return parser
 
@@ -269,10 +311,12 @@ def _handle_legacy(trader_path: str) -> None:
         base_seed=20260418,
         run_name="legacy_mc",
         workers=1,
+        output_options=OutputOptions(),
     )
     finals = [result.summary["final_pnl"] for result in results]
     print(f"Legacy Monte Carlo mean PnL: {sum(finals)/len(finals):,.2f}")
     print(f"Output bundle: {output_dir}")
+    _prune_after_auto_run(output_dir, True, 30)
 
 
 def main(argv: List[str] | None = None) -> None:
@@ -285,7 +329,8 @@ def main(argv: List[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     if args.command == "replay":
-        output_dir = Path(args.output_dir).resolve() if args.output_dir else _timestamped_dir(Path.cwd() / "backtests", "replay")
+        output_dir, auto_output = _auto_output_dir(args, "replay")
+        output_options = _output_options_from_args(args)
         artefact = run_replay(
             trader_spec=_trader_spec(args.trader, args.name),
             days=_days_arg(args.days),
@@ -298,15 +343,18 @@ def main(argv: List[str] | None = None) -> None:
             live_export_path=Path(args.live_export).resolve() if args.live_export else None,
             round_number=args.round,
             access_scenario=_access_from_args(args),
+            output_options=output_options,
         )
         _print_replay_result(artefact)
         print(f"Output bundle: {output_dir}")
+        _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
         if artefact.validation:
             print(f"Validation: {json.dumps(artefact.validation, indent=2)}")
         return
 
     if args.command == "monte-carlo":
-        output_dir = Path(args.output_dir).resolve() if args.output_dir else _timestamped_dir(Path.cwd() / "backtests", "mc")
+        output_dir, auto_output = _auto_output_dir(args, "mc")
+        output_options = _output_options_from_args(args)
         sessions = args.sessions
         sample_sessions = args.sample_sessions
         if args.quick:
@@ -327,16 +375,19 @@ def main(argv: List[str] | None = None) -> None:
             workers=args.workers,
             round_number=args.round,
             access_scenario=_access_from_args(args),
+            output_options=output_options,
         )
         finals = [result.summary["final_pnl"] for result in results]
         print(f"Sessions: {len(finals)}")
         print(f"Mean PnL: {sum(finals)/len(finals):,.2f}")
         print(f"Min / Max: {min(finals):,.2f} / {max(finals):,.2f}")
         print(f"Output bundle: {output_dir}")
+        _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
         return
 
     if args.command == "compare":
-        output_dir = Path(args.output_dir).resolve() if args.output_dir else _timestamped_dir(Path.cwd() / "backtests", "compare")
+        output_dir, auto_output = _auto_output_dir(args, "compare")
+        output_options = _output_options_from_args(args)
         names = args.names or []
         trader_specs = [
             _trader_spec(path, names[idx] if idx < len(names) else None)
@@ -353,34 +404,41 @@ def main(argv: List[str] | None = None) -> None:
             run_name=output_dir.name,
             round_number=args.round,
             access_scenario=_access_from_args(args),
+            output_options=output_options,
         )
         print(f"Compared {len(rows)} traders")
         for row in rows:
             print(f"  {row['trader']}: pnl={row['final_pnl']:,.2f} drawdown={row['max_drawdown']:,.2f}")
         print(f"Output bundle: {output_dir}")
+        _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
         return
 
     if args.command == "sweep":
-        output_dir = Path(args.output_dir).resolve() if args.output_dir else _timestamped_dir(Path.cwd() / "backtests", "sweep")
-        rows = run_sweep_from_config(Path(args.config).resolve(), output_dir)
+        output_dir, auto_output = _auto_output_dir(args, "sweep")
+        cli_options = _output_options_from_args(args) if args.output_profile is not None else None
+        rows = run_sweep_from_config(Path(args.config).resolve(), output_dir, output_options=cli_options)
         print(f"Sweep variants: {len(rows)}")
         for row in rows:
             print(f"  {row['trader']}: {row['final_pnl']:,.2f}")
         print(f"Output bundle: {output_dir}")
+        _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
         return
 
     if args.command == "optimize":
-        output_dir = Path(args.output_dir).resolve() if args.output_dir else _timestamped_dir(Path.cwd() / "backtests", "optimize")
-        rows = run_optimize_from_config(Path(args.config).resolve(), output_dir)
+        output_dir, auto_output = _auto_output_dir(args, "optimize")
+        cli_options = _output_options_from_args(args) if args.output_profile is not None or args.save_child_bundles is not None else None
+        rows = run_optimize_from_config(Path(args.config).resolve(), output_dir, output_options=cli_options)
         print(f"Optimized variants: {len(rows)}")
         for row in rows[:5]:
             print(f"  {row['variant']}: score={row['score']:,.2f} replay={row['replay_final_pnl']:,.2f} mc_p05={row['mc_p05']:,.2f}")
         print(f"Output bundle: {output_dir}")
+        _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
         return
 
     if args.command == "round2-scenarios":
-        output_dir = Path(args.output_dir).resolve() if args.output_dir else _timestamped_dir(Path.cwd() / "backtests", "round2_scenarios")
-        result = run_round2_scenario_compare_from_config(Path(args.config).resolve(), output_dir)
+        output_dir, auto_output = _auto_output_dir(args, "round2_scenarios")
+        cli_options = _output_options_from_args(args) if args.output_profile is not None or args.save_child_bundles is not None else None
+        result = run_round2_scenario_compare_from_config(Path(args.config).resolve(), output_dir, output_options=cli_options)
         rows = result["scenario_rows"]
         winners = result["winner_rows"]
         print(f"Round 2 scenario rows: {len(rows)}")
@@ -389,11 +447,13 @@ def main(argv: List[str] | None = None) -> None:
             gap_text = "n/a" if gap is None else f"{gap:,.2f}"
             print(f"  {row['scenario']}: winner={row['winner']} pnl={row['winner_final_pnl']:,.2f} gap={gap_text}")
         print(f"Output bundle: {output_dir}")
+        _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
         return
 
     if args.command == "scenario-compare":
-        output_dir = Path(args.output_dir).resolve() if args.output_dir else _timestamped_dir(Path.cwd() / "backtests", "scenario_compare")
-        result = run_scenario_compare_from_config(Path(args.config).resolve(), output_dir)
+        output_dir, auto_output = _auto_output_dir(args, "scenario_compare")
+        cli_options = _output_options_from_args(args) if args.output_profile is not None or args.save_child_bundles is not None else None
+        result = run_scenario_compare_from_config(Path(args.config).resolve(), output_dir, output_options=cli_options)
         rows = result["scenario_rows"]
         robustness = result["robustness_rows"]
         print(f"Scenario rows: {len(rows)}")
@@ -404,10 +464,11 @@ def main(argv: List[str] | None = None) -> None:
                 f"fragility={row['fragility_score']:,.2f}"
             )
         print(f"Output bundle: {output_dir}")
+        _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
         return
 
     if args.command == "derive-fill-profile":
-        output_dir = Path(args.output_dir).resolve() if args.output_dir else _timestamped_dir(Path.cwd() / "backtests", "fill_profile")
+        output_dir, auto_output = _auto_output_dir(args, "fill_profile")
         artefact = derive_empirical_fill_profile(
             [Path(path).resolve() for path in args.live_exports],
             output_dir,
@@ -416,10 +477,12 @@ def main(argv: List[str] | None = None) -> None:
         print(f"Empirical fill rows: {artefact['row_count']}")
         print(f"Profile: {args.profile_name}")
         print(f"Output bundle: {output_dir}")
+        _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
         return
 
     if args.command == "calibrate":
-        output_dir = Path(args.output_dir).resolve() if args.output_dir else _timestamped_dir(Path.cwd() / "backtests", "calibrate")
+        output_dir, auto_output = _auto_output_dir(args, "calibrate")
+        output_options = _output_options_from_args(args)
         best = calibrate_against_live_export(
             trader_spec=_trader_spec(args.trader, args.name),
             days=_days_arg(args.days),
@@ -429,9 +492,11 @@ def main(argv: List[str] | None = None) -> None:
             quick=args.quick,
             round_number=args.round,
             access_scenario=_access_from_args(args),
+            output_options=output_options,
         )
         print(f"Best calibration: {json.dumps(best, indent=2)}")
         print(f"Output bundle: {output_dir}")
+        _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
         return
 
     if args.command == "inspect":
@@ -447,6 +512,11 @@ def main(argv: List[str] | None = None) -> None:
 
     if args.command == "serve":
         serve_directory(Path(args.dir), host=args.host, port=args.port)
+        return
+
+    if args.command == "clean":
+        removed = prune_old_auto_runs(Path(args.dir), int(args.keep))
+        print(f"Pruned old auto backtest runs: {len(removed)}")
         return
 
     parser.print_help()

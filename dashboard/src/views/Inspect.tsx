@@ -82,6 +82,7 @@ export function Inspect() {
   const windowFairRows = inRange(series.fair, startTs, endTs)
   const windowFillRows = inRange(series.fills, startTs, endTs)
   const windowOrderRows = inRange(series.orders, startTs, endTs)
+  const ordersOmitted = payload.meta?.outputProfile?.include_orders === false && series.orders.length === 0
   const selectedFair =
     series.fair.find((row) => globalTs(row) === selectedTs) ??
     windowFairRows[Math.max(0, Math.floor(windowFairRows.length / 2))]
@@ -245,7 +246,7 @@ export function Inspect() {
               {[
                 {
                   label: 'Execution density',
-                  value: `${fmtInt(windowFillRows.length)} fills / ${fmtInt(windowOrderRows.length)} orders`,
+                  value: ordersOmitted ? `${fmtInt(windowFillRows.length)} fills / orders compacted` : `${fmtInt(windowFillRows.length)} fills / ${fmtInt(windowOrderRows.length)} orders`,
                   tone: 'text-accent',
                 },
                 {
@@ -289,8 +290,12 @@ export function Inspect() {
         <Card title="Window fills" subtitle="Exact rows available in the bundle for this selected slice">
           <DataTable rows={windowFillRows} cols={fillCols} maxRows={30} />
         </Card>
-        <Card title="Window orders" subtitle="Submitted orders around the same timestamp range">
-          <DataTable rows={windowOrderRows} cols={orderCols} maxRows={30} />
+        <Card title="Window orders" subtitle={ordersOmitted ? 'Run with --output-profile full to include submitted order rows' : 'Submitted orders around the same timestamp range'}>
+          {ordersOmitted ? (
+            <EmptyState title="Orders compacted" message="Light bundles omit submitted order rows to keep backtests small." />
+          ) : (
+            <DataTable rows={windowOrderRows} cols={orderCols} maxRows={30} />
+          )}
         </Card>
       </div>
     </div>

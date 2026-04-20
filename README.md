@@ -29,6 +29,8 @@ tests/                    Backend and dashboard adapter checks
 
 Generated research bundles are written to `backtests/` unless `--output-dir` is supplied. `backtests/`, local logs, virtual environments, caches and `dashboard/node_modules/` are ignored.
 
+Runs default to the lightweight output profile. Light bundles keep dashboard-ready summaries, fills and downsampled path data, while omitting heavy debug artefacts such as submitted order rows, duplicated Monte Carlo sample files and child bundles inside aggregate workflows. Use `--output-profile full` only for deep debugging. See [docs/OUTPUTS.md](docs/OUTPUTS.md).
+
 ## Setup
 
 Python runtime code uses the standard library only. Tests use `pytest`.
@@ -195,7 +197,6 @@ Replay bundles:
 - `manifest.json`
 - `run_summary.csv`
 - `session_summary.csv`
-- `orders.csv`
 - `fills.csv`
 - `inventory_series.csv`
 - `pnl_series.csv`
@@ -203,7 +204,9 @@ Replay bundles:
 - `behaviour_summary.csv`
 - `behaviour_series.csv`
 
-Monte Carlo bundles add:
+Full replay bundles also include `orders.csv`.
+
+Monte Carlo light bundles add session distributions and sampled runs inside `dashboard.json`. Full Monte Carlo bundles also add:
 
 - `sample_paths/`
 - `sessions/`
@@ -235,7 +238,7 @@ Calibrated scenario bundles add:
 - `robustness_ranking.csv`
 - `scenario_pairwise_mc.csv`
 
-Every generated parent output directory receives `run_registry.jsonl`.
+Every generated parent output directory receives `run_registry.jsonl`. Auto-generated timestamped runs under `backtests/` keep the newest 30 runs by default; custom `--output-dir` paths are never pruned automatically.
 
 ## Interpreting Outputs
 
@@ -269,6 +272,8 @@ Common fields:
 - `fill_config`: optional empirical fill-profile JSON.
 - `perturbation`: replay or Monte Carlo perturbation fields.
 - `mc_sessions`, `mc_sample_sessions`, `mc_seed`, `mc_workers`: Monte Carlo controls.
+- `output_profile`: `light` or `full`.
+- `save_child_bundles`: keep per-variant or per-scenario child bundles for aggregate workflows.
 
 Useful starting points:
 

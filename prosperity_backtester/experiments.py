@@ -17,6 +17,7 @@ from .platform import PerturbationConfig, SessionArtefacts, generate_synthetic_m
 from .reports import build_dashboard_payload, write_manifest, write_mc_bundle, write_replay_bundle, write_run_bundle
 from .round2 import AccessScenario, NO_ACCESS_SCENARIO, access_scenario_from_dict, expand_scenarios
 from .scenarios import ResearchScenario, scenario_manifest, scenarios_from_config
+from .storage import OutputOptions
 from .trader_adapter import describe_overrides, make_trader
 
 
@@ -120,7 +121,10 @@ def run_replay(
     round_number: int = 1,
     access_scenario: AccessScenario | None = None,
     register: bool = True,
+    write_bundle: bool = True,
+    output_options: OutputOptions | None = None,
 ) -> SessionArtefacts:
+    output_options = output_options or OutputOptions()
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
     datasets_map = load_round_dataset(data_dir, days, round_number=round_number)
     datasets = [datasets_map[day] for day in days]
@@ -145,20 +149,22 @@ def run_replay(
     if live_export is not None:
         validation = compare_live_export_summary(live_export, artefact)
         artefact.validation = validation
-    dashboard = build_dashboard_payload(
-        run_type="replay",
-        run_name=run_name,
-        trader_name=trader_spec.name,
-        mode="replay",
-        fill_model=fill_model.to_dict(),
-        perturbations=perturbation.to_dict(),
-        round_number=round_number,
-        access_scenario=access_scenario.to_dict(),
-        replay_result=artefact,
-        dataset_reports=_dataset_reports(datasets),
-        validation=validation,
-    )
-    write_replay_bundle(output_dir, artefact, dashboard, register=register)
+    if write_bundle:
+        dashboard = build_dashboard_payload(
+            run_type="replay",
+            run_name=run_name,
+            trader_name=trader_spec.name,
+            mode="replay",
+            fill_model=fill_model.to_dict(),
+            perturbations=perturbation.to_dict(),
+            round_number=round_number,
+            access_scenario=access_scenario.to_dict(),
+            replay_result=artefact,
+            dataset_reports=_dataset_reports(datasets),
+            validation=validation,
+            output_options=output_options,
+        )
+        write_replay_bundle(output_dir, artefact, dashboard, register=register, output_options=output_options)
     return artefact
 
 
@@ -211,7 +217,10 @@ def run_monte_carlo(
     access_scenario: AccessScenario | None = None,
     fill_model_config_path: Path | None = None,
     register: bool = True,
+    write_bundle: bool = True,
+    output_options: OutputOptions | None = None,
 ) -> List[SessionArtefacts]:
+    output_options = output_options or OutputOptions()
     if sessions < 1:
         raise ValueError("Monte Carlo sessions must be at least 1")
     sample_sessions = max(0, min(int(sample_sessions), int(sessions)))
@@ -240,19 +249,21 @@ def run_monte_carlo(
     else:
         with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as executor:
             results = list(executor.map(_run_monte_carlo_session, tasks))
-    dashboard = build_dashboard_payload(
-        run_type="monte_carlo",
-        run_name=run_name,
-        trader_name=trader_spec.name,
-        mode="monte_carlo",
-        fill_model=fill_model.to_dict(),
-        perturbations=perturbation.to_dict(),
-        round_number=round_number,
-        access_scenario=access_scenario.to_dict(),
-        monte_carlo_results=results,
-        dataset_reports=[],
-    )
-    write_mc_bundle(output_dir, results, dashboard, register=register)
+    if write_bundle:
+        dashboard = build_dashboard_payload(
+            run_type="monte_carlo",
+            run_name=run_name,
+            trader_name=trader_spec.name,
+            mode="monte_carlo",
+            fill_model=fill_model.to_dict(),
+            perturbations=perturbation.to_dict(),
+            round_number=round_number,
+            access_scenario=access_scenario.to_dict(),
+            monte_carlo_results=results,
+            dataset_reports=[],
+            output_options=output_options,
+        )
+        write_mc_bundle(output_dir, results, dashboard, register=register, output_options=output_options)
     return results
 
 
@@ -268,7 +279,9 @@ def run_compare(
     round_number: int = 1,
     access_scenario: AccessScenario | None = None,
     fill_model_config_path: Path | None = None,
+    output_options: OutputOptions | None = None,
 ) -> List[Dict[str, object]]:
+    output_options = output_options or OutputOptions()
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
     comparison_rows: List[Dict[str, object]] = []
     for trader_spec in trader_specs:
@@ -285,6 +298,8 @@ def run_compare(
             round_number=round_number,
             access_scenario=access_scenario,
             register=False,
+            write_bundle=output_options.write_child_bundles,
+            output_options=output_options,
         )
         comparison_rows.append({
             "trader": trader_spec.name,
@@ -326,13 +341,14 @@ def run_compare(
         round_number=round_number,
         access_scenario=access_scenario.to_dict(),
         comparison_rows=comparison_rows,
+        output_options=output_options,
     )
-    write_run_bundle(output_dir, dashboard, extra_csvs={"comparison.csv": comparison_rows})
-    write_manifest(output_dir, {"run_type": "comparison", "run_name": run_name, "row_count": len(comparison_rows), "round": round_number, "access_scenario": access_scenario.to_dict()})
+    write_run_bundle(output_dir, dashboard, extra_csvs={"comparison.csv": comparison_rows}, output_options=output_options)
+    write_manifest(output_dir, {"run_type": "comparison", "run_name": run_name, "row_count": len(comparison_rows), "round": round_number, "access_scenario": access_scenario.to_dict()}, output_options)
     return comparison_rows
 
 
-def run_sweep_from_config(config_path: Path, output_dir: Path) -> List[Dict[str, object]]:
+def run_sweep_from_config(config_path: Path, output_dir: Path, output_options: OutputOptions | None = None) -> List[Dict[str, object]]:
     config_path = config_path.resolve()
     config = _load_json_config(config_path)
     if "trader" not in config:
@@ -345,6 +361,7 @@ def run_sweep_from_config(config_path: Path, output_dir: Path) -> List[Dict[str,
     fill_model_config_path = _optional_config_path(config, config_path, "fill_config")
     perturbation = PerturbationConfig(**config.get("perturbation", {}))
     access_scenario = access_scenario_from_dict(config.get("access_scenario"))
+    output_options = output_options or OutputOptions.from_config(config)
     trader_specs = [
         TraderSpec(
             name=str(variant.get("name") or f"variant_{idx}"),
@@ -364,6 +381,7 @@ def run_sweep_from_config(config_path: Path, output_dir: Path) -> List[Dict[str,
         run_name=base_name,
         round_number=round_number,
         access_scenario=access_scenario,
+        output_options=output_options,
     )
 
 
@@ -469,7 +487,7 @@ def _pairwise_mc_rows(mc_results: Dict[tuple[str, str], List[SessionArtefacts]],
     return rows
 
 
-def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path) -> Dict[str, List[Dict[str, object]]]:
+def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path, output_options: OutputOptions | None = None) -> Dict[str, List[Dict[str, object]]]:
     config_path = config_path.resolve()
     config = _load_json_config(config_path)
     run_name = str(config.get("name", config_path.stem))
@@ -487,6 +505,7 @@ def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path)
     mc_sample_sessions = int(config.get("mc_sample_sessions", min(4, mc_sessions)))
     mc_seed = int(config.get("mc_seed", 20260418))
     mc_workers = int(config.get("mc_workers", 1))
+    output_options = output_options or OutputOptions.from_config(config)
 
     scenario_rows: List[Dict[str, object]] = []
     mc_results: Dict[tuple[str, str], List[SessionArtefacts]] = {}
@@ -506,6 +525,8 @@ def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path)
                 round_number=round_number,
                 access_scenario=scenario,
                 register=False,
+                write_bundle=output_options.write_child_bundles,
+                output_options=output_options,
             )
             gross = float(replay.summary.get("gross_pnl_before_maf", replay.summary["final_pnl"]))
             if not scenario.enabled and trader_spec.name not in baseline_gross_by_trader:
@@ -555,6 +576,8 @@ def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path)
                     round_number=round_number,
                     access_scenario=scenario,
                     register=False,
+                    write_bundle=output_options.write_child_bundles,
+                    output_options=output_options,
                 )
                 mc_summary = _mc_summary_for_rows(mc)
                 row.update(mc_summary)
@@ -589,6 +612,7 @@ def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path)
             },
         },
         comparison_rows=scenario_rows,
+        output_options=output_options,
     )
     write_run_bundle(
         output_dir,
@@ -599,6 +623,7 @@ def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path)
             "round2_pairwise_mc.csv": pairwise_rows,
             "round2_maf_sensitivity.csv": maf_sensitivity_rows,
         },
+        output_options=output_options,
     )
     write_manifest(output_dir, {
         "run_type": "round2_scenarios",
@@ -607,7 +632,7 @@ def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path)
         "scenario_count": len(scenarios),
         "trader_count": len(trader_specs),
         "mc_sessions": mc_sessions,
-    })
+    }, output_options)
     return {
         "scenario_rows": scenario_rows,
         "winner_rows": winner_rows,
@@ -679,7 +704,7 @@ def _robustness_rows(rows: Sequence[Dict[str, object]]) -> List[Dict[str, object
     return output
 
 
-def run_scenario_compare_from_config(config_path: Path, output_dir: Path) -> Dict[str, List[Dict[str, object]]]:
+def run_scenario_compare_from_config(config_path: Path, output_dir: Path, output_options: OutputOptions | None = None) -> Dict[str, List[Dict[str, object]]]:
     config_path = config_path.resolve()
     config = _load_json_config(config_path)
     run_name = str(config.get("name", config_path.stem))
@@ -696,6 +721,7 @@ def run_scenario_compare_from_config(config_path: Path, output_dir: Path) -> Dic
     mc_sample_sessions = int(config.get("mc_sample_sessions", min(4, mc_sessions)))
     mc_seed = int(config.get("mc_seed", 20260418))
     mc_workers = int(config.get("mc_workers", 1))
+    output_options = output_options or OutputOptions.from_config(config)
 
     scenario_rows: List[Dict[str, object]] = []
     mc_results: Dict[tuple[str, str], List[SessionArtefacts]] = {}
@@ -713,6 +739,8 @@ def run_scenario_compare_from_config(config_path: Path, output_dir: Path) -> Dic
                 run_name=f"{run_name}_{scenario.name}_{trader_spec.name}_replay",
                 round_number=round_number,
                 register=False,
+                write_bundle=output_options.write_child_bundles,
+                output_options=output_options,
             )
             row = {
                 "scenario": scenario.name,
@@ -760,6 +788,8 @@ def run_scenario_compare_from_config(config_path: Path, output_dir: Path) -> Dic
                     workers=mc_workers,
                     round_number=round_number,
                     register=False,
+                    write_bundle=output_options.write_child_bundles,
+                    output_options=output_options,
                 )
                 row.update(_mc_summary_for_rows(mc))
                 mc_results[(scenario.name, trader_spec.name)] = mc
@@ -789,6 +819,7 @@ def run_scenario_compare_from_config(config_path: Path, output_dir: Path) -> Dic
                 "unknown": "Website queue priority, hidden matching and other teams' behaviour are not reconstructed.",
             },
         },
+        output_options=output_options,
     )
     write_run_bundle(
         output_dir,
@@ -799,6 +830,7 @@ def run_scenario_compare_from_config(config_path: Path, output_dir: Path) -> Dic
             "robustness_ranking.csv": robustness_rows,
             "scenario_pairwise_mc.csv": pairwise_rows,
         },
+        output_options=output_options,
     )
     write_manifest(output_dir, {
         "run_type": "scenario_compare",
@@ -809,7 +841,7 @@ def run_scenario_compare_from_config(config_path: Path, output_dir: Path) -> Dic
         "mc_sessions": mc_sessions,
         "scenarios": scenario_manifest(scenarios),
         "fill_config": str(fill_model_config_path) if fill_model_config_path else None,
-    })
+    }, output_options)
     return {
         "scenario_rows": scenario_rows,
         "winner_rows": winner_rows,
@@ -828,7 +860,9 @@ def calibrate_against_live_export(
     quick: bool = False,
     round_number: int = 1,
     access_scenario: AccessScenario | None = None,
+    output_options: OutputOptions | None = None,
 ) -> Dict[str, object]:
+    output_options = output_options or OutputOptions()
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
     empirical_profile = derive_empirical_fill_profile([live_export_path], output_dir / "empirical_profile", profile_name="live_empirical")
     if quick:
@@ -868,6 +902,8 @@ def calibrate_against_live_export(
                             round_number=round_number,
                             access_scenario=access_scenario,
                             register=False,
+                            write_bundle=output_options.write_child_bundles,
+                            output_options=output_options,
                         )
                         validation = dict(artefact.validation)
                         per_product = validation.get("per_product_pnl", {})
@@ -909,8 +945,9 @@ def calibrate_against_live_export(
         access_scenario=access_scenario.to_dict(),
         calibration_grid=rows,
         calibration_best=best_row,
+        output_options=output_options,
     )
-    write_run_bundle(output_dir, dashboard, extra_csvs={"calibration_grid.csv": rows})
+    write_run_bundle(output_dir, dashboard, extra_csvs={"calibration_grid.csv": rows}, output_options=output_options)
     write_manifest(output_dir, {
         "run_type": "calibration",
         "grid_size": len(rows),
@@ -918,7 +955,7 @@ def calibrate_against_live_export(
         "quick": quick,
         "empirical_profile": empirical_profile,
         "validation_note": "Best score is a local calibration choice, not proof of exact website reconstruction.",
-    })
+    }, output_options)
     assert best_row is not None
     return best_row
 
@@ -968,7 +1005,7 @@ def _dominant_calibration_error(row: Dict[str, object]) -> str:
     return max(components, key=components.get)
 
 
-def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[str, object]]:
+def run_optimize_from_config(config_path: Path, output_dir: Path, output_options: OutputOptions | None = None) -> List[Dict[str, object]]:
     config_path = config_path.resolve()
     config = _load_json_config(config_path)
     if "trader" not in config:
@@ -986,6 +1023,7 @@ def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[s
     mc_sample_sessions = int(config.get("mc_sample_sessions", min(6, mc_sessions)))
     mc_seed = int(config.get("mc_seed", 20260418))
     mc_workers = int(config.get("mc_workers", 1))
+    output_options = output_options or OutputOptions.from_config(config)
     weights = {
         "replay": 1.0,
         "mc_mean": 0.35,
@@ -1014,6 +1052,8 @@ def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[s
             round_number=round_number,
             access_scenario=access_scenario,
             register=False,
+            write_bundle=output_options.write_child_bundles,
+            output_options=output_options,
         )
         mc = run_monte_carlo(
             trader_spec=spec,
@@ -1030,6 +1070,8 @@ def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[s
             round_number=round_number,
             access_scenario=access_scenario,
             register=False,
+            write_bundle=output_options.write_child_bundles,
+            output_options=output_options,
         )
         mc_final = [float(session.summary["final_pnl"]) for session in mc]
         p05 = _quantile(mc_final, 0.05)
@@ -1076,7 +1118,8 @@ def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[s
         round_number=round_number,
         access_scenario=access_scenario.to_dict(),
         optimization_rows=rows,
+        output_options=output_options,
     )
-    write_run_bundle(output_dir, dashboard, extra_csvs={"optimization.csv": rows})
-    write_manifest(output_dir, {"run_type": "optimization", "run_name": run_name, "row_count": len(rows), "best_variant": rows[0] if rows else None})
+    write_run_bundle(output_dir, dashboard, extra_csvs={"optimization.csv": rows}, output_options=output_options)
+    write_manifest(output_dir, {"run_type": "optimization", "run_name": run_name, "row_count": len(rows), "best_variant": rows[0] if rows else None}, output_options)
     return rows

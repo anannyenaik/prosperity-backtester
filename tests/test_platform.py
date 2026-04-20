@@ -6,6 +6,7 @@ from pathlib import Path
 from prosperity_backtester.dataset import load_round1_dataset
 from prosperity_backtester.experiments import TraderSpec, run_compare, run_monte_carlo, run_optimize_from_config, run_replay
 from prosperity_backtester.platform import PerturbationConfig
+from prosperity_backtester.storage import OutputOptions
 from prosperity_backtester.trader_adapter import make_trader
 
 
@@ -51,8 +52,11 @@ def test_replay_with_live_export_bundle(tmp_path):
     assert (tmp_path / "replay" / "dashboard.json").is_file()
     dashboard = json.loads((tmp_path / "replay" / "dashboard.json").read_text(encoding="utf-8"))
     assert dashboard["meta"]["schemaVersion"] == 3
+    assert dashboard["meta"]["outputProfile"]["profile"] == "light"
+    assert "orders" not in dashboard
     assert dashboard["assumptions"]["exact"]
     assert (tmp_path / "run_registry.jsonl").is_file()
+    assert not (tmp_path / "replay" / "orders.csv").exists()
     assert (tmp_path / "replay" / "fills.csv").is_file()
     assert (tmp_path / "replay" / "fair_value_series.csv").is_file()
     assert (tmp_path / "replay" / "behaviour_summary.csv").is_file()
@@ -73,6 +77,7 @@ def test_compare_and_monte_carlo(tmp_path):
         run_name="compare_test",
     )
     assert len(compare_rows) == 2
+    assert not (tmp_path / "compare" / "starter").exists()
     mc = run_monte_carlo(
         trader_spec=TraderSpec(name="main", path=MAIN_TRADER),
         sessions=2,
@@ -89,8 +94,29 @@ def test_compare_and_monte_carlo(tmp_path):
     mc_dashboard = json.loads((tmp_path / "mc" / "dashboard.json").read_text(encoding="utf-8"))
     pepper_bands = mc_dashboard["monteCarlo"]["fairValueBands"]["analysisFair"]["INTARIAN_PEPPER_ROOT"]
     assert not pepper_bands or {"p10", "p25", "p50", "p75", "p90"}.issubset(pepper_bands[0])
-    assert (tmp_path / "mc" / "sample_paths").is_dir()
+    assert mc_dashboard["meta"]["outputProfile"]["profile"] == "light"
+    assert mc_dashboard["monteCarlo"]["sampleRuns"]
+    assert not (tmp_path / "mc" / "sample_paths").exists()
     assert (tmp_path / "mc" / "behaviour_series.csv").is_file()
+
+
+def test_full_output_profile_writes_debug_artifacts(tmp_path):
+    options = OutputOptions.from_profile("full")
+    run_replay(
+        trader_spec=TraderSpec(name="live_v9", path=TRADER_V9),
+        days=(0,),
+        data_dir=DATA_DIR,
+        fill_model_name="base",
+        perturbation=PerturbationConfig(),
+        output_dir=tmp_path / "full_replay",
+        run_name="full_replay_test",
+        output_options=options,
+    )
+
+    dashboard = json.loads((tmp_path / "full_replay" / "dashboard.json").read_text(encoding="utf-8"))
+    assert dashboard["meta"]["outputProfile"]["profile"] == "full"
+    assert dashboard["orders"]
+    assert (tmp_path / "full_replay" / "orders.csv").is_file()
 
 
 def test_optimize_config(tmp_path):

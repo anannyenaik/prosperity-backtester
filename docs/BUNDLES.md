@@ -2,6 +2,8 @@
 
 Every workflow writes a `dashboard.json` payload and supporting files. The dashboard uses the bundle `type` field first, then falls back to payload sections when older bundles are loaded.
 
+Bundles default to the light output profile. Light mode keeps dashboard-ready evidence and avoids duplicate debug artefacts. Full mode is available with `--output-profile full`.
+
 ## Replay
 
 Purpose: inspect one trader at tick level.
@@ -12,13 +14,14 @@ Key files:
 - `manifest.json`
 - `run_summary.csv`
 - `session_summary.csv`
-- `orders.csv`
 - `fills.csv`
 - `inventory_series.csv`
 - `pnl_series.csv`
 - `fair_value_series.csv`
 - `behaviour_summary.csv`
 - `behaviour_series.csv`
+
+Full replay bundles also include `orders.csv`.
 
 Dashboard tabs: Overview, Alpha Lab, Replay, Inspect, Osmium, Pepper, Comparison when two replay bundles are loaded.
 
@@ -36,7 +39,7 @@ Dashboard tabs: Overview, Alpha Lab, Comparison.
 
 Purpose: robustness distribution and sampled path review.
 
-Additional files:
+Light Monte Carlo bundles keep session distribution rows and sampled runs inside `dashboard.json`. Full mode also writes:
 
 - `sample_paths/`
 - `sessions/`

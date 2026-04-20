@@ -9,7 +9,18 @@ export interface Meta {
   fillModel: FillModelInfo
   perturbations: Record<string, number>
   accessScenario?: AccessScenarioInfo
+  outputProfile?: OutputProfileInfo
   createdAt: string
+}
+
+export interface OutputProfileInfo {
+  profile?: string
+  max_series_rows_per_product?: number
+  include_orders?: boolean
+  write_sample_path_files?: boolean
+  write_session_manifests?: boolean
+  write_child_bundles?: boolean
+  compact_json?: boolean
 }
 
 export interface AccessScenarioInfo {

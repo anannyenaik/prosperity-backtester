@@ -104,3 +104,16 @@ python -m prosperity_backtester serve --port 5555
 ```
 
 Open `http://127.0.0.1:5555/`, load one or more bundles and use the available tabs for that bundle type.
+
+## Storage-Efficient Runs
+
+The default output profile is light. It keeps summaries, fills, sampled path evidence and downsampled series while avoiding submitted order dumps, duplicated Monte Carlo sample files and child bundles under aggregate workflows.
+
+Use full output only for a debugging session:
+
+```bash
+python -m prosperity_backtester replay strategies/trader.py --days 0 --output-profile full
+python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --save-child-bundles
+```
+
+Default timestamped runs under `backtests/` keep the newest 30 runs. Use `--keep-runs` or `python -m prosperity_backtester clean --keep 30` to manage retention.

@@ -96,6 +96,8 @@ Run a longer check for a leading script:
 python -m prosperity_backtester monte-carlo strategies/trader.py --fill-mode empirical_baseline --noise-profile fitted --sessions 512 --sample-sessions 32 --workers 4
 ```
 
+This still uses the light output profile unless `--output-profile full` is added. Light mode keeps the distribution and sampled dashboard paths without writing duplicate sample files.
+
 Use:
 
 - mean for average robustness
