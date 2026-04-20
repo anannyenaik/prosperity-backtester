@@ -19,6 +19,8 @@ def test_live_export_loader_reads_metadata():
     assert export.profit is not None
     assert export.graph_points
     assert export.final_positions
+    assert export.own_trade_history
+    assert len(export.own_trade_history) < len(export.trade_history)
 
 
 def test_server_bundle_discovery_uses_manifest_metadata(tmp_path):

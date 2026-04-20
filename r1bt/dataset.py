@@ -87,9 +87,9 @@ def _snapshot_issue_counts(snapshot: BookSnapshot) -> tuple[int, int, int]:
     return empty, one_sided, crossed
 
 
-def load_round1_day(data_dir: Path, day: int) -> DayDataset:
-    prices_path = data_dir / f"prices_round_1_day_{day}.csv"
-    trades_path = data_dir / f"trades_round_1_day_{day}.csv"
+def load_round_day(data_dir: Path, day: int, round_number: int = 1) -> DayDataset:
+    prices_path = data_dir / f"prices_round_{round_number}_day_{day}.csv"
+    trades_path = data_dir / f"trades_round_{round_number}_day_{day}.csv"
     if not prices_path.is_file():
         raise FileNotFoundError(prices_path)
 
@@ -197,9 +197,30 @@ def load_round1_day(data_dir: Path, day: int) -> DayDataset:
         books_by_timestamp=books_by_timestamp,
         trades_by_timestamp=trades_by_timestamp,
         validation=report.to_dict(),
-        metadata={"source": "round1_csv", "prices_path": str(prices_path), "trades_path": str(trades_path)},
+        metadata={
+            "source": f"round{round_number}_csv",
+            "round": round_number,
+            "prices_path": str(prices_path),
+            "trades_path": str(trades_path),
+        },
     )
 
 
+def load_round1_day(data_dir: Path, day: int) -> DayDataset:
+    return load_round_day(data_dir, day, round_number=1)
+
+
+def load_round2_day(data_dir: Path, day: int) -> DayDataset:
+    return load_round_day(data_dir, day, round_number=2)
+
+
+def load_round_dataset(data_dir: Path, days: Iterable[int] = (-2, -1, 0), round_number: int = 1) -> Dict[int, DayDataset]:
+    return {day: load_round_day(data_dir, int(day), round_number=round_number) for day in days}
+
+
 def load_round1_dataset(data_dir: Path, days: Iterable[int] = (-2, -1, 0)) -> Dict[int, DayDataset]:
-    return {day: load_round1_day(data_dir, int(day)) for day in days}
+    return load_round_dataset(data_dir, days, round_number=1)
+
+
+def load_round2_dataset(data_dir: Path, days: Iterable[int] = (-2, -1, 0)) -> Dict[int, DayDataset]:
+    return load_round_dataset(data_dir, days, round_number=2)

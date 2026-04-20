@@ -29,6 +29,7 @@ export function Overview() {
   const summary = payload.summary
   const mc = payload.monteCarlo?.summary
   const meta = payload.meta
+  const access = meta?.accessScenario ?? summary?.access_scenario
   const behaviour = payload.behaviour?.per_product?.[activeProduct]
   const productSummary = summary?.per_product?.[activeProduct]
   const productLabel = PRODUCT_LABELS[activeProduct as Product] ?? activeProduct
@@ -150,7 +151,10 @@ export function Overview() {
               { label: 'Run name', value: meta?.runName },
               { label: 'Trader', value: meta?.traderName },
               { label: 'Mode', value: meta?.mode },
+              { label: 'Round', value: meta?.round ?? 1 },
               { label: 'Fill model', value: meta?.fillModel?.name },
+              { label: 'Access', value: access?.name ?? 'no_access' },
+              { label: 'MAF cost', value: fmtNum(summary?.maf_cost) },
               { label: 'Created', value: fmtDate(meta?.createdAt) },
               { label: 'Schema v', value: meta?.schemaVersion },
               { label: 'Dominant risk', value: payload.behaviour?.summary?.dominant_risk_product },

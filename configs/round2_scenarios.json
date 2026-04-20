@@ -1,0 +1,60 @@
+{
+  "name": "round2_decision_grid",
+  "round": 2,
+  "data_dir": "data/round2",
+  "days": [0],
+  "fill_model": "base",
+  "trader": "strategies/trader.py",
+  "variants": [
+    {
+      "name": "current"
+    },
+    {
+      "name": "pepper_more_patient",
+      "overrides": {
+        "PARAMS.INTARIAN_PEPPER_ROOT.trend_slope": 0.095
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "no_access",
+      "enabled": false,
+      "contract_won": false,
+      "mode": "none"
+    },
+    {
+      "name": "access_low_quality",
+      "enabled": true,
+      "contract_won": true,
+      "mode": "deterministic",
+      "access_quality": 0.4,
+      "passive_fill_rate_multiplier": 1.05,
+      "missed_fill_reduction": 0.01
+    },
+    {
+      "name": "access_base",
+      "enabled": true,
+      "contract_won": true,
+      "mode": "deterministic",
+      "access_quality": 0.75,
+      "passive_fill_rate_multiplier": 1.12,
+      "missed_fill_reduction": 0.02
+    },
+    {
+      "name": "access_stochastic",
+      "enabled": true,
+      "contract_won": true,
+      "mode": "stochastic",
+      "access_quality": 0.8,
+      "access_probability": 0.65,
+      "passive_fill_rate_multiplier": 1.15,
+      "missed_fill_reduction": 0.02
+    }
+  ],
+  "maf_values": [0, 250, 500, 750, 1000, 1500, 2000],
+  "mc_sessions": 64,
+  "mc_sample_sessions": 4,
+  "mc_seed": 20260418,
+  "mc_workers": 1
+}

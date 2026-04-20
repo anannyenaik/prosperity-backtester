@@ -1,15 +1,30 @@
-# R1MCBT team platform v4
+# Prosperity research platform
 
-Round 1 research platform for:
+Round 1 and Round 2 research platform for:
 
 - `ASH_COATED_OSMIUM`
 - `INTARIAN_PEPPER_ROOT`
 
-The platform covers deterministic replay, configurable fill models, Monte Carlo robustness, live-export calibration, comparison, sweeps, optimisation, trader compatibility, reproducible output bundles and a React dashboard.
+The platform covers deterministic replay, configurable fill models, Round 2 Market Access Fee scenarios, Monte Carlo robustness, live-export calibration, comparison, sweeps, optimisation, trader compatibility, reproducible output bundles and a React dashboard.
+
+Round 2 support is a decision tool, not a fake website clone. It separates known facts, configurable assumptions and unknown website-only mechanics.
+
+## What changed in v5
+
+- Added empirical fill-profile derivation from live exports, with own fills filtered to `SUBMISSION` trades.
+- Added product-specific fill assumptions and liquidity-regime overrides.
+- Added size-dependent slippage, passive adverse-selection fields and per-product slippage reporting.
+- Added fitted latent noise profiles using current R1/R2 values: OSMIUM `3.70`, PEPPER `3.22`.
+- Added calibrated `scenario-compare` for baseline, stress, crash, spread/depth, harsh-slippage and lower-fill-quality checks.
+- Expanded live-vs-sim diagnostics with fill quantity, passive/aggressive mismatch, inventory-path error and activity timing.
 
 ## What changed in v4
 
 - Rebuilt the dashboard as a polished signal observatory with React, Vite, TypeScript, Tailwind and Recharts.
+- Added first-class Round 2 mode for `prices_round_2_day_*.csv` / `trades_round_2_day_*.csv`.
+- Added configurable MAF and extra-quote access scenarios.
+- Added Round 2 scenario sweeps, MAF sensitivity, scenario winners and pairwise Monte Carlo ranking diagnostics.
+- Added a Round 2 dashboard tab with access assumptions, break-even MAF and ranking stability.
 - Added a dedicated inspect mode for timestamp-window analysis.
 - Added stronger product deep dives for OSMIUM and PEPPER.
 - Added richer behaviour counts for dashboard diagnostics and product deep dives.
@@ -24,6 +39,7 @@ The platform covers deterministic replay, configurable fill models, Monte Carlo 
 analysis/                 Thin validation and calibration entry scripts
 configs/                  Named sweep and optimisation configs
 data/round1/              Historical Round 1 CSV inputs
+data/round2/              Optional Round 2 CSV inputs using round_2 filenames
 dashboard/                React/Vite dashboard source
 docs/                     Architecture, assumptions and audit notes
 examples/                 Example real trader files and config copies
@@ -68,7 +84,7 @@ python -m r1bt inspect --data-dir data/round1 --days -2 -1 0 --json
 Replay one trader:
 
 ```bash
-python -m r1bt replay strategies/trader.py --name main_strategy --data-dir data/round1 --days -2 -1 0 --fill-mode base
+python -m r1bt replay strategies/trader.py --name main_strategy --data-dir data/round1 --days -2 -1 0 --fill-mode empirical_baseline
 ```
 
 Replay against a live export:
@@ -80,13 +96,13 @@ python -m r1bt replay examples/trader_round1_v9.py --name live_v9 --data-dir dat
 Run Monte Carlo:
 
 ```bash
-python -m r1bt monte-carlo examples/trader_round1_v9.py --name live_v9 --days 0 --quick
+python -m r1bt monte-carlo examples/trader_round1_v9.py --name live_v9 --days 0 --fill-mode empirical_baseline --noise-profile fitted --quick
 ```
 
 Compare traders:
 
 ```bash
-python -m r1bt compare strategies/trader.py examples/trader_round1_v9.py --names main_strategy live_v9 --data-dir data/round1 --days 0 --fill-mode base
+python -m r1bt compare strategies/trader.py examples/trader_round1_v9.py --names main_strategy live_v9 --data-dir data/round1 --days 0 --fill-mode empirical_baseline
 ```
 
 Run a sweep:
@@ -106,6 +122,68 @@ Run calibration:
 ```bash
 python -m r1bt calibrate examples/trader_round1_v9.py --name live_v9 --data-dir data/round1 --days 0 --live-export live_exports/259168/259168.log --quick
 ```
+
+Derive an empirical fill profile:
+
+```bash
+python -m r1bt derive-fill-profile live_exports/259168/259168.log --profile-name live_empirical
+```
+
+Run the calibrated robustness grid:
+
+```bash
+python -m r1bt scenario-compare configs/research_scenarios.json
+```
+
+Compare no-slippage versus harsher-slippage assumptions:
+
+```bash
+python -m r1bt replay strategies/trader.py --data-dir data/round1 --days 0 --fill-mode empirical_baseline --slippage-multiplier 0
+python -m r1bt replay strategies/trader.py --data-dir data/round1 --days 0 --fill-mode slippage_stress --slippage-multiplier 1.5
+```
+
+## Round 2 workflow
+
+Inspect Round 2 data:
+
+```bash
+python -m r1bt inspect --round 2 --data-dir data/round2 --days 0 --json
+```
+
+Replay with no extra access:
+
+```bash
+python -m r1bt replay strategies/trader.py --round 2 --data-dir data/round2 --days 0 --fill-mode base
+```
+
+Replay with a local extra-access assumption and MAF deduction:
+
+```bash
+python -m r1bt replay strategies/trader.py --round 2 --data-dir data/round2 --days 0 --fill-mode base --with-extra-access --access-mode deterministic --maf-bid 750 --access-quality 0.75 --access-passive-multiplier 1.12 --access-missed-reduction 0.02
+```
+
+Compare current and candidate scripts under one access assumption:
+
+```bash
+python -m r1bt compare strategies/trader.py examples/trader_round1_v9.py --names current candidate --round 2 --data-dir data/round2 --days 0 --with-extra-access --access-mode stochastic --access-quality 0.8 --access-probability 0.65 --maf-bid 1000
+```
+
+Run the Round 2 decision grid:
+
+```bash
+python -m r1bt round2-scenarios configs/round2_scenarios.json
+```
+
+Key outputs:
+
+- `round2_scenarios.csv`
+- `round2_winners.csv`
+- `round2_pairwise_mc.csv`
+- `round2_maf_sensitivity.csv`
+- dashboard `Round 2` tab
+
+See [docs/ROUND2.md](docs/ROUND2.md) for the gap analysis, design plan, scenario fields and limitations.
+See [docs/CALIBRATED_RESEARCH.md](docs/CALIBRATED_RESEARCH.md) for the calibrated fill, slippage, noise, scenario and validation workflow.
 
 ## Dashboard
 
@@ -165,6 +243,26 @@ Monte Carlo bundles additionally include:
 
 Comparison, calibration and optimisation bundles include their matching CSV tables and manifests.
 
+Round 2 scenario bundles additionally include:
+
+- `round2_scenarios.csv`
+- `round2_winners.csv`
+- `round2_pairwise_mc.csv`
+- `round2_maf_sensitivity.csv`
+
+Calibrated scenario bundles additionally include:
+
+- `scenario_results.csv`
+- `scenario_winners.csv`
+- `robustness_ranking.csv`
+- `scenario_pairwise_mc.csv`
+
+Empirical fill-profile bundles include:
+
+- `empirical_fill_profile.json`
+- `empirical_fill_rows.csv`
+- `empirical_fill_summary.csv`
+
 The parent output directory receives `run_registry.jsonl`.
 
 ## Add a trader
@@ -191,6 +289,7 @@ Parameter overrides are supported through sweep and optimisation configs.
 Exact relative to local inputs:
 
 - Round 1 CSV ingestion and schema checks
+- Round 2 CSV ingestion and schema checks when files are present
 - Live-export parsing where fields are present
 - Visible-book aggressive fills
 - Trader state persistence
@@ -203,6 +302,9 @@ Approximate:
 - Passive fills and queue position
 - Same-price queue share
 - Adverse selection penalties
+- Size-dependent slippage
+- Empirical fill probabilities when rejected passive opportunities are not visible
+- Extra-quote access usefulness under MAF scenarios
 - Historical analysis fair
 - Synthetic market generation
 - Calibration and optimisation scores
@@ -238,6 +340,8 @@ The dashboard build output in `dashboard/dist/` is small and useful when serving
 ## Remaining limitations
 
 - True queue position is not known from public data.
+- The official Round 2 extra-quote selection and matching mechanics are not known locally.
+- Other teams' MAF bids are not known locally.
 - Live exports may not expose enough detail for exact inventory-path reconstruction.
 - Historical fair value is inferred, not official hidden fair.
 - Very large Monte Carlo batches may eventually justify moving the hot loop out of Python.

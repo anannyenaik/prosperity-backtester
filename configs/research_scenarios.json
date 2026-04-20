@@ -1,0 +1,97 @@
+{
+  "name": "calibrated_research_grid",
+  "round": 1,
+  "data_dir": "data/round1",
+  "days": [-2, -1, 0],
+  "fill_model": "empirical_baseline",
+  "trader": "strategies/trader.py",
+  "variants": [
+    {
+      "name": "current"
+    },
+    {
+      "name": "starter_reference",
+      "path": "strategies/starter.py"
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "baseline",
+      "fill_model": "empirical_baseline",
+      "noise_profile": "fitted",
+      "description": "Empirical fill baseline with fitted latent Monte Carlo noise.",
+      "tags": ["baseline", "calibrated"]
+    },
+    {
+      "name": "stressed",
+      "fill_model": "empirical_conservative",
+      "noise_profile": "stress",
+      "perturbation": {
+        "passive_fill_scale": 0.9,
+        "missed_fill_additive": 0.03,
+        "spread_shift_ticks": 1,
+        "order_book_volume_scale": 0.8
+      },
+      "description": "Worse fills, thinner book and stressed noise.",
+      "tags": ["stress"]
+    },
+    {
+      "name": "crash_shock",
+      "fill_model": "low_fill_quality",
+      "noise_profile": "crash",
+      "perturbation": {
+        "passive_fill_scale": 0.7,
+        "missed_fill_additive": 0.08,
+        "spread_shift_ticks": 2,
+        "order_book_volume_scale": 0.55,
+        "pepper_slope_scale": 0.2,
+        "shock_tick": 5000,
+        "shock_by_product": {
+          "ASH_COATED_OSMIUM": -25.0,
+          "INTARIAN_PEPPER_ROOT": -250.0
+        },
+        "slippage_multiplier": 1.5
+      },
+      "description": "Late negative shock with lower fill quality.",
+      "tags": ["crash", "shock"]
+    },
+    {
+      "name": "wide_spread_thin_depth",
+      "fill_model": "empirical_conservative",
+      "noise_profile": "stress",
+      "perturbation": {
+        "passive_fill_scale": 0.85,
+        "missed_fill_additive": 0.04,
+        "spread_shift_ticks": 2,
+        "order_book_volume_scale": 0.65
+      },
+      "description": "Spread/depth stress without explicit price shock.",
+      "tags": ["spread", "depth"]
+    },
+    {
+      "name": "harsher_slippage",
+      "fill_model": "slippage_stress",
+      "noise_profile": "fitted",
+      "perturbation": {
+        "slippage_multiplier": 1.5
+      },
+      "description": "Larger size-dependent slippage and adverse selection.",
+      "tags": ["slippage"]
+    },
+    {
+      "name": "lower_fill_quality",
+      "fill_model": "low_fill_quality",
+      "noise_profile": "fitted",
+      "perturbation": {
+        "passive_fill_scale": 0.75,
+        "missed_fill_additive": 0.07
+      },
+      "description": "Lower passive conversion and more missed fills.",
+      "tags": ["fills"]
+    }
+  ],
+  "mc_sessions": 64,
+  "mc_sample_sessions": 4,
+  "mc_seed": 20260418,
+  "mc_workers": 1
+}

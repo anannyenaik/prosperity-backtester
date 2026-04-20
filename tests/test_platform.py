@@ -50,7 +50,7 @@ def test_replay_with_live_export_bundle(tmp_path):
     assert "per_product_pnl" in artefact.validation
     assert (tmp_path / "replay" / "dashboard.json").is_file()
     dashboard = json.loads((tmp_path / "replay" / "dashboard.json").read_text(encoding="utf-8"))
-    assert dashboard["meta"]["schemaVersion"] == 2
+    assert dashboard["meta"]["schemaVersion"] == 3
     assert dashboard["assumptions"]["exact"]
     assert (tmp_path / "run_registry.jsonl").is_file()
     assert (tmp_path / "replay" / "fills.csv").is_file()

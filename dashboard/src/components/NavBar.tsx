@@ -26,6 +26,7 @@ interface Tab {
 
 const TABS: Tab[] = [
   { id: 'overview', label: 'Overview', code: '00', icon: <Activity className="h-3.5 w-3.5" /> },
+  { id: 'round2', label: 'Round 2', code: 'R2', icon: <Target className="h-3.5 w-3.5" /> },
   { id: 'replay', label: 'Replay', code: '01', icon: <BarChart2 className="h-3.5 w-3.5" /> },
   { id: 'montecarlo', label: 'Monte Carlo', code: '02', icon: <Sliders className="h-3.5 w-3.5" /> },
   { id: 'calibration', label: 'Calibration', code: '03', icon: <Target className="h-3.5 w-3.5" /> },
@@ -59,8 +60,8 @@ export function NavBar() {
               <div className="h-2.5 w-2.5 rounded-sm bg-accent shadow-glow" />
             </div>
             <div>
-              <div className="font-display text-sm font-extrabold uppercase tracking-[0.22em] text-txt">R1MCBT</div>
-              <div className="hud-label mt-1 text-muted">Team platform v4</div>
+              <div className="font-display text-sm font-extrabold uppercase tracking-[0.22em] text-txt">Prosperity Lab</div>
+              <div className="hud-label mt-1 text-muted">Round 2 platform</div>
             </div>
           </div>
         </div>

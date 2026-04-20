@@ -5,9 +5,26 @@ export interface Meta {
   runName: string
   traderName: string
   mode: string
+  round?: number
   fillModel: FillModelInfo
   perturbations: Record<string, number>
+  accessScenario?: AccessScenarioInfo
   createdAt: string
+}
+
+export interface AccessScenarioInfo {
+  name?: string
+  enabled?: boolean
+  contract_won?: boolean
+  mode?: string
+  maf_bid?: number
+  maf_cost?: number
+  extra_quote_fraction?: number
+  access_quality?: number
+  access_probability?: number
+  expected_extra_quote_fraction?: number
+  scenario_count?: number
+  [key: string]: unknown
 }
 
 export interface FillModelInfo {
@@ -23,6 +40,12 @@ export interface FillModelInfo {
 export interface Assumptions {
   exact: string[]
   approximate: string[]
+  round2?: {
+    grounded?: string[]
+    configurable?: string[]
+    unknown?: string[]
+    [key: string]: unknown
+  }
 }
 
 export interface DatasetReport {
@@ -52,6 +75,9 @@ export interface ProductSummary {
 
 export interface Summary {
   final_pnl: number
+  gross_pnl_before_maf?: number
+  maf_cost?: number
+  access_scenario?: AccessScenarioInfo
   fill_count: number
   order_count: number
   limit_breaches: number
@@ -81,6 +107,9 @@ export interface OrderRow {
   distance_to_touch: number | null
   analysis_fair: number | null
   signed_edge_to_analysis_fair: number | null
+  access_scenario?: string
+  access_active?: boolean
+  access_extra_fraction?: number
 }
 
 export interface FillRow {
@@ -89,7 +118,7 @@ export interface FillRow {
   side: 'buy' | 'sell'
   price: number
   quantity: number
-  kind: 'aggressive_visible' | 'passive_approx'
+  kind: string
   exact: boolean
   source_trade_price: number
   day: number
@@ -101,6 +130,9 @@ export interface FillRow {
   markout_5: number | null
   analysis_fair: number | null
   signed_edge_to_analysis_fair: number | null
+  access_scenario?: string
+  access_active?: boolean
+  access_extra_fraction?: number
 }
 
 export interface PnlRow {
@@ -184,11 +216,15 @@ export interface McSessionSummary {
   mean: number
   std: number
   p05: number
+  p25?: number
   p50: number
+  p75?: number
   p95: number
   expected_shortfall_05: number
   min: number
   max: number
+  gross_mean_before_maf?: number
+  mean_maf_cost?: number
   positive_rate: number
   mean_max_drawdown: number
   max_limit_breaches: number
@@ -209,12 +245,15 @@ export interface McSession {
   trader_name: string
   mode: string
   final_pnl: number
+  gross_pnl_before_maf?: number
+  maf_cost?: number
   fill_count: number
   limit_breaches: number
   days: number[]
   per_product: Record<string, { final_mtm: number }>
   fill_model: Record<string, unknown>
   perturbations: Record<string, unknown>
+  access_scenario?: AccessScenarioInfo
   fair_value_summary: Record<string, unknown>
   behaviour_summary: Record<string, unknown>
 }
@@ -310,14 +349,74 @@ export interface OptimizationData {
 // Comparison
 
 export interface ComparisonRow {
+  scenario?: string
   trader: string
   final_pnl: number
+  gross_pnl_before_maf?: number
+  maf_cost?: number
+  maf_bid?: number
+  contract_won?: boolean
+  extra_access_enabled?: boolean
+  expected_extra_quote_fraction?: number
   max_drawdown: number
   fill_count: number
   limit_breaches: number
   pepper_cap_usage: number | null
   pepper_markout_5: number | null
   [key: string]: unknown
+}
+
+export interface Round2ScenarioRow extends ComparisonRow {
+  scenario: string
+  round: number
+  marginal_access_pnl_before_maf?: number | null
+  break_even_maf_vs_no_access?: number | null
+  mc_sessions?: number
+  mc_mean?: number
+  mc_p05?: number
+  mc_p50?: number
+  mc_p95?: number
+  mc_std?: number
+  mc_positive_rate?: number
+}
+
+export interface Round2WinnerRow {
+  scenario: string
+  winner: string
+  winner_final_pnl: number
+  gap_to_second: number | null
+  mc_winner?: string | null
+  mc_winner_mean?: number | null
+  ranking_changed_vs_no_access?: boolean | null
+}
+
+export interface Round2PairwiseRow {
+  scenario: string
+  trader_a: string
+  trader_b: string
+  sessions: number
+  replay_diff_a_minus_b: number
+  mc_mean_diff_a_minus_b: number
+  mc_std_diff: number
+  mc_p05_diff: number
+  mc_p50_diff: number
+  mc_p95_diff: number
+  a_win_rate: number
+  likely_winner: string
+}
+
+export interface Round2Data {
+  scenarioRows: Round2ScenarioRow[]
+  winnerRows: Round2WinnerRow[]
+  pairwiseRows: Round2PairwiseRow[]
+  mafSensitivityRows: Round2ScenarioRow[]
+  assumptionRegistry?: {
+    grounded?: string[]
+    configurable?: string[]
+    unknown?: string[]
+    note?: string
+    [key: string]: unknown
+  }
 }
 
 // Top-level payload
@@ -344,6 +443,7 @@ export interface DashboardPayload {
   comparisonDiagnostics?: Record<string, unknown>
   calibration?: CalibrationData
   optimization?: OptimizationData
+  round2?: Round2Data
 }
 
 // App-level
@@ -365,6 +465,7 @@ export const POSITION_LIMIT = 80
 
 export type TabId =
   | 'overview'
+  | 'round2'
   | 'replay'
   | 'montecarlo'
   | 'calibration'

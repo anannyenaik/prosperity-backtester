@@ -16,6 +16,7 @@ from .behavior import analyse_behaviour
 from .fair_value import infer_market_fair_rows, summarize_fair_rows
 from .fill_models import FillModel, resolve_fill_model
 from .metadata import CURRENCY, DEFAULT_POSITION_LIMIT, PRODUCTS, PRODUCT_METADATA
+from .round2 import AccessScenario, NO_ACCESS_SCENARIO
 from .simulate import build_samplers, load_calibration, make_book, sample_trade_counts, sample_trade_quantity, simulate_latent_fair
 
 
@@ -26,14 +27,30 @@ class PerturbationConfig:
     spread_shift_ticks: int = 0
     order_book_volume_scale: float = 1.0
     price_noise_std: float = 0.0
+    latent_price_noise_by_product: Dict[str, float] = field(default_factory=dict)
+    latent_noise_scale: float = 1.0
     pepper_slope_scale: float = 1.0
     latency_ticks: int = 0
     adverse_selection_ticks: int = 0
+    slippage_multiplier: float = 1.0
     reentry_probability: float = 1.0
     inventory_limit_scale: float = 1.0
+    shock_tick: Optional[int] = None
+    shock_by_product: Dict[str, float] = field(default_factory=dict)
+    scenario_name: str = "custom"
 
     def to_dict(self) -> Dict[str, object]:
         return asdict(self)
+
+    def book_noise_for(self, product: str) -> float:
+        return max(0.0, float(self.price_noise_std))
+
+    def latent_noise_for(self, product: str) -> float:
+        value = float(self.latent_price_noise_by_product.get(product, 0.0))
+        return max(0.0, value * max(0.0, float(self.latent_noise_scale)))
+
+    def shock_for(self, product: str) -> float:
+        return float(self.shock_by_product.get(product, 0.0))
 
 
 @dataclass
@@ -113,6 +130,7 @@ class SessionArtefacts:
     fair_value_summary: Dict[str, object] = field(default_factory=dict)
     behaviour: Dict[str, object] = field(default_factory=dict)
     behaviour_series: List[Dict[str, object]] = field(default_factory=list)
+    access_scenario: Dict[str, object] = field(default_factory=dict)
 
 
 class OrderSchedule:
@@ -142,13 +160,20 @@ def snapshot_to_order_depth(snapshot: BookSnapshot) -> OrderDepth:
     return depth
 
 
-def _scaled_snapshot(snapshot: BookSnapshot, rng: random.Random, perturb: PerturbationConfig) -> BookSnapshot:
+def _scaled_snapshot(
+    snapshot: BookSnapshot,
+    rng: random.Random,
+    perturb: PerturbationConfig,
+    access_volume_multiplier: float = 1.0,
+) -> BookSnapshot:
+    book_noise_std = perturb.book_noise_for(snapshot.product)
+
     def scale_levels(levels: Sequence[Tuple[int, int]], is_bid: bool) -> List[Tuple[int, int]]:
         out: List[Tuple[int, int]] = []
         for price, volume in levels:
             shifted = price - perturb.spread_shift_ticks if is_bid else price + perturb.spread_shift_ticks
-            noisy = shifted + int(round(rng.gauss(0.0, perturb.price_noise_std))) if perturb.price_noise_std > 0 else shifted
-            scaled_volume = max(0, int(round(volume * perturb.order_book_volume_scale)))
+            noisy = shifted + int(round(rng.gauss(0.0, book_noise_std))) if book_noise_std > 0 else shifted
+            scaled_volume = max(0, int(round(volume * perturb.order_book_volume_scale * access_volume_multiplier)))
             if scaled_volume > 0:
                 out.append((noisy, scaled_volume))
         out.sort(key=lambda item: -item[0] if is_bid else item[0])
@@ -160,8 +185,8 @@ def _scaled_snapshot(snapshot: BookSnapshot, rng: random.Random, perturb: Pertur
     if bids and asks:
         mid = (bids[0][0] + asks[0][0]) / 2.0
     ref = snapshot.reference_fair
-    if ref is not None and perturb.price_noise_std > 0:
-        ref = ref + rng.gauss(0.0, perturb.price_noise_std)
+    if ref is not None and book_noise_std > 0:
+        ref = ref + rng.gauss(0.0, book_noise_std)
     return BookSnapshot(
         timestamp=snapshot.timestamp,
         product=snapshot.product,
@@ -197,13 +222,32 @@ def _consume_passive_trades(
     ledger: ProductLedger,
     fill_model: FillModel,
     perturb: PerturbationConfig,
+    access_scenario: AccessScenario,
+    access_extra_fraction: float,
     rng: random.Random,
     fills_out: List[Dict[str, object]],
 ) -> int:
     if remaining_qty <= 0:
         return 0
-    effective_fill_rate = max(0.0, fill_model.passive_fill_rate * perturb.passive_fill_scale)
-    effective_miss_prob = min(1.0, fill_model.missed_fill_probability + perturb.missed_fill_additive)
+    product_config, fill_regime = fill_model.config_for(product, snapshot.bids, snapshot.asks)
+    effective_fill_rate = max(
+        0.0,
+        product_config.passive_fill_rate
+        * fill_model.fill_rate_multiplier
+        * perturb.passive_fill_scale
+        * access_scenario.passive_rate_multiplier(access_extra_fraction)
+        + access_scenario.passive_rate_bonus(access_extra_fraction),
+    )
+    effective_miss_prob = min(
+        1.0,
+        max(
+            0.0,
+            product_config.missed_fill_probability
+            + fill_model.missed_fill_additive
+            + perturb.missed_fill_additive
+            - access_scenario.effective_missed_fill_reduction(access_extra_fraction),
+        ),
+    )
     if effective_fill_rate <= 0 or rng.random() < effective_miss_prob:
         return 0
 
@@ -211,20 +255,22 @@ def _consume_passive_trades(
         better_depth = sum(v for p, v in snapshot.bids if p > order.price)
         same_depth = sum(v for p, v in snapshot.bids if p == order.price)
         eligible = [trade for trade in available_trades if _market_sell_trade(trade) and trade.price <= order.price and trade.quantity > 0]
-        same_side_depth = better_depth + fill_model.same_price_queue_share * same_depth
-        execution_price = int(order.price + fill_model.adverse_selection_ticks + perturb.adverse_selection_ticks)
+        same_side_depth = better_depth + product_config.same_price_queue_share * same_depth
+        adverse_ticks = product_config.passive_adverse_selection_ticks + perturb.adverse_selection_ticks
+        execution_price = int(round(order.price + adverse_ticks))
     else:
         better_depth = sum(v for p, v in snapshot.asks if p < order.price)
         same_depth = sum(v for p, v in snapshot.asks if p == order.price)
         eligible = [trade for trade in available_trades if _market_buy_trade(trade) and trade.price >= order.price and trade.quantity > 0]
-        same_side_depth = better_depth + fill_model.same_price_queue_share * same_depth
-        execution_price = int(order.price - fill_model.adverse_selection_ticks - perturb.adverse_selection_ticks)
+        same_side_depth = better_depth + product_config.same_price_queue_share * same_depth
+        adverse_ticks = product_config.passive_adverse_selection_ticks + perturb.adverse_selection_ticks
+        execution_price = int(round(order.price - adverse_ticks))
 
     eligible_volume = sum(trade.quantity for trade in eligible)
     if eligible_volume <= 0:
         return 0
 
-    queue_factor = remaining_qty / max(1.0, remaining_qty + fill_model.queue_pressure * same_side_depth)
+    queue_factor = remaining_qty / max(1.0, remaining_qty + product_config.queue_pressure * same_side_depth)
     target = min(remaining_qty, int(round(eligible_volume * effective_fill_rate * queue_factor)))
     if target <= 0:
         return 0
@@ -248,7 +294,15 @@ def _consume_passive_trades(
                 "quantity": take,
                 "kind": "passive_approx",
                 "exact": False,
+                "reference_price": order.price,
                 "source_trade_price": trade.price,
+                "slippage_ticks": execution_price - int(order.price),
+                "size_slippage_ticks": 0.0,
+                "adverse_selection_ticks": adverse_ticks,
+                "fill_regime": fill_regime,
+                "access_scenario": access_scenario.name,
+                "access_active": access_extra_fraction > 0,
+                "access_extra_fraction": access_extra_fraction,
             })
         else:
             ledger.apply_sell(execution_price, take)
@@ -260,7 +314,15 @@ def _consume_passive_trades(
                 "quantity": take,
                 "kind": "passive_approx",
                 "exact": False,
+                "reference_price": order.price,
                 "source_trade_price": trade.price,
+                "slippage_ticks": int(order.price) - execution_price,
+                "size_slippage_ticks": 0.0,
+                "adverse_selection_ticks": adverse_ticks,
+                "fill_regime": fill_regime,
+                "access_scenario": access_scenario.name,
+                "access_active": access_extra_fraction > 0,
+                "access_extra_fraction": access_extra_fraction,
             })
     return filled
 
@@ -274,6 +336,8 @@ def _execute_order_batch(
     orders: List[Order],
     fill_model: FillModel,
     perturb: PerturbationConfig,
+    access_scenario: AccessScenario,
+    access_extra_fraction: float,
     rng: random.Random,
 ) -> Tuple[List[Dict[str, object]], List[TradePrint], int]:
     bids = [[price, volume] for price, volume in snapshot.bids]
@@ -287,6 +351,8 @@ def _execute_order_batch(
         return fills, trades, 1
 
     passive_candidates: List[Tuple[str, Order, int]] = []
+    exact_visible_fill = not access_scenario.has_access_effect(access_extra_fraction)
+    product_config, fill_regime = fill_model.config_for(product, snapshot.bids, snapshot.asks)
     for order in orders:
         qty = int(order.quantity)
         if qty == 0:
@@ -296,7 +362,10 @@ def _execute_order_batch(
             while remaining > 0 and asks and asks[0][0] <= order.price:
                 ask_price, ask_qty = asks[0]
                 fill_qty = min(remaining, ask_qty)
-                exec_price = ask_price + fill_model.aggressive_slippage_ticks
+                size_slippage = product_config.size_slippage_ticks(fill_qty)
+                flat_slippage = product_config.aggressive_slippage_ticks + product_config.aggressive_adverse_selection_ticks
+                total_slippage = int(round((flat_slippage + size_slippage) * fill_model.slippage_multiplier * perturb.slippage_multiplier))
+                exec_price = ask_price + total_slippage
                 ledger.apply_buy(exec_price, fill_qty)
                 fills.append({
                     "timestamp": timestamp,
@@ -304,9 +373,17 @@ def _execute_order_batch(
                     "side": "buy",
                     "price": exec_price,
                     "quantity": fill_qty,
-                    "kind": "aggressive_visible",
-                    "exact": True,
+                    "kind": "aggressive_visible" if exact_visible_fill else "aggressive_access_assumption",
+                    "exact": exact_visible_fill,
+                    "reference_price": ask_price,
                     "source_trade_price": ask_price,
+                    "slippage_ticks": total_slippage,
+                    "size_slippage_ticks": size_slippage,
+                    "adverse_selection_ticks": product_config.aggressive_adverse_selection_ticks,
+                    "fill_regime": fill_regime,
+                    "access_scenario": access_scenario.name,
+                    "access_active": access_extra_fraction > 0,
+                    "access_extra_fraction": access_extra_fraction,
                 })
                 remaining -= fill_qty
                 ask_qty -= fill_qty
@@ -321,7 +398,10 @@ def _execute_order_batch(
             while remaining > 0 and bids and bids[0][0] >= order.price:
                 bid_price, bid_qty = bids[0]
                 fill_qty = min(remaining, bid_qty)
-                exec_price = bid_price - fill_model.aggressive_slippage_ticks
+                size_slippage = product_config.size_slippage_ticks(fill_qty)
+                flat_slippage = product_config.aggressive_slippage_ticks + product_config.aggressive_adverse_selection_ticks
+                total_slippage = int(round((flat_slippage + size_slippage) * fill_model.slippage_multiplier * perturb.slippage_multiplier))
+                exec_price = bid_price - total_slippage
                 ledger.apply_sell(exec_price, fill_qty)
                 fills.append({
                     "timestamp": timestamp,
@@ -329,9 +409,17 @@ def _execute_order_batch(
                     "side": "sell",
                     "price": exec_price,
                     "quantity": fill_qty,
-                    "kind": "aggressive_visible",
-                    "exact": True,
+                    "kind": "aggressive_visible" if exact_visible_fill else "aggressive_access_assumption",
+                    "exact": exact_visible_fill,
+                    "reference_price": bid_price,
                     "source_trade_price": bid_price,
+                    "slippage_ticks": total_slippage,
+                    "size_slippage_ticks": size_slippage,
+                    "adverse_selection_ticks": product_config.aggressive_adverse_selection_ticks,
+                    "fill_regime": fill_regime,
+                    "access_scenario": access_scenario.name,
+                    "access_active": access_extra_fraction > 0,
+                    "access_extra_fraction": access_extra_fraction,
                 })
                 remaining -= fill_qty
                 bid_qty -= fill_qty
@@ -343,7 +431,11 @@ def _execute_order_batch(
                 passive_candidates.append(("sell", Order(product, int(order.price), -remaining), remaining))
 
     passive_candidates.sort(key=lambda item: (-item[1].price if item[0] == "buy" else item[1].price, -item[2]))
+    trade_volume_multiplier = access_scenario.trade_volume_multiplier(access_extra_fraction)
     working_trades = [TradePrint(**asdict(trade)) for trade in trades]
+    if trade_volume_multiplier != 1.0:
+        for trade in working_trades:
+            trade.quantity = max(1, int(round(trade.quantity * trade_volume_multiplier)))
     passive_snapshot = BookSnapshot(
         timestamp=snapshot.timestamp,
         product=snapshot.product,
@@ -365,6 +457,8 @@ def _execute_order_batch(
             ledger=ledger,
             fill_model=fill_model,
             perturb=perturb,
+            access_scenario=access_scenario,
+            access_extra_fraction=access_extra_fraction,
             rng=rng,
             fills_out=fills,
         )
@@ -438,6 +532,59 @@ def _apply_fill_markouts(
             row[f"markout_{horizon}"] = value
 
 
+def _summarise_slippage(fills_log: Sequence[Dict[str, object]]) -> Dict[str, object]:
+    per_product: Dict[str, Dict[str, object]] = {
+        product: {
+            "slippage_cost": 0.0,
+            "slippage_qty": 0,
+            "slippage_fill_count": 0,
+            "average_slippage_ticks": 0.0,
+            "average_size_slippage_ticks": 0.0,
+            "size_slippage_tick_qty": 0.0,
+            "aggressive_slippage_cost": 0.0,
+            "passive_adverse_cost": 0.0,
+        }
+        for product in PRODUCTS
+    }
+    total_cost = 0.0
+    total_qty = 0
+    total_size_ticks = 0.0
+    total_slip_ticks = 0.0
+    for row in fills_log:
+        product = str(row.get("product"))
+        if product not in per_product:
+            continue
+        qty = abs(int(row.get("quantity", 0)))
+        slip_ticks = float(row.get("slippage_ticks") or 0.0)
+        size_ticks = float(row.get("size_slippage_ticks") or 0.0)
+        cost = slip_ticks * qty
+        bucket = per_product[product]
+        bucket["slippage_cost"] = float(bucket["slippage_cost"]) + cost
+        bucket["slippage_qty"] = int(bucket["slippage_qty"]) + qty
+        bucket["slippage_fill_count"] = int(bucket["slippage_fill_count"]) + 1
+        bucket["size_slippage_tick_qty"] = float(bucket["size_slippage_tick_qty"]) + size_ticks * qty
+        if str(row.get("kind", "")).startswith("aggressive"):
+            bucket["aggressive_slippage_cost"] = float(bucket["aggressive_slippage_cost"]) + cost
+        else:
+            bucket["passive_adverse_cost"] = float(bucket["passive_adverse_cost"]) + cost
+        total_cost += cost
+        total_qty += qty
+        total_slip_ticks += slip_ticks * qty
+        total_size_ticks += size_ticks * qty
+    for bucket in per_product.values():
+        qty = int(bucket["slippage_qty"])
+        if qty > 0:
+            bucket["average_slippage_ticks"] = float(bucket["slippage_cost"]) / qty
+            bucket["average_size_slippage_ticks"] = float(bucket["size_slippage_tick_qty"]) / qty
+    return {
+        "total_slippage_cost": total_cost,
+        "total_slippage_qty": total_qty,
+        "average_slippage_ticks": 0.0 if total_qty == 0 else total_slip_ticks / total_qty,
+        "average_size_slippage_ticks": 0.0 if total_qty == 0 else total_size_ticks / total_qty,
+        "per_product": per_product,
+    }
+
+
 
 
 def run_market_session(
@@ -450,7 +597,9 @@ def run_market_session(
     run_name: str,
     mode: str,
     capture_full_output: bool = True,
+    access_scenario: AccessScenario | None = None,
 ) -> SessionArtefacts:
+    access_scenario = access_scenario or NO_ACCESS_SCENARIO
     ledgers = {product: ProductLedger() for product in PRODUCTS}
     trader_data = ""
     prev_own_trades = {product: [] for product in PRODUCTS}
@@ -466,12 +615,24 @@ def run_market_session(
 
     for day_dataset in market_days:
         for ts in day_dataset.timestamps:
+            tick_snapshots: Dict[str, BookSnapshot] = {}
+            tick_access_fractions: Dict[str, float] = {}
+            for product in PRODUCTS:
+                original_snapshot = day_dataset.books_by_timestamp.get(ts, {}).get(product)
+                access_extra_fraction = access_scenario.active_extra_fraction(rng)
+                tick_access_fractions[product] = access_extra_fraction
+                access_volume_multiplier = access_scenario.book_volume_multiplier(access_extra_fraction)
+                tick_snapshots[product] = (
+                    _scaled_snapshot(original_snapshot, rng, perturb, access_volume_multiplier)
+                    if original_snapshot
+                    else BookSnapshot(ts, product, [], [], None)
+                )
             state = TradingState(
                 traderData=trader_data,
                 timestamp=ts,
                 listings={product: Listing(product, product, CURRENCY) for product in PRODUCTS},
                 order_depths={
-                    product: snapshot_to_order_depth(day_dataset.books_by_timestamp[ts].get(product, BookSnapshot(ts, product, [], [], None)))
+                    product: snapshot_to_order_depth(tick_snapshots[product])
                     for product in PRODUCTS
                 },
                 own_trades=prev_own_trades,
@@ -492,8 +653,8 @@ def run_market_session(
             market_trades_tick = {product: [] for product in PRODUCTS}
 
             for product in PRODUCTS:
-                original_snapshot = day_dataset.books_by_timestamp.get(ts, {}).get(product)
-                snapshot = _scaled_snapshot(original_snapshot, rng, perturb) if original_snapshot else BookSnapshot(ts, product, [], [], None)
+                snapshot = tick_snapshots[product]
+                access_extra_fraction = tick_access_fractions[product]
                 trades = deepcopy(day_dataset.trades_by_timestamp.get(ts, {}).get(product, []))
                 product_fills, residual_trades, limit_breach = _execute_order_batch(
                     timestamp=ts,
@@ -504,12 +665,15 @@ def run_market_session(
                     orders=due_orders.get(product, []),
                     fill_model=fill_model,
                     perturb=perturb,
+                    access_scenario=access_scenario,
+                    access_extra_fraction=access_extra_fraction,
                     rng=rng,
                 )
                 total_limit_breaches += limit_breach
 
                 best_bid = snapshot.bids[0][0] if snapshot.bids else None
                 best_ask = snapshot.asks[0][0] if snapshot.asks else None
+                _product_config, fill_regime = fill_model.config_for(product, snapshot.bids, snapshot.asks)
                 for order in due_orders.get(product, []):
                     qty = int(order.quantity)
                     order_role = "passive"
@@ -535,6 +699,10 @@ def run_market_session(
                         "reference_fair": snapshot.reference_fair,
                         "order_role": order_role,
                         "distance_to_touch": distance_to_touch,
+                        "fill_regime": fill_regime,
+                        "access_scenario": access_scenario.name,
+                        "access_active": access_extra_fraction > 0,
+                        "access_extra_fraction": access_extra_fraction,
                     })
                 for fill in product_fills:
                     fill["day"] = day_dataset.day
@@ -563,10 +731,14 @@ def run_market_session(
             prev_market_trades = market_trades_tick
             global_step += 1
 
-        final_by_product = {product: ledgers[product].mtm((market_days[-1].books_by_timestamp[market_days[-1].timestamps[-1]].get(product).reference_fair if market_days[-1].books_by_timestamp[market_days[-1].timestamps[-1]].get(product) else None)) for product in PRODUCTS}
+        maf_cost_for_row = access_scenario.maf_cost if day_dataset is market_days[-1] else 0.0
+        gross_day_pnl = sum(ledgers[p].mtm(day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get(p).reference_fair if day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get(p) else None) for p in PRODUCTS)
         session_rows.append({
             "day": day_dataset.day,
-            "final_pnl": sum(ledgers[p].mtm(day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get(p).reference_fair if day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get(p) else None) for p in PRODUCTS),
+            "final_pnl": gross_day_pnl - maf_cost_for_row,
+            "gross_pnl_before_maf": gross_day_pnl,
+            "maf_cost": maf_cost_for_row,
+            "access_scenario": access_scenario.name,
             "osmium_pnl": ledgers["ASH_COATED_OSMIUM"].mtm(day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get("ASH_COATED_OSMIUM").reference_fair if day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get("ASH_COATED_OSMIUM") else None),
             "pepper_pnl": ledgers["INTARIAN_PEPPER_ROOT"].mtm(day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get("INTARIAN_PEPPER_ROOT").reference_fair if day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get("INTARIAN_PEPPER_ROOT") else None),
             "osmium_position": ledgers["ASH_COATED_OSMIUM"].position,
@@ -579,6 +751,7 @@ def run_market_session(
     for product in PRODUCTS:
         snap = final_day.books_by_timestamp[final_ts].get(product)
         final_marks[product] = None if snap is None else (snap.reference_fair if snap.reference_fair is not None else snap.mid)
+    slippage_summary = _summarise_slippage(fills_log)
     per_product_summary = {
         product: {
             "cash": ledgers[product].cash,
@@ -587,6 +760,8 @@ def run_market_session(
             "final_mtm": ledgers[product].mtm(final_marks[product]),
             "final_position": ledgers[product].position,
             "avg_entry_price": ledgers[product].avg_entry_price,
+            "slippage_cost": slippage_summary["per_product"][product]["slippage_cost"],
+            "average_slippage_ticks": slippage_summary["per_product"][product]["average_slippage_ticks"],
         }
         for product in PRODUCTS
     }
@@ -634,14 +809,20 @@ def run_market_session(
     for value in total_path:
         running_peak = max(running_peak, value)
         max_drawdown = max(max_drawdown, running_peak - value)
+    gross_final_pnl = sum(item["final_mtm"] for item in per_product_summary.values())
+    maf_cost = access_scenario.maf_cost
     summary = {
-        "final_pnl": sum(item["final_mtm"] for item in per_product_summary.values()),
+        "final_pnl": gross_final_pnl - maf_cost,
+        "gross_pnl_before_maf": gross_final_pnl,
+        "maf_cost": maf_cost,
+        "access_scenario": access_scenario.to_dict(),
         "fill_count": len(fills_log),
         "order_count": len(orders_log),
         "limit_breaches": total_limit_breaches,
         "max_drawdown": max_drawdown,
         "final_positions": {product: per_product_summary[product]["final_position"] for product in PRODUCTS},
         "per_product": per_product_summary,
+        "slippage": slippage_summary,
         "fair_value": fair_summary,
         "behaviour": behaviour.get("summary", {}),
     }
@@ -662,6 +843,7 @@ def run_market_session(
         fair_value_summary=fair_summary,
         behaviour=behaviour,
         behaviour_series=behaviour.get("series", []) if capture_full_output else [],
+        access_scenario=access_scenario.to_dict(),
     )
 
 
@@ -674,6 +856,10 @@ def generate_synthetic_market_days(
     calib = deepcopy(load_calibration())
     if "INTARIAN_PEPPER_ROOT" in calib:
         calib["INTARIAN_PEPPER_ROOT"]["drift_per_tick"] = calib["INTARIAN_PEPPER_ROOT"]["drift_per_tick"] * perturb.pepper_slope_scale
+    for product in PRODUCTS:
+        latent_noise = perturb.latent_noise_for(product)
+        if latent_noise > 0:
+            calib[product]["simulation_noise_std"] = latent_noise
     samplers = build_samplers(calib)
     market_days: List[DayDataset] = []
     last_latent: Dict[str, Optional[float]] = {product: None for product in PRODUCTS}
@@ -683,6 +869,14 @@ def generate_synthetic_market_days(
             product: simulate_latent_fair(product, calib, session_day_index, rng, continue_from=last_latent[product])
             for product in PRODUCTS
         }
+        if perturb.shock_tick is not None:
+            shock_tick = max(0, int(perturb.shock_tick))
+            for product, path in latent_paths.items():
+                shock = perturb.shock_for(product)
+                if shock == 0.0 or shock_tick >= len(path):
+                    continue
+                for tick in range(shock_tick, len(path)):
+                    path[tick] += shock
         trade_counts = {product: sample_trade_counts(product, calib, rng) for product in PRODUCTS}
         timestamps = [tick * 100 for tick in range(len(next(iter(latent_paths.values()))))]
         books_by_timestamp: Dict[int, Dict[str, BookSnapshot]] = {}
@@ -766,6 +960,9 @@ def describe_series(artefact: SessionArtefacts) -> Dict[str, object]:
         "per_product": artefact.summary["per_product"],
         "fill_model": artefact.fill_model,
         "perturbations": artefact.perturbations,
+        "access_scenario": artefact.access_scenario,
+        "gross_pnl_before_maf": artefact.summary.get("gross_pnl_before_maf"),
+        "maf_cost": artefact.summary.get("maf_cost"),
         "fair_value_summary": artefact.fair_value_summary,
         "behaviour_summary": artefact.behaviour.get("summary", {}),
     }
@@ -797,18 +994,26 @@ def summarise_monte_carlo_sessions(session_artefacts: List[SessionArtefacts]) ->
             "max": max(vals),
         }
     p05 = quantile(0.05)
+    p25 = quantile(0.25)
+    p75 = quantile(0.75)
     tail = [value for value in pnl_values if value <= p05]
     drawdowns = [float(session.summary.get("max_drawdown", 0.0)) for session in session_artefacts]
+    gross_values = [float(session.summary.get("gross_pnl_before_maf", session.summary["final_pnl"])) for session in session_artefacts]
+    maf_costs = [float(session.summary.get("maf_cost", 0.0)) for session in session_artefacts]
     return {
         "session_count": len(session_artefacts),
         "mean": statistics.fmean(pnl_values),
         "std": statistics.pstdev(pnl_values) if len(pnl_values) > 1 else 0.0,
         "p05": p05,
+        "p25": p25,
         "p50": quantile(0.50),
+        "p75": p75,
         "p95": quantile(0.95),
         "expected_shortfall_05": statistics.fmean(tail) if tail else p05,
         "min": min(pnl_values),
         "max": max(pnl_values),
+        "gross_mean_before_maf": statistics.fmean(gross_values),
+        "mean_maf_cost": statistics.fmean(maf_costs),
         "positive_rate": sum(1 for value in pnl_values if value > 0) / len(pnl_values),
         "mean_max_drawdown": statistics.fmean(drawdowns) if drawdowns else 0.0,
         "max_limit_breaches": max(int(session.summary.get("limit_breaches", 0)) for session in session_artefacts),

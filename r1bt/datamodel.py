@@ -1,12 +1,12 @@
 """
-IMC-Prosperity-compatible datamodel for ROUND 1.
+IMC-Prosperity-compatible datamodel for OSMIUM / PEPPER rounds.
 
 This mirrors the official Prosperity TradingState contract so strategies written
-for the live competition run unmodified here. Products for round 1:
+for the live competition run unmodified here. Products:
     - ASH_COATED_OSMIUM  (symbol: ASH_COATED_OSMIUM)
     - INTARIAN_PEPPER_ROOT (symbol: INTARIAN_PEPPER_ROOT)
 
-Position limit for both: 80 (configurable in engine.py::POSITION_LIMIT).
+Position limit for both: 80.
 """
 from __future__ import annotations
 

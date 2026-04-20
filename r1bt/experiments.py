@@ -9,11 +9,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Sequence
 
-from .dataset import DayDataset, load_round1_dataset
-from .fill_models import resolve_fill_model
+from .dataset import DayDataset, load_round_dataset
+from .fill_models import derive_empirical_fill_profile, resolve_fill_model
 from .live_export import compare_live_export_summary, load_live_export
 from .platform import PerturbationConfig, SessionArtefacts, generate_synthetic_market_days, run_market_session
 from .reports import build_dashboard_payload, write_manifest, write_mc_bundle, write_replay_bundle, write_run_bundle
+from .round2 import AccessScenario, NO_ACCESS_SCENARIO, access_scenario_from_dict, expand_scenarios
+from .scenarios import ResearchScenario, scenario_manifest, scenarios_from_config
 from .trader_adapter import describe_overrides, make_trader
 
 
@@ -25,7 +27,12 @@ class TraderSpec:
 
 
 DEFAULT_DATA_DIR = Path(__file__).parent.parent / "data" / "round1"
+DEFAULT_ROUND2_DATA_DIR = Path(__file__).parent.parent / "data" / "round2"
 DEFAULT_EXPORT_DIR = Path(__file__).parent.parent / "live_exports"
+
+
+def default_data_dir_for_round(round_number: int) -> Path:
+    return DEFAULT_ROUND2_DATA_DIR if int(round_number) == 2 else DEFAULT_DATA_DIR
 
 
 def _dataset_reports(datasets: Sequence[DayDataset]) -> List[Dict[str, object]]:
@@ -54,18 +61,22 @@ def run_replay(
     data_dir: Path,
     fill_model_name: str,
     perturbation: PerturbationConfig,
+    fill_model_config_path: Path | None = None,
     output_dir: Path,
     run_name: str,
     live_export_path: Path | None = None,
+    round_number: int = 1,
+    access_scenario: AccessScenario | None = None,
     register: bool = True,
 ) -> SessionArtefacts:
-    datasets_map = load_round1_dataset(data_dir, days)
+    access_scenario = access_scenario or NO_ACCESS_SCENARIO
+    datasets_map = load_round_dataset(data_dir, days, round_number=round_number)
     datasets = [datasets_map[day] for day in days]
     live_export = load_live_export(live_export_path) if live_export_path is not None else None
     if live_export is not None:
         datasets = [live_export.day_dataset]
     trader, _module = make_trader(trader_spec.path, trader_spec.overrides)
-    fill_model = resolve_fill_model(fill_model_name)
+    fill_model = resolve_fill_model(fill_model_name, fill_model_config_path)
     artefact = run_market_session(
         trader=trader,
         trader_name=trader_spec.name,
@@ -76,6 +87,7 @@ def run_replay(
         run_name=run_name,
         mode="replay",
         capture_full_output=True,
+        access_scenario=access_scenario,
     )
     validation = {}
     if live_export is not None:
@@ -88,6 +100,8 @@ def run_replay(
         mode="replay",
         fill_model=fill_model.to_dict(),
         perturbations=perturbation.to_dict(),
+        round_number=round_number,
+        access_scenario=access_scenario.to_dict(),
         replay_result=artefact,
         dataset_reports=_dataset_reports(datasets),
         validation=validation,
@@ -105,8 +119,14 @@ def _run_monte_carlo_session(task: Dict[str, object]) -> SessionArtefacts:
     assert isinstance(trader_spec, TraderSpec)
     perturbation = task["perturbation"]
     assert isinstance(perturbation, PerturbationConfig)
+    access_scenario = task.get("access_scenario") or NO_ACCESS_SCENARIO
+    assert isinstance(access_scenario, AccessScenario)
     days = tuple(int(day) for day in task["days"])
-    fill_model = resolve_fill_model(str(task["fill_model_name"]))
+    fill_model_config_path = task.get("fill_model_config_path")
+    fill_model = resolve_fill_model(
+        str(task["fill_model_name"]),
+        Path(str(fill_model_config_path)) if fill_model_config_path else None,
+    )
     market_days = generate_synthetic_market_days(days=days, seed=base_seed + session_idx * 17, perturb=perturbation)
     trader, _module = make_trader(trader_spec.path, trader_spec.overrides)
     return run_market_session(
@@ -119,6 +139,7 @@ def _run_monte_carlo_session(task: Dict[str, object]) -> SessionArtefacts:
         run_name=f"{run_name}_session_{session_idx:04d}",
         mode="monte_carlo",
         capture_full_output=session_idx < sample_sessions,
+        access_scenario=access_scenario,
     )
 
 
@@ -134,12 +155,16 @@ def run_monte_carlo(
     base_seed: int,
     run_name: str,
     workers: int = 1,
+    round_number: int = 1,
+    access_scenario: AccessScenario | None = None,
+    fill_model_config_path: Path | None = None,
     register: bool = True,
 ) -> List[SessionArtefacts]:
     if sessions < 1:
         raise ValueError("Monte Carlo sessions must be at least 1")
     sample_sessions = max(0, min(int(sample_sessions), int(sessions)))
-    fill_model = resolve_fill_model(fill_model_name)
+    access_scenario = access_scenario or NO_ACCESS_SCENARIO
+    fill_model = resolve_fill_model(fill_model_name, fill_model_config_path)
     worker_count = max(1, int(workers))
     if worker_count > 1:
         worker_count = min(worker_count, sessions, os.cpu_count() or worker_count)
@@ -151,8 +176,10 @@ def run_monte_carlo(
             "run_name": run_name,
             "trader_spec": trader_spec,
             "perturbation": perturbation,
+            "access_scenario": access_scenario,
             "days": tuple(days),
             "fill_model_name": fill_model_name,
+            "fill_model_config_path": str(fill_model_config_path) if fill_model_config_path else None,
         }
         for session_idx in range(sessions)
     ]
@@ -168,6 +195,8 @@ def run_monte_carlo(
         mode="monte_carlo",
         fill_model=fill_model.to_dict(),
         perturbations=perturbation.to_dict(),
+        round_number=round_number,
+        access_scenario=access_scenario.to_dict(),
         monte_carlo_results=results,
         dataset_reports=[],
     )
@@ -184,7 +213,11 @@ def run_compare(
     perturbation: PerturbationConfig,
     output_dir: Path,
     run_name: str,
+    round_number: int = 1,
+    access_scenario: AccessScenario | None = None,
+    fill_model_config_path: Path | None = None,
 ) -> List[Dict[str, object]]:
+    access_scenario = access_scenario or NO_ACCESS_SCENARIO
     comparison_rows: List[Dict[str, object]] = []
     for trader_spec in trader_specs:
         run_dir = output_dir / trader_spec.name
@@ -194,25 +227,41 @@ def run_compare(
             data_dir=data_dir,
             fill_model_name=fill_model_name,
             perturbation=perturbation,
+            fill_model_config_path=fill_model_config_path,
             output_dir=run_dir,
             run_name=f"{run_name}_{trader_spec.name}",
+            round_number=round_number,
+            access_scenario=access_scenario,
             register=False,
         )
         comparison_rows.append({
             "trader": trader_spec.name,
             "overrides": describe_overrides(trader_spec.overrides),
             "final_pnl": artefact.summary["final_pnl"],
+            "gross_pnl_before_maf": artefact.summary.get("gross_pnl_before_maf"),
+            "maf_cost": artefact.summary.get("maf_cost"),
+            "access_scenario": access_scenario.name,
+            "contract_won": access_scenario.contract_won,
+            "extra_access_enabled": access_scenario.enabled,
+            "expected_extra_quote_fraction": access_scenario.expected_extra_quote_fraction,
             "max_drawdown": artefact.summary.get("max_drawdown"),
             "fill_count": artefact.summary["fill_count"],
             "order_count": artefact.summary.get("order_count"),
             "limit_breaches": artefact.summary["limit_breaches"],
             "osmium_pnl": artefact.summary["per_product"]["ASH_COATED_OSMIUM"]["final_mtm"],
             "pepper_pnl": artefact.summary["per_product"]["INTARIAN_PEPPER_ROOT"]["final_mtm"],
+            "osmium_realised": artefact.summary["per_product"]["ASH_COATED_OSMIUM"]["realised"],
+            "pepper_realised": artefact.summary["per_product"]["INTARIAN_PEPPER_ROOT"]["realised"],
             "osmium_position": artefact.summary["per_product"]["ASH_COATED_OSMIUM"]["final_position"],
             "pepper_position": artefact.summary["per_product"]["INTARIAN_PEPPER_ROOT"]["final_position"],
             "osmium_cap_usage": artefact.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("cap_usage_ratio"),
             "pepper_cap_usage": artefact.behaviour.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("cap_usage_ratio"),
+            "osmium_fill_count": artefact.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("total_fills"),
+            "pepper_fill_count": artefact.behaviour.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("total_fills"),
+            "osmium_max_drawdown": artefact.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("max_drawdown"),
+            "pepper_max_drawdown": artefact.behaviour.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("max_drawdown"),
             "pepper_markout_5": artefact.behaviour.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("average_fill_markout_5"),
+            "osmium_markout_5": artefact.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("average_fill_markout_5"),
         })
     comparison_rows.sort(key=lambda row: float(row["final_pnl"]), reverse=True)
     dashboard = build_dashboard_payload(
@@ -220,12 +269,14 @@ def run_compare(
         run_name=run_name,
         trader_name="multiple",
         mode="replay",
-        fill_model=resolve_fill_model(fill_model_name).to_dict(),
+        fill_model=resolve_fill_model(fill_model_name, fill_model_config_path).to_dict(),
         perturbations=perturbation.to_dict(),
+        round_number=round_number,
+        access_scenario=access_scenario.to_dict(),
         comparison_rows=comparison_rows,
     )
     write_run_bundle(output_dir, dashboard, extra_csvs={"comparison.csv": comparison_rows})
-    write_manifest(output_dir, {"run_type": "comparison", "run_name": run_name, "row_count": len(comparison_rows)})
+    write_manifest(output_dir, {"run_type": "comparison", "run_name": run_name, "row_count": len(comparison_rows), "round": round_number, "access_scenario": access_scenario.to_dict()})
     return comparison_rows
 
 
@@ -233,9 +284,12 @@ def run_sweep_from_config(config_path: Path, output_dir: Path) -> List[Dict[str,
     config = json.loads(config_path.read_text(encoding="utf-8"))
     trader_path = Path(config["trader"])
     base_name = config.get("name", config_path.stem)
+    round_number = int(config.get("round", 1))
     days = tuple(config.get("days", [-2, -1, 0]))
     fill_model_name = config.get("fill_model", "base")
+    fill_model_config_path = Path(str(config["fill_config"])).resolve() if config.get("fill_config") else None
     perturbation = PerturbationConfig(**config.get("perturbation", {}))
+    access_scenario = access_scenario_from_dict(config.get("access_scenario"))
     trader_specs = [
         TraderSpec(
             name=variant["name"],
@@ -247,12 +301,453 @@ def run_sweep_from_config(config_path: Path, output_dir: Path) -> List[Dict[str,
     return run_compare(
         trader_specs=trader_specs,
         days=days,
-        data_dir=Path(config.get("data_dir", DEFAULT_DATA_DIR)),
+        data_dir=Path(config.get("data_dir", default_data_dir_for_round(round_number))),
         fill_model_name=fill_model_name,
         perturbation=perturbation,
+        fill_model_config_path=fill_model_config_path,
         output_dir=output_dir,
         run_name=base_name,
+        round_number=round_number,
+        access_scenario=access_scenario,
     )
+
+
+def _trader_specs_from_config(config: Dict[str, object], config_path: Path) -> List[TraderSpec]:
+    trader_items = config.get("traders")
+    if isinstance(trader_items, list):
+        return [
+            TraderSpec(
+                name=str(item.get("name") or Path(str(item["path"])).stem),
+                path=Path(str(item["path"])).resolve(),
+                overrides=item.get("overrides") if isinstance(item, dict) else None,
+            )
+            for item in trader_items
+            if isinstance(item, dict)
+        ]
+
+    trader_path = Path(str(config["trader"])).resolve()
+    variants = config.get("variants")
+    if isinstance(variants, list):
+        return [
+            TraderSpec(
+                name=str(variant.get("name") or f"variant_{idx}"),
+                path=Path(str(variant.get("path", trader_path))).resolve(),
+                overrides=variant.get("overrides") if isinstance(variant, dict) else None,
+            )
+            for idx, variant in enumerate(variants)
+            if isinstance(variant, dict)
+        ]
+
+    return [TraderSpec(name=str(config.get("name", config_path.stem)), path=trader_path)]
+
+
+def _scenario_winner_rows(rows: Sequence[Dict[str, object]]) -> List[Dict[str, object]]:
+    grouped: Dict[str, List[Dict[str, object]]] = {}
+    for row in rows:
+        grouped.setdefault(str(row["scenario"]), []).append(row)
+
+    baseline_name = None
+    for scenario, scenario_rows in grouped.items():
+        if any(not bool(row.get("extra_access_enabled")) for row in scenario_rows):
+            baseline_name = scenario
+            break
+    baseline_winner = None
+    if baseline_name:
+        baseline_winner = max(grouped[baseline_name], key=lambda row: float(row.get("final_pnl") or 0.0)).get("trader")
+
+    winner_rows = []
+    for scenario, scenario_rows in sorted(grouped.items()):
+        replay_winner = max(scenario_rows, key=lambda row: float(row.get("final_pnl") or 0.0))
+        mc_candidates = [row for row in scenario_rows if row.get("mc_mean") is not None]
+        mc_winner = max(mc_candidates, key=lambda row: float(row.get("mc_mean") or 0.0)) if mc_candidates else None
+        second = sorted(scenario_rows, key=lambda row: float(row.get("final_pnl") or 0.0), reverse=True)[1:2]
+        winner_rows.append({
+            "scenario": scenario,
+            "winner": replay_winner.get("trader"),
+            "winner_final_pnl": replay_winner.get("final_pnl"),
+            "gap_to_second": None if not second else float(replay_winner.get("final_pnl") or 0.0) - float(second[0].get("final_pnl") or 0.0),
+            "mc_winner": None if mc_winner is None else mc_winner.get("trader"),
+            "mc_winner_mean": None if mc_winner is None else mc_winner.get("mc_mean"),
+            "ranking_changed_vs_no_access": None if baseline_winner is None else replay_winner.get("trader") != baseline_winner,
+        })
+    return winner_rows
+
+
+def _pairwise_mc_rows(mc_results: Dict[tuple[str, str], List[SessionArtefacts]], replay_rows: Sequence[Dict[str, object]]) -> List[Dict[str, object]]:
+    replay_lookup = {(str(row["scenario"]), str(row["trader"])): row for row in replay_rows}
+    rows: List[Dict[str, object]] = []
+    scenarios = sorted({key[0] for key in mc_results})
+    for scenario in scenarios:
+        traders = sorted(trader for sc, trader in mc_results if sc == scenario)
+        for idx, trader_a in enumerate(traders):
+            for trader_b in traders[idx + 1:]:
+                sessions_a = mc_results[(scenario, trader_a)]
+                sessions_b = mc_results[(scenario, trader_b)]
+                n = min(len(sessions_a), len(sessions_b))
+                if n == 0:
+                    continue
+                diffs = [float(sessions_a[i].summary["final_pnl"]) - float(sessions_b[i].summary["final_pnl"]) for i in range(n)]
+                mean_diff = statistics.fmean(diffs)
+                std_diff = statistics.pstdev(diffs) if len(diffs) > 1 else 0.0
+                replay_diff = float(replay_lookup[(scenario, trader_a)].get("final_pnl") or 0.0) - float(replay_lookup[(scenario, trader_b)].get("final_pnl") or 0.0)
+                rows.append({
+                    "scenario": scenario,
+                    "trader_a": trader_a,
+                    "trader_b": trader_b,
+                    "sessions": n,
+                    "replay_diff_a_minus_b": replay_diff,
+                    "mc_mean_diff_a_minus_b": mean_diff,
+                    "mc_std_diff": std_diff,
+                    "mc_p05_diff": _quantile(diffs, 0.05),
+                    "mc_p50_diff": _quantile(diffs, 0.50),
+                    "mc_p95_diff": _quantile(diffs, 0.95),
+                    "a_win_rate": sum(1 for value in diffs if value > 0) / n,
+                    "likely_winner": trader_a if mean_diff > 0 else trader_b if mean_diff < 0 else "tie",
+                })
+    return rows
+
+
+def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path) -> Dict[str, List[Dict[str, object]]]:
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    run_name = str(config.get("name", config_path.stem))
+    round_number = int(config.get("round", 2))
+    data_dir = Path(str(config.get("data_dir", default_data_dir_for_round(round_number))))
+    days = tuple(int(day) for day in config.get("days", [-2, -1, 0]))
+    fill_model_name = str(config.get("fill_model", "base"))
+    fill_model_config_path = Path(str(config["fill_config"])).resolve() if config.get("fill_config") else None
+    perturbation = PerturbationConfig(**config.get("perturbation", {}))
+    scenarios = expand_scenarios(config.get("scenarios"), config.get("maf_values"))
+    trader_specs = _trader_specs_from_config(config, config_path)
+    mc_sessions = int(config.get("mc_sessions", 0))
+    mc_sample_sessions = int(config.get("mc_sample_sessions", min(4, mc_sessions)))
+    mc_seed = int(config.get("mc_seed", 20260418))
+    mc_workers = int(config.get("mc_workers", 1))
+
+    scenario_rows: List[Dict[str, object]] = []
+    mc_results: Dict[tuple[str, str], List[SessionArtefacts]] = {}
+    baseline_gross_by_trader: Dict[str, float] = {}
+
+    for scenario_idx, scenario in enumerate(scenarios):
+        for trader_idx, trader_spec in enumerate(trader_specs):
+            replay = run_replay(
+                trader_spec=trader_spec,
+                days=days,
+                data_dir=data_dir,
+                fill_model_name=fill_model_name,
+                perturbation=perturbation,
+                fill_model_config_path=fill_model_config_path,
+                output_dir=output_dir / scenario.name / trader_spec.name / "replay",
+                run_name=f"{run_name}_{scenario.name}_{trader_spec.name}_replay",
+                round_number=round_number,
+                access_scenario=scenario,
+                register=False,
+            )
+            gross = float(replay.summary.get("gross_pnl_before_maf", replay.summary["final_pnl"]))
+            if not scenario.enabled and trader_spec.name not in baseline_gross_by_trader:
+                baseline_gross_by_trader[trader_spec.name] = gross
+            baseline_gross = baseline_gross_by_trader.get(trader_spec.name)
+            row = {
+                "scenario": scenario.name,
+                "trader": trader_spec.name,
+                "overrides": describe_overrides(trader_spec.overrides),
+                "round": round_number,
+                "final_pnl": replay.summary["final_pnl"],
+                "gross_pnl_before_maf": gross,
+                "maf_cost": replay.summary.get("maf_cost"),
+                "maf_bid": scenario.maf_bid,
+                "contract_won": scenario.contract_won,
+                "extra_access_enabled": scenario.enabled,
+                "expected_extra_quote_fraction": scenario.expected_extra_quote_fraction,
+                "marginal_access_pnl_before_maf": None if baseline_gross is None else gross - baseline_gross,
+                "break_even_maf_vs_no_access": None if baseline_gross is None else gross - baseline_gross,
+                "max_drawdown": replay.summary.get("max_drawdown"),
+                "fill_count": replay.summary["fill_count"],
+                "order_count": replay.summary.get("order_count"),
+                "limit_breaches": replay.summary["limit_breaches"],
+                "osmium_pnl": replay.summary["per_product"]["ASH_COATED_OSMIUM"]["final_mtm"],
+                "pepper_pnl": replay.summary["per_product"]["INTARIAN_PEPPER_ROOT"]["final_mtm"],
+                "osmium_fill_count": replay.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("total_fills"),
+                "pepper_fill_count": replay.behaviour.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("total_fills"),
+                "osmium_cap_usage": replay.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("cap_usage_ratio"),
+                "pepper_cap_usage": replay.behaviour.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("cap_usage_ratio"),
+                "osmium_markout_5": replay.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("average_fill_markout_5"),
+                "pepper_markout_5": replay.behaviour.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("average_fill_markout_5"),
+            }
+
+            if mc_sessions > 0:
+                mc = run_monte_carlo(
+                    trader_spec=trader_spec,
+                    sessions=mc_sessions,
+                    sample_sessions=mc_sample_sessions,
+                    days=days,
+                    fill_model_name=fill_model_name,
+                    perturbation=perturbation,
+                    fill_model_config_path=fill_model_config_path,
+                    output_dir=output_dir / scenario.name / trader_spec.name / "monte_carlo",
+                    base_seed=mc_seed + scenario_idx * 10_000,
+                    run_name=f"{run_name}_{scenario.name}_{trader_spec.name}_mc",
+                    workers=mc_workers,
+                    round_number=round_number,
+                    access_scenario=scenario,
+                    register=False,
+                )
+                mc_summary = _mc_summary_for_rows(mc)
+                row.update(mc_summary)
+                mc_results[(scenario.name, trader_spec.name)] = mc
+
+            scenario_rows.append(row)
+
+    winner_rows = _scenario_winner_rows(scenario_rows)
+    pairwise_rows = _pairwise_mc_rows(mc_results, scenario_rows) if mc_results else []
+    maf_sensitivity_rows = [
+        row for row in scenario_rows
+        if row.get("maf_bid") is not None and (bool(row.get("extra_access_enabled")) or float(row.get("maf_bid") or 0.0) != 0.0)
+    ]
+    scenario_rows.sort(key=lambda row: (str(row["scenario"]), -float(row.get("final_pnl") or 0.0)))
+
+    dashboard = build_dashboard_payload(
+        run_type="round2_scenarios",
+        run_name=run_name,
+        trader_name="multiple" if len(trader_specs) > 1 else trader_specs[0].name,
+        mode="replay" if mc_sessions <= 0 else "replay+monte_carlo",
+        fill_model=resolve_fill_model(fill_model_name, fill_model_config_path).to_dict(),
+        perturbations=perturbation.to_dict(),
+        round_number=round_number,
+        access_scenario={"name": "scenario_sweep", "scenario_count": len(scenarios)},
+        round2={
+            "scenarioRows": scenario_rows,
+            "winnerRows": winner_rows,
+            "pairwiseRows": pairwise_rows,
+            "mafSensitivityRows": maf_sensitivity_rows,
+            "assumptionRegistry": {
+                "note": "Rows are local decision scenarios, not official website reconstruction.",
+            },
+        },
+        comparison_rows=scenario_rows,
+    )
+    write_run_bundle(
+        output_dir,
+        dashboard,
+        extra_csvs={
+            "round2_scenarios.csv": scenario_rows,
+            "round2_winners.csv": winner_rows,
+            "round2_pairwise_mc.csv": pairwise_rows,
+            "round2_maf_sensitivity.csv": maf_sensitivity_rows,
+        },
+    )
+    write_manifest(output_dir, {
+        "run_type": "round2_scenarios",
+        "run_name": run_name,
+        "round": round_number,
+        "scenario_count": len(scenarios),
+        "trader_count": len(trader_specs),
+        "mc_sessions": mc_sessions,
+    })
+    return {
+        "scenario_rows": scenario_rows,
+        "winner_rows": winner_rows,
+        "pairwise_rows": pairwise_rows,
+        "maf_sensitivity_rows": maf_sensitivity_rows,
+    }
+
+
+def _mc_summary_for_rows(results: Sequence[SessionArtefacts]) -> Dict[str, object]:
+    finals = [float(session.summary["final_pnl"]) for session in results]
+    if not finals:
+        return {}
+    p05 = _quantile(finals, 0.05)
+    tail = [value for value in finals if value <= p05]
+    return {
+        "mc_sessions": len(finals),
+        "mc_mean": statistics.fmean(finals),
+        "mc_std": statistics.pstdev(finals) if len(finals) > 1 else 0.0,
+        "mc_p05": p05,
+        "mc_p50": _quantile(finals, 0.50),
+        "mc_p95": _quantile(finals, 0.95),
+        "mc_expected_shortfall_05": statistics.fmean(tail) if tail else p05,
+        "mc_positive_rate": sum(1 for value in finals if value > 0) / len(finals),
+        "mc_mean_drawdown": statistics.fmean(float(session.summary.get("max_drawdown", 0.0)) for session in results),
+    }
+
+
+def _robustness_rows(rows: Sequence[Dict[str, object]]) -> List[Dict[str, object]]:
+    by_trader: Dict[str, List[Dict[str, object]]] = {}
+    for row in rows:
+        by_trader.setdefault(str(row["trader"]), []).append(row)
+    baseline_rows = {
+        str(row["trader"]): row
+        for row in rows
+        if str(row.get("scenario")) == "baseline"
+    }
+    winners = {
+        str(row.get("trader"))
+        for row in _scenario_winner_rows(rows)
+        if row.get("winner") is not None
+    }
+    output: List[Dict[str, object]] = []
+    for trader, trader_rows in sorted(by_trader.items()):
+        pnls = [float(row.get("final_pnl") or 0.0) for row in trader_rows]
+        mc_means = [float(row.get("mc_mean")) for row in trader_rows if row.get("mc_mean") is not None]
+        baseline = baseline_rows.get(trader, trader_rows[0])
+        baseline_pnl = float(baseline.get("final_pnl") or 0.0)
+        worst = min(pnls) if pnls else 0.0
+        p10 = _quantile(pnls, 0.10) if pnls else 0.0
+        stress_drop = baseline_pnl - worst
+        output.append({
+            "trader": trader,
+            "scenario_count": len(trader_rows),
+            "baseline_pnl": baseline_pnl,
+            "mean_pnl": statistics.fmean(pnls) if pnls else 0.0,
+            "median_pnl": statistics.median(pnls) if pnls else 0.0,
+            "p10_pnl": p10,
+            "worst_pnl": worst,
+            "best_pnl": max(pnls) if pnls else 0.0,
+            "stress_drop_from_baseline": stress_drop,
+            "fragility_score": max(0.0, stress_drop) + max(0.0, baseline_pnl - float(p10 or baseline_pnl)),
+            "scenario_win_count": sum(1 for row in _scenario_winner_rows(rows) if row.get("winner") == trader),
+            "wins_any_scenario": trader in winners,
+            "mean_mc_pnl": statistics.fmean(mc_means) if mc_means else None,
+        })
+    output.sort(key=lambda row: (float(row["fragility_score"]), -float(row["median_pnl"])))
+    for idx, row in enumerate(output, start=1):
+        row["robust_rank"] = idx
+    return output
+
+
+def run_scenario_compare_from_config(config_path: Path, output_dir: Path) -> Dict[str, List[Dict[str, object]]]:
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    run_name = str(config.get("name", config_path.stem))
+    round_number = int(config.get("round", 1))
+    data_dir = Path(str(config.get("data_dir", default_data_dir_for_round(round_number))))
+    days = tuple(int(day) for day in config.get("days", [-2, -1, 0]))
+    fill_model_config_path = Path(str(config["fill_config"])).resolve() if config.get("fill_config") else None
+    default_fill_model = str(config.get("fill_model", "empirical_baseline"))
+    scenarios = scenarios_from_config(config.get("scenarios"))
+    trader_specs = _trader_specs_from_config(config, config_path)
+    mc_sessions = int(config.get("mc_sessions", 0))
+    mc_sample_sessions = int(config.get("mc_sample_sessions", min(4, mc_sessions)))
+    mc_seed = int(config.get("mc_seed", 20260418))
+    mc_workers = int(config.get("mc_workers", 1))
+
+    scenario_rows: List[Dict[str, object]] = []
+    mc_results: Dict[tuple[str, str], List[SessionArtefacts]] = {}
+    for scenario_idx, scenario in enumerate(scenarios):
+        fill_model_name = scenario.fill_model or default_fill_model
+        for trader_spec in trader_specs:
+            replay = run_replay(
+                trader_spec=trader_spec,
+                days=days,
+                data_dir=data_dir,
+                fill_model_name=fill_model_name,
+                fill_model_config_path=fill_model_config_path,
+                perturbation=scenario.perturbation,
+                output_dir=output_dir / scenario.name / trader_spec.name / "replay",
+                run_name=f"{run_name}_{scenario.name}_{trader_spec.name}_replay",
+                round_number=round_number,
+                register=False,
+            )
+            row = {
+                "scenario": scenario.name,
+                "scenario_description": scenario.description,
+                "scenario_tags": ",".join(scenario.tags),
+                "trader": trader_spec.name,
+                "overrides": describe_overrides(trader_spec.overrides),
+                "round": round_number,
+                "fill_model": fill_model_name,
+                "final_pnl": replay.summary["final_pnl"],
+                "gross_pnl_before_maf": replay.summary.get("gross_pnl_before_maf"),
+                "max_drawdown": replay.summary.get("max_drawdown"),
+                "fill_count": replay.summary["fill_count"],
+                "order_count": replay.summary.get("order_count"),
+                "limit_breaches": replay.summary["limit_breaches"],
+                "slippage_cost": replay.summary.get("slippage", {}).get("total_slippage_cost"),
+                "average_slippage_ticks": replay.summary.get("slippage", {}).get("average_slippage_ticks"),
+                "osmium_pnl": replay.summary["per_product"]["ASH_COATED_OSMIUM"]["final_mtm"],
+                "pepper_pnl": replay.summary["per_product"]["INTARIAN_PEPPER_ROOT"]["final_mtm"],
+                "osmium_slippage_cost": replay.summary["per_product"]["ASH_COATED_OSMIUM"].get("slippage_cost"),
+                "pepper_slippage_cost": replay.summary["per_product"]["INTARIAN_PEPPER_ROOT"].get("slippage_cost"),
+                "osmium_fill_count": replay.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("total_fills"),
+                "pepper_fill_count": replay.behaviour.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("total_fills"),
+                "osmium_cap_usage": replay.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("cap_usage_ratio"),
+                "pepper_cap_usage": replay.behaviour.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("cap_usage_ratio"),
+                "latent_noise": scenario.perturbation.latent_price_noise_by_product,
+                "spread_shift_ticks": scenario.perturbation.spread_shift_ticks,
+                "order_book_volume_scale": scenario.perturbation.order_book_volume_scale,
+                "slippage_multiplier": scenario.perturbation.slippage_multiplier,
+                "shock_tick": scenario.perturbation.shock_tick,
+                "shock_by_product": scenario.perturbation.shock_by_product,
+            }
+            if mc_sessions > 0:
+                mc = run_monte_carlo(
+                    trader_spec=trader_spec,
+                    sessions=mc_sessions,
+                    sample_sessions=mc_sample_sessions,
+                    days=days,
+                    fill_model_name=fill_model_name,
+                    fill_model_config_path=fill_model_config_path,
+                    perturbation=scenario.perturbation,
+                    output_dir=output_dir / scenario.name / trader_spec.name / "monte_carlo",
+                    base_seed=mc_seed + scenario_idx * 10_000,
+                    run_name=f"{run_name}_{scenario.name}_{trader_spec.name}_mc",
+                    workers=mc_workers,
+                    round_number=round_number,
+                    register=False,
+                )
+                row.update(_mc_summary_for_rows(mc))
+                mc_results[(scenario.name, trader_spec.name)] = mc
+            scenario_rows.append(row)
+
+    scenario_rows.sort(key=lambda row: (str(row["scenario"]), -float(row.get("final_pnl") or 0.0)))
+    winner_rows = _scenario_winner_rows(scenario_rows)
+    robustness_rows = _robustness_rows(scenario_rows)
+    pairwise_rows = _pairwise_mc_rows(mc_results, scenario_rows) if mc_results else []
+    dashboard = build_dashboard_payload(
+        run_type="scenario_compare",
+        run_name=run_name,
+        trader_name="multiple" if len(trader_specs) > 1 else trader_specs[0].name,
+        mode="replay" if mc_sessions <= 0 else "replay+monte_carlo",
+        fill_model=resolve_fill_model(default_fill_model, fill_model_config_path).to_dict(),
+        perturbations={"scenario_count": len(scenarios)},
+        round_number=round_number,
+        comparison_rows=scenario_rows,
+        scenario_analysis={
+            "scenarios": scenario_manifest(scenarios),
+            "rows": scenario_rows,
+            "winners": winner_rows,
+            "robustness": robustness_rows,
+            "pairwiseMc": pairwise_rows,
+            "assumptions": {
+                "empirical": "Fill, noise and slippage scenarios are calibrated decision assumptions.",
+                "unknown": "Website queue priority, hidden matching and other teams' behaviour are not reconstructed.",
+            },
+        },
+    )
+    write_run_bundle(
+        output_dir,
+        dashboard,
+        extra_csvs={
+            "scenario_results.csv": scenario_rows,
+            "scenario_winners.csv": winner_rows,
+            "robustness_ranking.csv": robustness_rows,
+            "scenario_pairwise_mc.csv": pairwise_rows,
+        },
+    )
+    write_manifest(output_dir, {
+        "run_type": "scenario_compare",
+        "run_name": run_name,
+        "round": round_number,
+        "scenario_count": len(scenarios),
+        "trader_count": len(trader_specs),
+        "mc_sessions": mc_sessions,
+        "scenarios": scenario_manifest(scenarios),
+        "fill_config": str(fill_model_config_path) if fill_model_config_path else None,
+    })
+    return {
+        "scenario_rows": scenario_rows,
+        "winner_rows": winner_rows,
+        "robustness_rows": robustness_rows,
+        "pairwise_rows": pairwise_rows,
+    }
 
 
 def calibrate_against_live_export(
@@ -263,15 +758,19 @@ def calibrate_against_live_export(
     live_export_path: Path,
     output_dir: Path,
     quick: bool = False,
+    round_number: int = 1,
+    access_scenario: AccessScenario | None = None,
 ) -> Dict[str, object]:
+    access_scenario = access_scenario or NO_ACCESS_SCENARIO
+    empirical_profile = derive_empirical_fill_profile([live_export_path], output_dir / "empirical_profile", profile_name="live_empirical")
     if quick:
-        candidate_fill_models = ["base", "conservative"]
+        candidate_fill_models = ["empirical_baseline", "empirical_conservative", "base"]
         candidate_scales = [0.70, 1.00]
         candidate_adverse = [0, 1]
         candidate_latency = [0]
         candidate_missed = [0.0, 0.05]
     else:
-        candidate_fill_models = ["optimistic", "base", "conservative"]
+        candidate_fill_models = ["empirical_optimistic", "empirical_baseline", "empirical_conservative", "base", "conservative"]
         candidate_scales = [0.50, 0.70, 0.85, 1.00]
         candidate_adverse = [0, 1, 2]
         candidate_latency = [0, 1]
@@ -298,6 +797,8 @@ def calibrate_against_live_export(
                             output_dir=output_dir / f"{fill_model_name}_{passive_fill_scale:.2f}_{adverse_ticks}_{latency_ticks}_{missed_fill_additive:.2f}",
                             run_name=f"calibration_{fill_model_name}_{passive_fill_scale:.2f}_{adverse_ticks}_{latency_ticks}_{missed_fill_additive:.2f}",
                             live_export_path=live_export_path,
+                            round_number=round_number,
+                            access_scenario=access_scenario,
                             register=False,
                         )
                         validation = dict(artefact.validation)
@@ -336,11 +837,20 @@ def calibrate_against_live_export(
         mode="replay",
         fill_model={"name": "grid"},
         perturbations={},
+        round_number=round_number,
+        access_scenario=access_scenario.to_dict(),
         calibration_grid=rows,
         calibration_best=best_row,
     )
     write_run_bundle(output_dir, dashboard, extra_csvs={"calibration_grid.csv": rows})
-    write_manifest(output_dir, {"run_type": "calibration", "grid_size": len(rows), "best": best_row, "quick": quick})
+    write_manifest(output_dir, {
+        "run_type": "calibration",
+        "grid_size": len(rows),
+        "best": best_row,
+        "quick": quick,
+        "empirical_profile": empirical_profile,
+        "validation_note": "Best score is a local calibration choice, not proof of exact website reconstruction.",
+    })
     assert best_row is not None
     return best_row
 
@@ -394,10 +904,13 @@ def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[s
     config = json.loads(config_path.read_text(encoding="utf-8"))
     trader_path = Path(config["trader"])
     run_name = config.get("name", config_path.stem)
-    data_dir = Path(config.get("data_dir", DEFAULT_DATA_DIR))
+    round_number = int(config.get("round", 1))
+    data_dir = Path(config.get("data_dir", default_data_dir_for_round(round_number)))
     days = tuple(config.get("days", [-2, -1, 0]))
     fill_model_name = config.get("fill_model", "base")
+    fill_model_config_path = Path(str(config["fill_config"])).resolve() if config.get("fill_config") else None
     perturbation = PerturbationConfig(**config.get("perturbation", {}))
+    access_scenario = access_scenario_from_dict(config.get("access_scenario"))
     mc_sessions = int(config.get("mc_sessions", 24))
     mc_sample_sessions = int(config.get("mc_sample_sessions", min(6, mc_sessions)))
     mc_seed = int(config.get("mc_seed", 20260418))
@@ -423,8 +936,11 @@ def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[s
             data_dir=data_dir,
             fill_model_name=fill_model_name,
             perturbation=perturbation,
+            fill_model_config_path=fill_model_config_path,
             output_dir=variant_dir / "replay",
             run_name=f"{run_name}_{variant['name']}_replay",
+            round_number=round_number,
+            access_scenario=access_scenario,
             register=False,
         )
         mc = run_monte_carlo(
@@ -434,10 +950,13 @@ def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[s
             days=days,
             fill_model_name=fill_model_name,
             perturbation=perturbation,
+            fill_model_config_path=fill_model_config_path,
             output_dir=variant_dir / "monte_carlo",
             base_seed=mc_seed + idx * 1000,
             run_name=f"{run_name}_{variant['name']}_mc",
             workers=mc_workers,
+            round_number=round_number,
+            access_scenario=access_scenario,
             register=False,
         )
         mc_final = [float(session.summary["final_pnl"]) for session in mc]
@@ -461,6 +980,8 @@ def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[s
             "variant": variant["name"],
             "overrides": describe_overrides(spec.overrides),
             "replay_final_pnl": replay.summary["final_pnl"],
+            "replay_gross_pnl_before_maf": replay.summary.get("gross_pnl_before_maf"),
+            "maf_cost": replay.summary.get("maf_cost"),
             "replay_max_drawdown": replay.summary.get("max_drawdown"),
             "replay_fill_count": replay.summary["fill_count"],
             "mc_mean": mean,
@@ -478,8 +999,10 @@ def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[s
         run_name=run_name,
         trader_name=trader_path.stem,
         mode="replay+monte_carlo",
-        fill_model=resolve_fill_model(fill_model_name).to_dict(),
+        fill_model=resolve_fill_model(fill_model_name, fill_model_config_path).to_dict(),
         perturbations=perturbation.to_dict(),
+        round_number=round_number,
+        access_scenario=access_scenario.to_dict(),
         optimization_rows=rows,
     )
     write_run_bundle(output_dir, dashboard, extra_csvs={"optimization.csv": rows})

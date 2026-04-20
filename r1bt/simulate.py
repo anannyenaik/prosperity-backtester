@@ -148,14 +148,14 @@ def simulate_latent_fair(product: str, calib: dict, day_index: int,
 
     if product == "ASH_COATED_OSMIUM":
         kappa = 0.15
-        sigma = 0.4
+        sigma = float(pc.get("simulation_noise_std", 0.4))
         target = 10000.0
         for i in range(1, TICKS_PER_DAY):
             pull = -kappa * (path[i - 1] - target)
             path[i] = path[i - 1] + pull + sigma * rng.gauss(0.0, 1.0)
     else:  # INTARIAN_PEPPER_ROOT
         drift = pc["drift_per_tick"]
-        sigma = max(0.8, pc["resid_std"] * 0.5)
+        sigma = float(pc.get("simulation_noise_std", max(0.8, pc["resid_std"] * 0.5)))
         for i in range(1, TICKS_PER_DAY):
             path[i] = path[i - 1] + drift + sigma * rng.gauss(0.0, 1.0)
     return path

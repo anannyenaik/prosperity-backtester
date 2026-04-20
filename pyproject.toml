@@ -1,7 +1,7 @@
 [project]
 name = "r1mcbt"
 version = "0.1.0"
-description = "Monte Carlo backtester for Round 1 (ASH_COATED_OSMIUM + INTARIAN_PEPPER_ROOT)"
+description = "Replay, Monte Carlo and Round 2 MAF research platform for ASH_COATED_OSMIUM and INTARIAN_PEPPER_ROOT"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = []  # stdlib only for runtime

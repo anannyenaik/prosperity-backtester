@@ -54,7 +54,7 @@ def build_behaviour_series(
         })
         qty = abs(int(row.get("quantity", 0)))
         bucket["fill_count"] += 1
-        if row.get("kind") == "aggressive_visible":
+        if str(row.get("kind", "")).startswith("aggressive"):
             bucket["aggressive_fill_count"] += 1
         else:
             bucket["passive_fill_count"] += 1
@@ -131,10 +131,10 @@ def analyse_behaviour(
 
         total_order_qty = sum(abs(int(row.get("submitted_quantity", 0))) for row in product_orders)
         total_fill_qty = sum(abs(int(row.get("quantity", 0))) for row in product_fills)
-        aggressive_fill_qty = sum(abs(int(row.get("quantity", 0))) for row in product_fills if row.get("kind") == "aggressive_visible")
-        passive_fill_qty = sum(abs(int(row.get("quantity", 0))) for row in product_fills if row.get("kind") != "aggressive_visible")
-        aggressive_fill_count = sum(1 for row in product_fills if row.get("kind") == "aggressive_visible")
-        passive_fill_count = sum(1 for row in product_fills if row.get("kind") != "aggressive_visible")
+        aggressive_fill_qty = sum(abs(int(row.get("quantity", 0))) for row in product_fills if str(row.get("kind", "")).startswith("aggressive"))
+        passive_fill_qty = sum(abs(int(row.get("quantity", 0))) for row in product_fills if not str(row.get("kind", "")).startswith("aggressive"))
+        aggressive_fill_count = sum(1 for row in product_fills if str(row.get("kind", "")).startswith("aggressive"))
+        passive_fill_count = sum(1 for row in product_fills if not str(row.get("kind", "")).startswith("aggressive"))
         buy_order_qty = sum(max(0, int(row.get("submitted_quantity", 0))) for row in product_orders)
         sell_order_qty = sum(max(0, -int(row.get("submitted_quantity", 0))) for row in product_orders)
         buy_fill_qty = sum(int(row.get("quantity", 0)) for row in product_fills if row.get("side") == "buy")

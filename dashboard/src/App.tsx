@@ -5,6 +5,7 @@ import { NavBar } from './components/NavBar'
 import { FileDrop } from './components/FileDrop'
 import { ServerRunLoader } from './components/ServerRunLoader'
 import { Overview } from './views/Overview'
+import { Round2 } from './views/Round2'
 import { Replay } from './views/Replay'
 import { MonteCarlo } from './views/MonteCarlo'
 import { Calibration } from './views/Calibration'
@@ -17,6 +18,7 @@ import type { TabId } from './types'
 
 const VIEWS: Record<TabId, React.ComponentType> = {
   overview: Overview,
+  round2: Round2,
   replay: Replay,
   montecarlo: MonteCarlo,
   calibration: Calibration,
@@ -52,21 +54,21 @@ function LandingScreen() {
   return (
     <div className="mx-auto grid min-h-[calc(100vh-132px)] w-full max-w-[1380px] items-center gap-8 px-4 pb-12 md:px-7 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.82fr)]">
       <section className="min-w-0">
-        <div className="hud-label chapter-rule mb-5 text-accent">R1MCBT V4 / SIGNAL OBSERVATORY</div>
+        <div className="hud-label chapter-rule mb-5 text-accent">PROSPERITY LAB / ROUND 2</div>
         <h1 className="font-display max-w-[780px] text-[3rem] font-extrabold uppercase leading-[0.9] tracking-normal text-txt md:text-[4.8rem]">
-          <span className="block">Round 1</span>
+          <span className="block">Round 2</span>
           <span className="block">research</span>
-          <em className="font-serif block font-light normal-case tracking-normal text-accent-2">command deck</em>
+          <em className="font-serif block font-light normal-case tracking-normal text-accent-2">decision deck</em>
         </h1>
         <p className="mt-6 max-w-2xl text-xl leading-9 text-txt-soft">
-          Load replay, Monte Carlo, calibration, comparison or optimisation bundles and inspect the run as a trading lab instrument.
+          Load replay, Monte Carlo, calibration, comparison, optimisation or MAF scenario bundles and inspect the run as a trading lab instrument.
         </p>
 
         <div className="mt-8 grid max-w-3xl grid-cols-1 gap-3 sm:grid-cols-3">
           {[
             { icon: <Radar className="h-4 w-4" />, label: 'Replay', value: 'Path diagnostics' },
-            { icon: <Database className="h-4 w-4" />, label: 'Monte Carlo', value: 'Robustness bands' },
-            { icon: <Server className="h-4 w-4" />, label: 'Calibration', value: 'Live mismatch' },
+            { icon: <Database className="h-4 w-4" />, label: 'MAF', value: 'Access scenarios' },
+            { icon: <Server className="h-4 w-4" />, label: 'Monte Carlo', value: 'Robust ranking' },
           ].map((item) => (
             <div key={item.label} className="glass-panel rounded-lg px-4 py-4">
               <div className="mb-3 text-accent">{item.icon}</div>
@@ -88,7 +90,7 @@ function LandingScreen() {
         <FileDrop />
         <ServerRunLoader />
         <div className="hud-label mt-5 border-t border-border pt-4 text-muted">
-          python -m r1bt replay / monte-carlo / calibrate / optimize
+          python -m r1bt replay / monte-carlo / compare / round2-scenarios
         </div>
       </section>
     </div>

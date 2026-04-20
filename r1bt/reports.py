@@ -10,9 +10,10 @@ from typing import Dict, List, Sequence
 from .fair_value import fair_path_bands
 from .metadata import PRODUCTS
 from .platform import SessionArtefacts, describe_series, summarise_monte_carlo_sessions, write_rows_csv
+from .round2 import ASSUMPTION_REGISTRY
 
 
-DASHBOARD_SCHEMA_VERSION = 2
+DASHBOARD_SCHEMA_VERSION = 3
 
 
 def _mean(values: Sequence[float]) -> float | None:
@@ -144,6 +145,8 @@ def _comparison_diagnostics(rows: Sequence[Dict[str, object]]) -> Dict[str, obje
         "winner_final_pnl": winner.get("final_pnl"),
         "gap_to_second": None if runner_up is None else float(winner.get("final_pnl") or 0.0) - float(runner_up.get("final_pnl") or 0.0),
         "limit_breach_count": sum(int(row.get("limit_breaches") or 0) for row in rows),
+        "scenario_count": len({str(row.get("scenario", "default")) for row in rows}),
+        "maf_sensitive_rows": sum(1 for row in rows if row.get("maf_cost") not in (None, 0, 0.0)),
     }
 
 
@@ -162,6 +165,8 @@ def _write_registry_entry(output_dir: Path, dashboard_payload: Dict[str, object]
         "run_type": dashboard_payload.get("type"),
         "trader_name": meta.get("traderName"),
         "mode": meta.get("mode"),
+        "round": meta.get("round"),
+        "access_scenario": (meta.get("accessScenario") or {}).get("name") if isinstance(meta.get("accessScenario"), dict) else None,
         "output_dir": str(output_dir),
         "dashboard_json": str(output_dir / "dashboard.json"),
         "final_pnl": summary.get("final_pnl"),
@@ -187,6 +192,8 @@ def build_dashboard_payload(
     mode: str,
     fill_model: Dict[str, object],
     perturbations: Dict[str, object],
+    round_number: int = 1,
+    access_scenario: Dict[str, object] | None = None,
     replay_result: SessionArtefacts | None = None,
     monte_carlo_results: Sequence[SessionArtefacts] | None = None,
     comparison_rows: List[Dict[str, object]] | None = None,
@@ -195,7 +202,36 @@ def build_dashboard_payload(
     calibration_grid: List[Dict[str, object]] | None = None,
     calibration_best: Dict[str, object] | None = None,
     optimization_rows: List[Dict[str, object]] | None = None,
+    round2: Dict[str, object] | None = None,
+    scenario_analysis: Dict[str, object] | None = None,
 ) -> Dict[str, object]:
+    access_scenario = access_scenario or {}
+    assumptions: Dict[str, object] = {
+        "exact": [
+            "CSV and live-export parsing",
+            "visible-book aggressive fills",
+            "cash, realised, unrealised and MTM accounting",
+            "traderData and own-trade state hand-off",
+            "synthetic latent fair inside Monte Carlo sessions",
+        ],
+        "approximate": [
+            "passive queue position",
+            "same-price queue share",
+            "adverse selection penalties",
+            "size-dependent slippage",
+            "empirical fill profiles inferred from realised live fills",
+            "historical analysis fair",
+            "synthetic market generation",
+            "calibration and optimisation scores",
+        ],
+        "scenario": [
+            "Stress, crash, fill-quality and slippage scenarios are decision tools.",
+            "Scenario outputs should be used for ranking stability and fragility checks, not exact website forecasts.",
+        ],
+    }
+    if int(round_number) == 2 or access_scenario:
+        assumptions["round2"] = ASSUMPTION_REGISTRY
+
     payload: Dict[str, object] = {
         "type": run_type,
         "meta": {
@@ -203,28 +239,14 @@ def build_dashboard_payload(
             "runName": run_name,
             "traderName": trader_name,
             "mode": mode,
+            "round": round_number,
             "fillModel": fill_model,
             "perturbations": perturbations,
+            "accessScenario": access_scenario,
             "createdAt": datetime.now(timezone.utc).isoformat(),
         },
         "products": list(PRODUCTS),
-        "assumptions": {
-            "exact": [
-                "CSV and live-export parsing",
-                "visible-book aggressive fills",
-                "cash, realised, unrealised and MTM accounting",
-                "traderData and own-trade state hand-off",
-                "synthetic latent fair inside Monte Carlo sessions",
-            ],
-            "approximate": [
-                "passive queue position",
-                "same-price queue share",
-                "adverse selection penalties",
-                "historical analysis fair",
-                "synthetic market generation",
-                "calibration and optimisation scores",
-            ],
-        },
+        "assumptions": assumptions,
         "datasetReports": dataset_reports or [],
         "validation": validation or {},
     }
@@ -277,6 +299,19 @@ def build_dashboard_payload(
             "rows": optimization_rows,
             "diagnostics": _optimization_diagnostics(optimization_rows),
         }
+    if round2 is not None:
+        registry_extra = round2.get("assumptionRegistry", {})
+        if not isinstance(registry_extra, dict):
+            registry_extra = {}
+        payload["round2"] = {
+            **round2,
+            "assumptionRegistry": {
+                **ASSUMPTION_REGISTRY,
+                **registry_extra,
+            },
+        }
+    if scenario_analysis is not None:
+        payload["scenarioAnalysis"] = scenario_analysis
     return payload
 
 
@@ -307,15 +342,19 @@ def _manifest_base(artefact: SessionArtefacts) -> Dict[str, object]:
         "mode": artefact.mode,
         "fill_model": artefact.fill_model,
         "perturbations": artefact.perturbations,
+        "access_scenario": artefact.access_scenario,
         "summary": artefact.summary,
         "fair_value_summary": artefact.fair_value_summary,
         "behaviour_summary": artefact.behaviour.get("summary", {}),
         "schema_version": DASHBOARD_SCHEMA_VERSION,
         "assumptions": {
             "aggressive_fills": "exact against visible book",
-            "passive_fills": "approximate queue model",
+            "passive_fills": "empirical or configured approximate queue model",
+            "slippage": "configured size-dependent and adverse-selection penalty",
+            "noise": "configured or fitted Monte Carlo latent noise profile",
             "historical_fair": "diagnostic inference",
             "synthetic_fair": "exact latent path",
+            "round2_access": "configurable local assumption, not official reconstruction",
         },
         "created_at": datetime.now(timezone.utc).isoformat(),
         "python_version": sys.version,
@@ -338,6 +377,9 @@ def write_replay_bundle(
                 "trader_name": artefact.trader_name,
                 "mode": artefact.mode,
                 "final_pnl": artefact.summary["final_pnl"],
+                "gross_pnl_before_maf": artefact.summary.get("gross_pnl_before_maf"),
+                "maf_cost": artefact.summary.get("maf_cost"),
+                "access_scenario": artefact.access_scenario.get("name"),
                 "fill_count": artefact.summary["fill_count"],
                 "order_count": artefact.summary.get("order_count"),
                 "limit_breaches": artefact.summary["limit_breaches"],
@@ -373,6 +415,9 @@ def write_mc_bundle(
             "trader_name": result.trader_name,
             "mode": result.mode,
             "final_pnl": result.summary["final_pnl"],
+            "gross_pnl_before_maf": result.summary.get("gross_pnl_before_maf"),
+            "maf_cost": result.summary.get("maf_cost"),
+            "access_scenario": result.access_scenario.get("name"),
             "fill_count": result.summary["fill_count"],
             "order_count": result.summary.get("order_count"),
             "limit_breaches": result.summary["limit_breaches"],

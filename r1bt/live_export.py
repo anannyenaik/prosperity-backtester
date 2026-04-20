@@ -19,6 +19,7 @@ class LiveExport:
     profit: Optional[float]
     day_dataset: DayDataset
     trade_history: List[TradePrint]
+    own_trade_history: List[TradePrint]
     raw_path: str
     graph_points: List[Dict[str, float]]
     final_positions: Dict[str, int]
@@ -139,7 +140,13 @@ def load_live_export(path: Path) -> LiveExport:
         )
         for item in trade_history_raw
     ]
+    own_trade_history = [
+        trade for trade in trade_history
+        if trade.buyer == "SUBMISSION" or trade.seller == "SUBMISSION"
+    ]
     for trade in trade_history:
+        if trade.buyer == "SUBMISSION" or trade.seller == "SUBMISSION":
+            continue
         day_dataset.trades_by_timestamp.setdefault(trade.timestamp, {}).setdefault(trade.symbol, []).append(trade)
 
     other = sibling_payload or {}
@@ -155,6 +162,7 @@ def load_live_export(path: Path) -> LiveExport:
         profit=payload.get("profit") if payload.get("profit") is not None else other.get("profit"),
         day_dataset=day_dataset,
         trade_history=trade_history,
+        own_trade_history=own_trade_history,
         raw_path=str(path),
         graph_points=graph_points,
         final_positions=final_positions,
@@ -170,11 +178,221 @@ def _path_rmse(a: List[Dict[str, float]], b_lookup: Dict[int, float]) -> float |
     return math.sqrt(sum((sim - live) ** 2 for live, sim in common) / len(common))
 
 
+def _own_trade_side(trade: TradePrint) -> str | None:
+    if trade.buyer == "SUBMISSION":
+        return "buy"
+    if trade.seller == "SUBMISSION":
+        return "sell"
+    return None
+
+
+def _classify_live_role(trade: TradePrint, dataset: DayDataset) -> str:
+    side = _own_trade_side(trade)
+    snapshot = dataset.books_by_timestamp.get(int(trade.timestamp), {}).get(trade.symbol)
+    if side is None or snapshot is None:
+        return "unknown"
+    if side == "buy" and snapshot.asks and int(trade.price) >= int(snapshot.asks[0][0]):
+        return "aggressive"
+    if side == "sell" and snapshot.bids and int(trade.price) <= int(snapshot.bids[0][0]):
+        return "aggressive"
+    return "passive"
+
+
+def _live_fill_summary(live_export: LiveExport) -> Dict[str, object]:
+    own_trades = live_export.own_trade_history
+    role_counts = {"passive": 0, "aggressive": 0, "unknown": 0}
+    side_counts = {"buy": 0, "sell": 0, "unknown": 0}
+    per_product: Dict[str, Dict[str, object]] = {}
+    for product in PRODUCTS:
+        per_product[product] = {
+            "fill_count": 0,
+            "fill_qty": 0,
+            "passive_count": 0,
+            "aggressive_count": 0,
+            "buy_qty": 0,
+            "sell_qty": 0,
+            "active_tick_count": 0,
+        }
+    active_ticks_by_product: Dict[str, set[int]] = {product: set() for product in PRODUCTS}
+    for trade in own_trades:
+        side = _own_trade_side(trade) or "unknown"
+        role = _classify_live_role(trade, live_export.day_dataset)
+        side_counts[side] = side_counts.get(side, 0) + 1
+        role_counts[role] = role_counts.get(role, 0) + 1
+        product_row = per_product.setdefault(trade.symbol, {
+            "fill_count": 0,
+            "fill_qty": 0,
+            "passive_count": 0,
+            "aggressive_count": 0,
+            "buy_qty": 0,
+            "sell_qty": 0,
+            "active_tick_count": 0,
+        })
+        product_row["fill_count"] = int(product_row["fill_count"]) + 1
+        product_row["fill_qty"] = int(product_row["fill_qty"]) + int(trade.quantity)
+        if role in {"passive", "aggressive"}:
+            product_row[f"{role}_count"] = int(product_row[f"{role}_count"]) + 1
+        if side == "buy":
+            product_row["buy_qty"] = int(product_row["buy_qty"]) + int(trade.quantity)
+        elif side == "sell":
+            product_row["sell_qty"] = int(product_row["sell_qty"]) + int(trade.quantity)
+        active_ticks_by_product.setdefault(trade.symbol, set()).add(int(trade.timestamp))
+    for product, ticks in active_ticks_by_product.items():
+        per_product.setdefault(product, {})["active_tick_count"] = len(ticks)
+    return {
+        "fill_count": len(own_trades),
+        "fill_qty": sum(int(trade.quantity) for trade in own_trades),
+        "role_counts": role_counts,
+        "side_counts": side_counts,
+        "per_product": per_product,
+    }
+
+
+def _sim_fill_summary(artefact) -> Dict[str, object]:
+    fills = artefact.fills
+    role_counts = {"passive": 0, "aggressive": 0, "unknown": 0}
+    side_counts = {"buy": 0, "sell": 0, "unknown": 0}
+    per_product: Dict[str, Dict[str, object]] = {}
+    active_ticks_by_product: Dict[str, set[int]] = {product: set() for product in PRODUCTS}
+    for product in PRODUCTS:
+        per_product[product] = {
+            "fill_count": 0,
+            "fill_qty": 0,
+            "passive_count": 0,
+            "aggressive_count": 0,
+            "buy_qty": 0,
+            "sell_qty": 0,
+            "active_tick_count": 0,
+        }
+    for row in fills:
+        product = str(row.get("product"))
+        kind = str(row.get("kind", ""))
+        role = "aggressive" if kind.startswith("aggressive") else "passive" if kind.startswith("passive") else "unknown"
+        side = str(row.get("side", "unknown"))
+        qty = int(row.get("quantity", 0))
+        role_counts[role] = role_counts.get(role, 0) + 1
+        side_counts[side] = side_counts.get(side, 0) + 1
+        product_row = per_product.setdefault(product, {
+            "fill_count": 0,
+            "fill_qty": 0,
+            "passive_count": 0,
+            "aggressive_count": 0,
+            "buy_qty": 0,
+            "sell_qty": 0,
+            "active_tick_count": 0,
+        })
+        product_row["fill_count"] = int(product_row["fill_count"]) + 1
+        product_row["fill_qty"] = int(product_row["fill_qty"]) + qty
+        if role in {"passive", "aggressive"}:
+            product_row[f"{role}_count"] = int(product_row[f"{role}_count"]) + 1
+        if side == "buy":
+            product_row["buy_qty"] = int(product_row["buy_qty"]) + qty
+        elif side == "sell":
+            product_row["sell_qty"] = int(product_row["sell_qty"]) + qty
+        active_ticks_by_product.setdefault(product, set()).add(int(row.get("timestamp", 0)))
+    for product, ticks in active_ticks_by_product.items():
+        per_product.setdefault(product, {})["active_tick_count"] = len(ticks)
+    return {
+        "fill_count": len(fills),
+        "fill_qty": sum(int(row.get("quantity", 0)) for row in fills),
+        "role_counts": role_counts,
+        "side_counts": side_counts,
+        "per_product": per_product,
+    }
+
+
+def _position_path_from_live(live_export: LiveExport) -> Dict[str, Dict[int, int]]:
+    positions = {product: 0 for product in PRODUCTS}
+    path: Dict[str, Dict[int, int]] = {product: {} for product in PRODUCTS}
+    for trade in sorted(live_export.own_trade_history, key=lambda item: int(item.timestamp)):
+        if trade.symbol not in PRODUCTS:
+            continue
+        side = _own_trade_side(trade)
+        if side == "buy":
+            positions[trade.symbol] += int(trade.quantity)
+        elif side == "sell":
+            positions[trade.symbol] -= int(trade.quantity)
+        for product in PRODUCTS:
+            path[product][int(trade.timestamp)] = positions[product]
+    return path
+
+
+def _position_path_errors(live_export: LiveExport, artefact) -> Dict[str, object]:
+    live_paths = _position_path_from_live(live_export)
+    sim_paths: Dict[str, Dict[int, int]] = {product: {} for product in PRODUCTS}
+    for row in artefact.inventory_series:
+        product = str(row["product"])
+        if product in sim_paths:
+            sim_paths[product][int(row["timestamp"])] = int(row["position"])
+    per_product: Dict[str, object] = {}
+    total_common = 0
+    total_abs_error = 0.0
+    total_sq_error = 0.0
+    for product in PRODUCTS:
+        live_path = live_paths.get(product, {})
+        sim_path = sim_paths.get(product, {})
+        common = sorted(set(live_path) & set(sim_path))
+        abs_errors = [abs(sim_path[ts] - live_path[ts]) for ts in common]
+        sq_errors = [(sim_path[ts] - live_path[ts]) ** 2 for ts in common]
+        total_common += len(common)
+        total_abs_error += sum(abs_errors)
+        total_sq_error += sum(sq_errors)
+        per_product[product] = {
+            "common_points": len(common),
+            "mean_abs_error": None if not common else sum(abs_errors) / len(common),
+            "rmse": None if not common else math.sqrt(sum(sq_errors) / len(common)),
+        }
+    return {
+        "common_points": total_common,
+        "mean_abs_error": None if total_common == 0 else total_abs_error / total_common,
+        "rmse": None if total_common == 0 else math.sqrt(total_sq_error / total_common),
+        "per_product": per_product,
+    }
+
+
+def _activity_timing_summary(live_export: LiveExport, artefact) -> Dict[str, object]:
+    live_ticks = {product: set() for product in PRODUCTS}
+    sim_ticks = {product: set() for product in PRODUCTS}
+    for trade in live_export.own_trade_history:
+        if trade.symbol in live_ticks:
+            live_ticks[trade.symbol].add(int(trade.timestamp))
+    for row in artefact.fills:
+        product = str(row.get("product"))
+        if product in sim_ticks:
+            sim_ticks[product].add(int(row.get("timestamp", 0)))
+    per_product: Dict[str, object] = {}
+    for product in PRODUCTS:
+        union = live_ticks[product] | sim_ticks[product]
+        overlap = live_ticks[product] & sim_ticks[product]
+        per_product[product] = {
+            "live_active_ticks": len(live_ticks[product]),
+            "simulated_active_ticks": len(sim_ticks[product]),
+            "overlap_ticks": len(overlap),
+            "jaccard": None if not union else len(overlap) / len(union),
+            "first_live_tick": min(live_ticks[product]) if live_ticks[product] else None,
+            "first_simulated_tick": min(sim_ticks[product]) if sim_ticks[product] else None,
+            "last_live_tick": max(live_ticks[product]) if live_ticks[product] else None,
+            "last_simulated_tick": max(sim_ticks[product]) if sim_ticks[product] else None,
+        }
+    return {"per_product": per_product}
+
+
+def _ranking_usefulness(profit_error: float | None, path_rmse: float | None) -> str:
+    if profit_error is None:
+        return "unknown_live_profit"
+    abs_profit_error = abs(float(profit_error))
+    if abs_profit_error <= 2_000:
+        return "usable_for_relative_ranking_with_caution"
+    if abs_profit_error <= 5_000 or (path_rmse is not None and float(path_rmse) <= 2_500):
+        return "calibration_needed_before_trusting_small_edges"
+    return "large_mismatch_use_only_for_coarse_stress_tests"
+
+
 def compare_live_export_summary(live_export: LiveExport, artefact) -> Dict[str, object]:
     run_summary = artefact.summary
     live_positions = dict(live_export.final_positions)
-    if not live_positions and live_export.trade_history:
-        for trade in live_export.trade_history:
+    if not live_positions and live_export.own_trade_history:
+        for trade in live_export.own_trade_history:
             live_positions.setdefault(trade.symbol, 0)
             if trade.buyer == "SUBMISSION":
                 live_positions[trade.symbol] += trade.quantity
@@ -213,20 +431,42 @@ def compare_live_export_summary(live_export: LiveExport, artefact) -> Dict[str, 
         }
 
     position_l1_error = sum(abs(int(run_summary.get("final_positions", {}).get(product, 0)) - int(live_positions.get(product, 0))) for product in PRODUCTS)
-    fill_count_error = int(run_summary.get("fill_count", 0)) - len(live_export.trade_history)
+    live_fill_summary = _live_fill_summary(live_export)
+    sim_fill_summary = _sim_fill_summary(artefact)
+    fill_count_error = int(run_summary.get("fill_count", 0)) - int(live_fill_summary["fill_count"])
+    position_path_error = _position_path_errors(live_export, artefact)
+    timing = _activity_timing_summary(live_export, artefact)
+    profit_error = None if live_export.profit is None else float(run_summary.get("final_pnl", 0.0)) - float(live_export.profit)
 
     return {
         "live_profit": live_export.profit,
         "simulated_profit": run_summary.get("final_pnl"),
-        "profit_error": None if live_export.profit is None else float(run_summary.get("final_pnl", 0.0)) - float(live_export.profit),
+        "profit_error": profit_error,
         "live_positions": live_positions,
         "simulated_positions": run_summary.get("final_positions", {}),
         "position_l1_error": position_l1_error,
-        "fill_count_live": len(live_export.trade_history),
+        "fill_count_live": live_fill_summary["fill_count"],
         "fill_count_simulated": run_summary.get("fill_count", 0),
         "fill_count_error": fill_count_error,
+        "fill_qty_live": live_fill_summary["fill_qty"],
+        "fill_qty_simulated": sim_fill_summary["fill_qty"],
+        "fill_qty_error": int(sim_fill_summary["fill_qty"]) - int(live_fill_summary["fill_qty"]),
         "path_rmse": path_rmse,
         "graph_points_live": live_path,
         "graph_points_simulated": sim_pnl_points,
         "per_product_pnl": per_product_pnl,
+        "live_fill_summary": live_fill_summary,
+        "simulated_fill_summary": sim_fill_summary,
+        "fill_role_error": {
+            "passive_count_error": int(sim_fill_summary["role_counts"].get("passive", 0)) - int(live_fill_summary["role_counts"].get("passive", 0)),
+            "aggressive_count_error": int(sim_fill_summary["role_counts"].get("aggressive", 0)) - int(live_fill_summary["role_counts"].get("aggressive", 0)),
+        },
+        "inventory_path_error": position_path_error,
+        "activity_timing": timing,
+        "ranking_usefulness": _ranking_usefulness(profit_error, path_rmse),
+        "diagnostic_notes": [
+            "Live fill counts use only tradeHistory rows where SUBMISSION is buyer or seller.",
+            "Passive/aggressive live labels are inferred from visible touch prices at fill time.",
+            "A 1k to 2k daily profit mismatch can still be useful for relative ranking if scenario ordering is stable.",
+        ],
     }
