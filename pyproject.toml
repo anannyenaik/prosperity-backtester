@@ -1,5 +1,5 @@
 [project]
-name = "r1mcbt"
+name = "prosperity-backtester"
 version = "0.1.0"
 description = "Replay, Monte Carlo and Round 2 MAF research platform for ASH_COATED_OSMIUM and INTARIAN_PEPPER_ROOT"
 readme = "README.md"
@@ -11,6 +11,7 @@ analysis = ["pandas>=2.0", "numpy>=1.24"]
 dev = ["pytest>=8.0"]
 
 [project.scripts]
+prosperity-backtester = "prosperity_backtester.__main__:main"
 r1mcbt = "r1bt.__main__:main"
 
 [build-system]
@@ -18,7 +19,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["r1bt", "r1bt.*"]
+include = ["prosperity_backtester", "prosperity_backtester.*", "r1bt", "r1bt.*"]
 
 [tool.setuptools.package-data]
-r1bt = ["calibration.json"]
+prosperity_backtester = ["calibration.json"]

@@ -1,208 +1,129 @@
-# Calibrated research workflow
+# Calibrated Research Workflow
 
-## Result
+The calibrated workflow helps choose fill, slippage and stress assumptions that are useful for local strategy ranking. It does not prove exact website accuracy.
 
-The platform is now aimed at robust local decisions, not fake-perfect website reconstruction.
+## When To Use It
 
-It strengthens:
+Use calibrated research when:
 
-- empirical fill profiling from live exports
-- product-specific passive fill assumptions
-- size-dependent slippage and adverse selection
-- fitted latent Monte Carlo noise
-- baseline, stress, crash, spread/depth, slippage and fill-quality scenarios
-- live-vs-sim mismatch diagnostics
-- reproducible scenario comparison bundles
+- a live export exists for a known trader version
+- replay looks too optimistic or too pessimistic
+- two scripts have a small PnL gap
+- fill quality or inventory timing is driving the result
+- you need a conservative upload decision
 
-## Gap analysis
+## Empirical Fill Profile
 
-What was already strong:
-
-- deterministic replay over Prosperity CSVs
-- visible-book aggressive fills
-- cash, inventory, realised, unrealised and MTM accounting
-- Monte Carlo sampling and saved path bundles
-- trader comparison, sweeps and optimisation
-- live export loading
-- product behaviour summaries and dashboard output
-- Round 2 MAF/access scenarios
-
-Recent changes that are genuinely useful:
-
-- Round 2 is modelled as scenario analysis rather than claimed truth
-- comparison and optimisation bundles are reproducible
-- behaviour summaries expose fill counts, cap usage and markouts
-- live-vs-sim calibration already scores PnL, fills, position and path error
-- dashboard payloads preserve exact vs approximate assumptions
-
-Weaknesses fixed in this pass:
-
-- live `tradeHistory` was previously counted as own fills even when rows did not involve `SUBMISSION`
-- passive fill modelling was mostly global presets rather than product-specific calibrated assumptions
-- slippage was a flat tick adjustment and did not worsen with order size
-- Monte Carlo noise did not expose the fitted R1/R2 values as a reusable profile
-- there was no general calibrated scenario workflow outside Round 2
-- live-vs-sim diagnostics did not split passive/aggressive, activity timing or inventory-path mismatch clearly enough
-
-Remaining weak points:
-
-- rejected passive orders are not visible in live exports
-- true queue priority is unknown
-- hidden website matching and other teams' behaviour are unknown
-- one live export is not enough to prove stable calibration
-
-## The 90% accuracy claim
-
-Treat any "90% accurate" claim as unproven until it is validated on held-out live exports.
-
-A believable validation standard would require:
-
-- calibration on one set of live sessions
-- held-out testing on different sessions
-- total PnL error, per-product PnL error and inventory-path error inside agreed bands
-- ranking stability across original vs updated strategies
-- scenario sensitivity showing that the winner is not only winning under friendly fills
-
-The current platform can support that validation, but it should not claim exact website accuracy.
-
-## Design
-
-Empirical fills:
-
-- `derive-fill-profile` filters live fills to rows where `SUBMISSION` is buyer or seller
-- passive/aggressive labels are inferred from the visible touch at fill time
-- product, side, quantity, spread, touch distance and liquidity regime are saved
-- output includes `empirical_fill_profile.json`, `empirical_fill_rows.csv` and `empirical_fill_summary.csv`
-- derived profiles are inspectable JSON and can be reused with `--fill-config`
-
-Fill assumptions:
-
-- built-in models now include `empirical_baseline`, `empirical_optimistic`, `empirical_conservative`, `slippage_stress` and `low_fill_quality`
-- OSMIUM and PEPPER have separate product configs
-- wide-spread and thin-depth regimes can override fill quality
-- baseline/conservative/optimistic remain explicit assumptions, not claims of truth
-
-Slippage:
-
-- aggressive fills include flat slippage, aggressive adverse selection and size-dependent slippage
-- passive fills separately record adverse-selection ticks
-- each fill logs reference price, slippage ticks, size slippage ticks and fill regime
-- run summaries include total and per-product slippage cost
-- `--slippage-multiplier 0` gives a clean no-slippage comparison
-
-Noise:
-
-- fitted latent noise values are exposed through `r1bt/noise.py`
-- current fitted values are `3.70` for OSMIUM and `3.22` for PEPPER
-- profiles are `none`, `fitted`, `baseline`, `stress` and `crash`
-- profiles can be scaled rather than treated as permanent truth
-
-Stress scenarios:
-
-- `scenario-compare` runs a general baseline/stress/crash grid
-- default stresses cover crash shock, wider spread, thinner depth, harsher slippage and lower fill quality
-- outputs include scenario winners, pairwise Monte Carlo rows and robustness ranking
-
-Live-vs-sim diagnostics:
-
-- total profit error
-- PnL path RMSE
-- per-product PnL error
-- final position L1 error
-- inventory-path error
-- fill count and fill quantity error
-- passive/aggressive fill mismatch
-- active tick overlap and timing mismatch
-- ranking usefulness label
-
-## Commands
-
-Derive an empirical fill profile:
+Derive a profile from the tracked live-export fixture:
 
 ```bash
-python -m r1bt derive-fill-profile live_exports/259168/259168.log --profile-name live_empirical
+python -m prosperity_backtester derive-fill-profile live_exports/259168/259168.json --profile-name live_empirical
 ```
 
-Replay with empirical fills and fitted noise:
-
-```bash
-python -m r1bt replay strategies/trader.py --data-dir data/round1 --days 0 --fill-mode empirical_baseline --noise-profile fitted
-```
-
-Compare two scripts:
-
-```bash
-python -m r1bt compare strategies/trader.py examples/trader_round1_v9.py --names current candidate --data-dir data/round1 --days 0 --fill-mode empirical_baseline
-```
-
-Compare with and without slippage:
-
-```bash
-python -m r1bt replay strategies/trader.py --data-dir data/round1 --days 0 --fill-mode empirical_baseline --slippage-multiplier 0
-python -m r1bt replay strategies/trader.py --data-dir data/round1 --days 0 --fill-mode slippage_stress --slippage-multiplier 1.5
-```
-
-Run the calibrated scenario grid:
-
-```bash
-python -m r1bt scenario-compare configs/research_scenarios.json
-```
-
-Run a longer Monte Carlo check:
-
-```bash
-python -m r1bt monte-carlo strategies/trader.py --fill-mode empirical_baseline --noise-profile fitted --sessions 512 --sample-sessions 32 --workers 4
-```
-
-Calibrate against a live export:
-
-```bash
-python -m r1bt calibrate examples/trader_round1_v9.py --name live_v9 --data-dir data/round1 --days 0 --live-export live_exports/259168/259168.log
-```
-
-## Output files
-
-Scenario bundles include:
-
-- `dashboard.json`
-- `manifest.json`
-- `scenario_results.csv`
-- `scenario_winners.csv`
-- `robustness_ranking.csv`
-- `scenario_pairwise_mc.csv`
-
-Fill profile bundles include:
+Outputs:
 
 - `empirical_fill_profile.json`
 - `empirical_fill_rows.csv`
 - `empirical_fill_summary.csv`
 
-Calibration bundles include:
+The derivation filters live `tradeHistory` to rows where `SUBMISSION` is buyer or seller, then records product, side, quantity, spread, touch distance and inferred passive/aggressive role.
 
-- `calibration_grid.csv`
-- `empirical_profile/empirical_fill_profile.json`
-- manifest metadata with the best candidate and validation note
+## Calibration Grid
 
-## Validation plan
+Run a quick calibration pass:
 
-1. Use one or more live exports to derive empirical fill profiles.
-2. Run `calibrate` on a calibration session and save the best settings.
-3. Replay held-out live sessions with the chosen fill model.
-4. Check total PnL error, per-product PnL error, fill-count error, fill-quantity error and inventory-path RMSE.
-5. Compare original and updated strategy scripts under the same calibrated assumptions.
-6. Run `scenario-compare` with baseline, stress, crash, wide-spread, harsh-slippage and lower-fill-quality scenarios.
-7. Trust a strategy gain more when it survives conservative fills and stress scenarios.
-8. Treat gains smaller than the observed live-vs-sim error band as suspect until confirmed by held-out logs.
+```bash
+python -m prosperity_backtester calibrate examples/trader_round1_v9.py --name live_v9 --data-dir data/round1 --days 0 --live-export live_exports/259168/259168.json --quick
+```
 
-## Honest limitations
+Run the full grid by omitting `--quick`.
 
-Local backtests still cannot know:
+The calibration score combines:
 
-- true website queue position
-- hidden order matching
+- total profit error
+- PnL path RMSE
+- fill count error
+- final position error
+- per-product path error where available
+
+Lower score is better. A best score is still a local modelling choice.
+
+## Replay With Calibrated Assumptions
+
+```bash
+python -m prosperity_backtester replay strategies/trader.py --data-dir data/round1 --days 0 --fill-mode empirical_baseline --noise-profile fitted
+```
+
+Compare no-slippage and harsher-slippage assumptions:
+
+```bash
+python -m prosperity_backtester replay strategies/trader.py --data-dir data/round1 --days 0 --fill-mode empirical_baseline --slippage-multiplier 0
+python -m prosperity_backtester replay strategies/trader.py --data-dir data/round1 --days 0 --fill-mode slippage_stress --slippage-multiplier 1.5
+```
+
+## Scenario Grid
+
+Run the calibrated scenario grid:
+
+```bash
+python -m prosperity_backtester scenario-compare configs/research_scenarios.json
+```
+
+Default scenarios cover:
+
+- empirical baseline
+- conservative fills
+- wider spreads
+- thinner depth
+- harsher slippage
+- lower fill quality
+- crash-style price shock
+
+Outputs:
+
+- `scenario_results.csv`
+- `scenario_winners.csv`
+- `robustness_ranking.csv`
+- `scenario_pairwise_mc.csv`
+- `dashboard.json`
+- `manifest.json`
+
+## Monte Carlo Robustness
+
+Run a longer check for a leading script:
+
+```bash
+python -m prosperity_backtester monte-carlo strategies/trader.py --fill-mode empirical_baseline --noise-profile fitted --sessions 512 --sample-sessions 32 --workers 4
+```
+
+Use:
+
+- mean for average robustness
+- median for typical outcome
+- P05 and expected shortfall for downside
+- max drawdown for path risk
+- limit breaches for execution safety
+
+## Validation Standard
+
+A useful calibration should be judged on held-out evidence where possible:
+
+1. Derive fills from one live export.
+2. Calibrate on a separate live session.
+3. Replay a held-out session with the chosen assumptions.
+4. Check total PnL error, per-product PnL error, fill count, fill quantity and inventory path.
+5. Compare current and candidate scripts under the same assumptions.
+6. Run scenario and Monte Carlo checks before trusting small edges.
+
+## Limits
+
+Local calibration cannot know:
+
 - rejected passive orders
-- other teams' MAF bids or adaptation
-- hidden quote selection in Round 2
-- website-only latency or throttling effects
+- true queue position
+- hidden matching
+- website-only latency or throttling
+- other teams' behaviour
+- Round 2 extra-quote selection
 
-The right use is robust strategy ranking and fragility diagnosis, not exact official PnL prediction.
+Use the workflow for ranking stability, fragility diagnosis and conservative decision-making.

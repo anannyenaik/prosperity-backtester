@@ -1,12 +1,7 @@
-"""
-Historical replay: play a trader through the REAL CSV data from data/round1/.
+"""Legacy Round 1 replay helper over historical CSV snapshots.
 
-This is the equivalent of `prosperity3bt runner.py`. It does NOT use the sim
-engine; instead it feeds the trader the exact book snapshots from the CSVs, and
-matches orders against (a) the book, then (b) the historical trades.
-
-Use this to validate that a strategy that works in Monte Carlo also works on the
-actual historical data (and vice versa).
+The primary CLI workflows live in :mod:`prosperity_backtester.experiments`. This module remains
+available for older callers that use the small single-day replay API directly.
 """
 from __future__ import annotations
 
@@ -157,7 +152,7 @@ def run_replay(trader, day: int, data_dir: Optional[Path] = None) -> ReplayResul
                         if order.quantity == 0:
                             break
 
-                    # Then try to match against historical trades (price ≤ order.price)
+                    # Then try to match against historical trades (price <= order.price).
                     for htr in hist_tr:
                         if order.quantity <= 0:
                             break

@@ -5,7 +5,7 @@ Calibration-driven strategies:
   - OSMIUM: mean-revert around a stationary fair of 10000.
   - PEPPER: ride the +0.108/tick drift (confirmed across all 3 days).
 
-Order-sizing invariant (avoids the ±80 batch-drop penalty):
+Order-sizing invariant (avoids the +/-80 batch-drop penalty):
   Per product we track `long_head` (remaining capacity to buy) and `short_head`
   (remaining capacity to sell) across all phases. Every new order's size is
   capped by the appropriate head. This guarantees the engine's batch limit
@@ -19,7 +19,7 @@ from typing import Dict, List, Optional
 try:
     from datamodel import Order, OrderDepth, TradingState
 except ImportError:
-    from r1bt.datamodel import Order, OrderDepth, TradingState
+    from prosperity_backtester.datamodel import Order, OrderDepth, TradingState
 
 
 OSMIUM = "ASH_COATED_OSMIUM"
@@ -32,12 +32,12 @@ def _best_bid_ask(depth: OrderDepth):
             min(depth.sell_orders) if depth.sell_orders else None)
 
 
-# ════════════════════════ OSMIUM STRATEGY ════════════════════════ #
+# OSMIUM strategy
 
 class OsmiumTrader:
     FAIR = 10_000          # calibrated mean across 3 days
-    TAKE_MARGIN = 0        # take any ask ≤ 10000 / bid ≥ 10000
-    MAKE_OFFSET = 4        # quote at 9996 / 10004  (inside bot inner spread ≈12)
+    TAKE_MARGIN = 0        # take any ask <= 10000 / bid >= 10000
+    MAKE_OFFSET = 4        # quote at 9996 / 10004, inside bot inner spread around 12
     MAKE_SIZE = 20
     MAX_TAKE = 30
     SKEW_POS_THRESHOLD = 40
@@ -50,7 +50,7 @@ class OsmiumTrader:
         long_head = POS_LIMIT - position
         short_head = POS_LIMIT + position
 
-        # ── TAKE ASKS ── #
+        # Take asks.
         budget = min(self.MAX_TAKE, long_head)
         for ask_px in sorted(depth.sell_orders):
             if budget <= 0 or ask_px > fair + self.TAKE_MARGIN:
@@ -62,7 +62,7 @@ class OsmiumTrader:
                 long_head -= q
                 budget -= q
 
-        # ── TAKE BIDS ── #
+        # Take bids.
         budget = min(self.MAX_TAKE, short_head)
         for bid_px in sorted(depth.buy_orders, reverse=True):
             if budget <= 0 or bid_px < fair - self.TAKE_MARGIN:
@@ -74,7 +74,7 @@ class OsmiumTrader:
                 short_head -= q
                 budget -= q
 
-        # ── MAKE ── #
+        # Make.
         best_bid, best_ask = _best_bid_ask(depth)
         bid_px = fair - self.MAKE_OFFSET
         ask_px = fair + self.MAKE_OFFSET
@@ -98,7 +98,7 @@ class OsmiumTrader:
         return out
 
 
-# ════════════════════════ PEPPER STRATEGY ════════════════════════ #
+# PEPPER strategy
 
 class PepperTrader:
     DRIFT_PER_TICK = 0.108
@@ -139,7 +139,7 @@ class PepperTrader:
         long_head = POS_LIMIT - position
         short_head = POS_LIMIT + position
 
-        # ── TAKE ASKS (aggressive accumulation) ── #
+        # Take asks for aggressive accumulation.
         budget = min(self.MAX_TAKE, long_head)
         for ask_px in sorted(depth.sell_orders):
             if budget <= 0 or ask_px > fair + self.TAKE_BUFFER:
@@ -153,7 +153,7 @@ class PepperTrader:
 
         live_pos = position + ((POS_LIMIT - position) - long_head)
 
-        # ── OFFLOAD when overweight ── #
+        # Offload when overweight.
         if live_pos > self.OFFLOAD_POS:
             budget = min(self.MAX_TAKE, short_head)
             min_sell_price = fair + 2
@@ -168,7 +168,7 @@ class PepperTrader:
                     budget -= q
                     live_pos -= q
 
-        # ── MAKE BID (the drift walks into this) ── #
+        # Make bid. The drift walks into this.
         best_bid, best_ask = _best_bid_ask(depth)
         bid_px = int(fair - self.MAKE_BID_OFFSET)
         if best_bid is not None and bid_px <= best_bid:
@@ -178,7 +178,7 @@ class PepperTrader:
             out.append(Order(PEPPER, bid_px, bid_size))
             long_head -= bid_size
 
-        # ── MAKE ASK (only if we need to offload) ── #
+        # Make ask only when offloading is needed.
         if live_pos > self.OFFLOAD_POS:
             ask_px = int(fair + self.MAKE_ASK_OFFSET)
             if best_ask is not None and ask_px >= best_ask:
@@ -190,7 +190,7 @@ class PepperTrader:
         return out
 
 
-# ════════════════════════ Trader (public API) ════════════════════════ #
+# Trader public API
 
 class Trader:
     def __init__(self):

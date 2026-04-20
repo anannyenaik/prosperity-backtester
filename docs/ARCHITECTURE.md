@@ -1,171 +1,132 @@
-# Architecture overview
+# Architecture
 
-## Product goal
+The repository is organised around output bundles. Each workflow runs a trader, records structured sidecars, writes a `dashboard.json` payload and, where useful, writes `manifest.json` metadata for fast dashboard discovery.
 
-Make Round 1 and Round 2 research fast, reproducible and teammate-friendly.
+## Layers
 
-The platform is built around four workflows:
-
-1. Replay a real trader on historical data or a live export.
-2. Stress a trader with Monte Carlo sessions.
-3. Compare, sweep and optimise variants.
-4. Inspect results in a local dashboard without reading code.
-5. Stress Round 2 MAF and extra quote access assumptions without pretending they are known exactly.
-6. Compare strategies across calibrated fill, slippage, noise and crash scenarios.
-
-## Core layers
-
-### Data layer
+### Data
 
 Files:
 
-- `r1bt/dataset.py`
-- `r1bt/live_export.py`
-- `r1bt/metadata.py`
-- `r1bt/round2.py`
-- `r1bt/noise.py`
-- `r1bt/scenarios.py`
+- `prosperity_backtester/dataset.py`
+- `prosperity_backtester/live_export.py`
+- `prosperity_backtester/metadata.py`
+- `prosperity_backtester/noise.py`
+- `prosperity_backtester/round2.py`
+- `prosperity_backtester/scenarios.py`
 
 Responsibilities:
 
-- Load historical Round 1 and Round 2 CSVs.
-- Validate schema and structural integrity.
-- Load live export `.json` and `.log` files.
-- Expose product metadata and dataset reports.
-- Expose Round 2 access scenario metadata and assumption boundaries.
-- Expose fitted noise profiles and calibrated research scenarios.
+- Load Round 1 and Round 2 CSVs.
+- Validate schema, timestamps, products, duplicate rows and book issues.
+- Load tracked live-export JSON fixtures.
+- Store product metadata and fitted noise profiles.
+- Describe Round 2 access assumptions and calibrated research scenarios.
 
-### Trader compatibility layer
+### Trader Compatibility
 
 Files:
 
-- `r1bt/datamodel.py`
-- `r1bt/trader_adapter.py`
+- `prosperity_backtester/datamodel.py`
+- `prosperity_backtester/trader_adapter.py`
 
 Responsibilities:
 
-- Expose a Prosperity-compatible `TradingState`.
-- Alias common import paths such as `from datamodel import ...`.
-- Load trader modules.
-- Apply parameter overrides for sweeps and optimisation.
+- Provide the Prosperity `TradingState`, `OrderDepth`, `Order` and `Trade` contract.
+- Support common imports such as `from datamodel import ...`.
+- Load trader files safely and apply config override dictionaries.
 
-### Execution and accounting layer
+### Execution And Accounting
 
 Files:
 
-- `r1bt/fill_models.py`
-- `r1bt/platform.py`
-- `r1bt/round2.py`
+- `prosperity_backtester/platform.py`
+- `prosperity_backtester/fill_models.py`
+- `prosperity_backtester/simulate.py`
+- `prosperity_backtester/engine.py`
 
 Responsibilities:
 
-- Deterministic event replay.
-- Visible-book aggressive fills.
-- Approximate passive fills.
-- Product-specific empirical fill profiles.
-- Size-dependent slippage and adverse-selection assumptions.
-- Cash, realised, unrealised and MTM accounting.
-- Order, fill, inventory and PnL logging.
-- MAF fee accounting and access scenario effects.
+- Replay market days tick by tick.
+- Match visible aggressive fills exactly against the local book.
+- Approximate passive fills through named fill models.
+- Apply perturbations, slippage, latency-like effects and adverse-selection assumptions.
+- Track cash, inventory, realised, unrealised and mark-to-market PnL.
+- Generate synthetic Monte Carlo market days.
 
-### Fair-value and behaviour layer
+### Diagnostics
 
 Files:
 
-- `r1bt/fair_value.py`
-- `r1bt/behavior.py`
+- `prosperity_backtester/fair_value.py`
+- `prosperity_backtester/behavior.py`
+- `prosperity_backtester/live_export.py`
 
 Responsibilities:
 
-- Infer diagnostic fair values on historical replay.
-- Expose exact latent fair on synthetic sessions.
-- Summarise product behaviour, cap usage, order-to-fill conversion and fill markouts.
+- Infer historical diagnostic fair values.
+- Expose exact latent fair values in synthetic sessions.
+- Compute markouts, cap usage, fill mix and product behaviour summaries.
+- Compare replay output with live-export PnL, fills, positions and timing where fields exist.
 
-### Experiment orchestration layer
+### Workflow Orchestration
 
 Files:
 
-- `r1bt/experiments.py`
-- `r1bt/__main__.py`
+- `prosperity_backtester/experiments.py`
+- `prosperity_backtester/__main__.py`
 
 Responsibilities:
 
-- Replay.
-- Monte Carlo.
-- Compare.
-- Sweep.
-- Optimise.
-- Calibrate.
-- Derive empirical fill profiles.
-- Run calibrated scenario comparison grids.
-- Run Round 2 scenario grids.
-- Inspect data.
-- Serve the dashboard.
+- Run replay, Monte Carlo, comparison, sweep, optimisation, calibration and scenario workflows.
+- Load JSON config files with clear validation errors.
+- Resolve trader, data and fill-config paths.
+- Keep CLI commands thin and reproducible.
 
-### Reporting layer
+### Reporting
 
 File:
 
-- `r1bt/reports.py`
+- `prosperity_backtester/reports.py`
 
 Responsibilities:
 
-- Write `dashboard.json`.
-- Write CSV sidecars and manifests.
-- Write Monte Carlo sample paths.
-- Write `run_registry.jsonl`.
-- Preserve exact vs approximate assumptions in every dashboard payload.
-- Preserve Round 2 access assumptions and MAF sensitivity in every relevant payload.
+- Build dashboard payloads.
+- Write CSV sidecars, manifests, sample paths and session manifests.
+- Append `run_registry.jsonl` entries.
+- Preserve exact and approximate assumption notes in output bundles.
 
-### Dashboard layer
+### Dashboard
 
 Files:
 
-- `dashboard/src/App.tsx`
-- `dashboard/src/views/*.tsx`
-- `dashboard/src/components/*.tsx`
-- `dashboard/src/charts/*.tsx`
-- `r1bt/server.py`
+- `dashboard/src/`
+- `prosperity_backtester/server.py`
+- `legacy_dashboard/dashboard.html`
 
 Responsibilities:
 
-- Load one or more dashboard bundles by drag/drop.
-- Discover bundles through the local server API.
-- Render overview, replay, Monte Carlo, calibration, comparison, optimisation and product deep dives.
-- Render Round 2 access, MAF sensitivity, scenario winner and pairwise robustness views.
-- Provide inspect mode for timestamp-window analysis.
-- Keep the dashboard product-like rather than report-like.
-- Discover local bundles from lightweight manifest metadata before loading full dashboard payloads.
+- Load one or more `dashboard.json` bundles.
+- Discover local bundles through `/api/runs`.
+- Render bundle-aware tabs for replay, comparison, Monte Carlo, calibration, optimisation, Round 2, Alpha Lab and product deep dives.
+- Show compatibility messages when a bundle does not contain the data required by a tab.
 
-## Dashboard design system
+## Data Contract
 
-The v4 dashboard uses:
+The dashboard should consume bundle fields rather than reconstructing results from raw CSVs. Backend workflows are responsible for writing:
 
-- React + Vite + TypeScript for a maintainable app shell.
-- Tailwind for local tokens and layout.
-- Recharts for resilient, typed chart components.
-- Zustand for simple cross-view state.
-- Syne for display headings, Cormorant for editorial tone and DM Mono for labels/data.
+- `type`
+- `meta`
+- `assumptions`
+- `datasetReports`
+- workflow-specific payload sections
+- sidecar CSV files for review outside the dashboard
 
-The visual language is a dark signal observatory:
+When adding a workflow, prefer extending this bundle contract over adding a one-off report format.
 
-- Obsidian and midnight backgrounds.
-- Cyan and muted gold accents.
-- Bone text.
-- Glass panels.
-- HUD labels.
-- Fixed top navigation.
-- Restrained grain, scanline and glow.
+## Design Choices
 
-## Why Python remains the backend default
-
-Round 1 scale does not require a compiled hot loop yet.
-
-Python keeps:
-
-- Trader compatibility simple.
-- Local debugging fast.
-- Parameter overrides easy.
-- Team setup low-friction.
-
-If Monte Carlo volume becomes the bottleneck, the execution hot loop can move behind the same bundle and dashboard contracts.
+- Python remains the backend because trader compatibility, debugging and config iteration matter more than raw throughput at current scale.
+- Monte Carlo output is intentionally sampled. Full per-tick paths are only saved for selected sample sessions.
+- Round 2 is modelled as scenario analysis, not as a claim about hidden website mechanics.
+- The React dashboard is the primary review surface. The static dashboard is only a fallback.

@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from r1bt.noise import resolve_noise_profile
-from r1bt.scenarios import default_research_scenarios
-from r1bt.experiments import run_scenario_compare_from_config
+import pytest
+
+from prosperity_backtester.noise import resolve_noise_profile
+from prosperity_backtester.scenarios import default_research_scenarios
+from prosperity_backtester.experiments import run_scenario_compare_from_config
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -78,3 +80,11 @@ def test_scenario_compare_bundle(tmp_path):
     assert result["robustness_rows"][0]["trader"] == "starter"
     assert (tmp_path / "scenario_out" / "dashboard.json").is_file()
     assert (tmp_path / "scenario_out" / "robustness_ranking.csv").is_file()
+
+
+def test_scenario_config_reports_missing_trader(tmp_path):
+    config_path = tmp_path / "bad_scenario_config.json"
+    config_path.write_text(json.dumps({"name": "bad", "days": [0], "scenarios": []}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="trader"):
+        run_scenario_compare_from_config(config_path, tmp_path / "out")

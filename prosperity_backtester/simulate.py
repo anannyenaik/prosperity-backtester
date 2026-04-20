@@ -42,7 +42,7 @@ class BotBook:
     asks: List[Tuple[int, int]]
 
 
-# ─────────────────────── calibration loading ─────────────────────── #
+# Calibration loading
 
 _CALIB_CACHE: Optional[dict] = None
 
@@ -71,7 +71,7 @@ def load_calibration(path: Optional[Path] = None) -> dict:
     return calib
 
 
-# ─────────────────────── weighted sampling ─────────────────────── #
+# Weighted sampling
 
 class _Sampler:
     """Categorical sampler from a {value: count} histogram. Precomputes CDF."""
@@ -117,7 +117,7 @@ def build_samplers(calib: dict) -> dict:
     return out
 
 
-# ─────────────────────── latent-fair paths ─────────────────────── #
+# Latent-fair paths
 
 def simulate_latent_fair(product: str, calib: dict, day_index: int,
                          rng: random.Random,
@@ -129,10 +129,10 @@ def simulate_latent_fair(product: str, calib: dict, day_index: int,
     calibration data - useful when simulating a single standalone day.
 
     Calibration notes:
-      - OSMIUM: observable mid std ≈ 4.7 but autocorr(1) = -0.49 → classic
+      - OSMIUM: observable mid std approx 4.7 but autocorr(1) = -0.49, a classic
         bid-ask bounce. The latent fair barely moves (we use kappa=0.15, sigma=0.4,
         stationary std < 1).
-      - PEPPER: linear drift ≈ +0.108/tick, residual std ≈ 1.17.
+      - PEPPER: linear drift approx +0.108/tick, residual std approx 1.17.
 
     Returns a list of TICKS_PER_DAY floats.
     """
@@ -161,7 +161,7 @@ def simulate_latent_fair(product: str, calib: dict, day_index: int,
     return path
 
 
-# ─────────────────────── book generation ─────────────────────── #
+# Book generation
 
 def _nearest_half(x: float) -> float:
     return round(x * 2.0) / 2.0
@@ -256,7 +256,7 @@ def book_to_order_depth(book: BotBook) -> OrderDepth:
     return od
 
 
-# ─────────────────────── trade generation ─────────────────────── #
+# Trade generation
 
 def sample_trade_counts(product: str, calib: dict, rng: random.Random) -> List[int]:
     """Per-tick Bernoulli with a tiny second-trade bump."""
@@ -280,7 +280,7 @@ def sample_trade_quantity(product: str, samplers: dict, volume_limit: int,
     # Filter sampler on the fly (we don't precompute; qty distributions are tiny)
     s = samplers[product]["trade_qty"]
     # Rejection: draw repeatedly until we get a feasible size
-    # (empirical sizes are all ≤ 10, so this is fast)
+    # Empirical sizes are all <= 10, so this is fast.
     for _ in range(8):
         q = s.draw(rng)
         if q <= volume_limit:

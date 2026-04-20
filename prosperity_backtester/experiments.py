@@ -5,6 +5,7 @@ import json
 import os
 import random
 import statistics
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Sequence
@@ -33,6 +34,57 @@ DEFAULT_EXPORT_DIR = Path(__file__).parent.parent / "live_exports"
 
 def default_data_dir_for_round(round_number: int) -> Path:
     return DEFAULT_ROUND2_DATA_DIR if int(round_number) == 2 else DEFAULT_DATA_DIR
+
+
+def _load_json_config(config_path: Path) -> Dict[str, object]:
+    config_path = config_path.resolve()
+    try:
+        payload = json.loads(config_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON config {config_path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Config must be a JSON object: {config_path}")
+    return payload
+
+
+def _resolve_config_path(config_path: Path, value: object) -> Path:
+    path = Path(str(value))
+    if path.is_absolute():
+        return path
+    cwd_candidate = (Path.cwd() / path).resolve()
+    if cwd_candidate.exists():
+        return cwd_candidate
+    return (config_path.resolve().parent / path).resolve()
+
+
+def _optional_config_path(config: Mapping[str, object], config_path: Path, key: str) -> Path | None:
+    value = config.get(key)
+    if value in (None, ""):
+        return None
+    return _resolve_config_path(config_path, value)
+
+
+def _config_data_dir(config: Mapping[str, object], config_path: Path, round_number: int) -> Path:
+    value = config.get("data_dir")
+    if value in (None, ""):
+        return default_data_dir_for_round(round_number)
+    return _resolve_config_path(config_path, value)
+
+
+def _config_days(config: Mapping[str, object]) -> tuple[int, ...]:
+    raw_days = config.get("days", [-2, -1, 0])
+    if not isinstance(raw_days, list) or not raw_days:
+        raise ValueError("Config field 'days' must be a non-empty list of integers")
+    return tuple(int(day) for day in raw_days)
+
+
+def _config_variants(config: Mapping[str, object], config_path: Path) -> List[Mapping[str, object]]:
+    variants = config.get("variants")
+    if not isinstance(variants, list) or not variants:
+        raise ValueError(f"{config_path}: expected a non-empty 'variants' list")
+    if not all(isinstance(variant, Mapping) for variant in variants):
+        raise ValueError(f"{config_path}: every variant must be an object")
+    return list(variants)
 
 
 def _dataset_reports(datasets: Sequence[DayDataset]) -> List[Dict[str, object]]:
@@ -281,27 +333,30 @@ def run_compare(
 
 
 def run_sweep_from_config(config_path: Path, output_dir: Path) -> List[Dict[str, object]]:
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    trader_path = Path(config["trader"])
+    config_path = config_path.resolve()
+    config = _load_json_config(config_path)
+    if "trader" not in config:
+        raise ValueError(f"{config_path}: expected 'trader'")
+    trader_path = _resolve_config_path(config_path, config["trader"])
     base_name = config.get("name", config_path.stem)
     round_number = int(config.get("round", 1))
-    days = tuple(config.get("days", [-2, -1, 0]))
+    days = _config_days(config)
     fill_model_name = config.get("fill_model", "base")
-    fill_model_config_path = Path(str(config["fill_config"])).resolve() if config.get("fill_config") else None
+    fill_model_config_path = _optional_config_path(config, config_path, "fill_config")
     perturbation = PerturbationConfig(**config.get("perturbation", {}))
     access_scenario = access_scenario_from_dict(config.get("access_scenario"))
     trader_specs = [
         TraderSpec(
-            name=variant["name"],
+            name=str(variant.get("name") or f"variant_{idx}"),
             path=trader_path,
             overrides=variant.get("overrides"),
         )
-        for variant in config["variants"]
+        for idx, variant in enumerate(_config_variants(config, config_path))
     ]
     return run_compare(
         trader_specs=trader_specs,
         days=days,
-        data_dir=Path(config.get("data_dir", default_data_dir_for_round(round_number))),
+        data_dir=_config_data_dir(config, config_path, round_number),
         fill_model_name=fill_model_name,
         perturbation=perturbation,
         fill_model_config_path=fill_model_config_path,
@@ -315,27 +370,34 @@ def run_sweep_from_config(config_path: Path, output_dir: Path) -> List[Dict[str,
 def _trader_specs_from_config(config: Dict[str, object], config_path: Path) -> List[TraderSpec]:
     trader_items = config.get("traders")
     if isinstance(trader_items, list):
-        return [
-            TraderSpec(
-                name=str(item.get("name") or Path(str(item["path"])).stem),
-                path=Path(str(item["path"])).resolve(),
+        if not trader_items:
+            raise ValueError(f"{config_path}: 'traders' must not be empty")
+        specs = []
+        for item in trader_items:
+            if not isinstance(item, Mapping):
+                raise ValueError(f"{config_path}: every trader entry must be an object")
+            if "path" not in item:
+                raise ValueError(f"{config_path}: every trader entry must include 'path'")
+            path = _resolve_config_path(config_path, item["path"])
+            specs.append(TraderSpec(
+                name=str(item.get("name") or path.stem),
+                path=path,
                 overrides=item.get("overrides") if isinstance(item, dict) else None,
-            )
-            for item in trader_items
-            if isinstance(item, dict)
-        ]
+            ))
+        return specs
 
-    trader_path = Path(str(config["trader"])).resolve()
+    if "trader" not in config:
+        raise ValueError(f"{config_path}: expected 'trader' or 'traders'")
+    trader_path = _resolve_config_path(config_path, config["trader"])
     variants = config.get("variants")
     if isinstance(variants, list):
         return [
             TraderSpec(
                 name=str(variant.get("name") or f"variant_{idx}"),
-                path=Path(str(variant.get("path", trader_path))).resolve(),
+                path=_resolve_config_path(config_path, variant.get("path", trader_path)),
                 overrides=variant.get("overrides") if isinstance(variant, dict) else None,
             )
-            for idx, variant in enumerate(variants)
-            if isinstance(variant, dict)
+            for idx, variant in enumerate(_config_variants(config, config_path))
         ]
 
     return [TraderSpec(name=str(config.get("name", config_path.stem)), path=trader_path)]
@@ -408,16 +470,19 @@ def _pairwise_mc_rows(mc_results: Dict[tuple[str, str], List[SessionArtefacts]],
 
 
 def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path) -> Dict[str, List[Dict[str, object]]]:
-    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config_path = config_path.resolve()
+    config = _load_json_config(config_path)
     run_name = str(config.get("name", config_path.stem))
     round_number = int(config.get("round", 2))
-    data_dir = Path(str(config.get("data_dir", default_data_dir_for_round(round_number))))
-    days = tuple(int(day) for day in config.get("days", [-2, -1, 0]))
+    data_dir = _config_data_dir(config, config_path, round_number)
+    days = _config_days(config)
     fill_model_name = str(config.get("fill_model", "base"))
-    fill_model_config_path = Path(str(config["fill_config"])).resolve() if config.get("fill_config") else None
+    fill_model_config_path = _optional_config_path(config, config_path, "fill_config")
     perturbation = PerturbationConfig(**config.get("perturbation", {}))
     scenarios = expand_scenarios(config.get("scenarios"), config.get("maf_values"))
     trader_specs = _trader_specs_from_config(config, config_path)
+    if not scenarios:
+        raise ValueError(f"{config_path}: no Round 2 scenarios configured")
     mc_sessions = int(config.get("mc_sessions", 0))
     mc_sample_sessions = int(config.get("mc_sample_sessions", min(4, mc_sessions)))
     mc_seed = int(config.get("mc_seed", 20260418))
@@ -615,15 +680,18 @@ def _robustness_rows(rows: Sequence[Dict[str, object]]) -> List[Dict[str, object
 
 
 def run_scenario_compare_from_config(config_path: Path, output_dir: Path) -> Dict[str, List[Dict[str, object]]]:
-    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config_path = config_path.resolve()
+    config = _load_json_config(config_path)
     run_name = str(config.get("name", config_path.stem))
     round_number = int(config.get("round", 1))
-    data_dir = Path(str(config.get("data_dir", default_data_dir_for_round(round_number))))
-    days = tuple(int(day) for day in config.get("days", [-2, -1, 0]))
-    fill_model_config_path = Path(str(config["fill_config"])).resolve() if config.get("fill_config") else None
+    data_dir = _config_data_dir(config, config_path, round_number)
+    days = _config_days(config)
+    fill_model_config_path = _optional_config_path(config, config_path, "fill_config")
     default_fill_model = str(config.get("fill_model", "empirical_baseline"))
     scenarios = scenarios_from_config(config.get("scenarios"))
     trader_specs = _trader_specs_from_config(config, config_path)
+    if not scenarios:
+        raise ValueError(f"{config_path}: no research scenarios configured")
     mc_sessions = int(config.get("mc_sessions", 0))
     mc_sample_sessions = int(config.get("mc_sample_sessions", min(4, mc_sessions)))
     mc_seed = int(config.get("mc_seed", 20260418))
@@ -901,14 +969,17 @@ def _dominant_calibration_error(row: Dict[str, object]) -> str:
 
 
 def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[str, object]]:
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    trader_path = Path(config["trader"])
+    config_path = config_path.resolve()
+    config = _load_json_config(config_path)
+    if "trader" not in config:
+        raise ValueError(f"{config_path}: expected 'trader'")
+    trader_path = _resolve_config_path(config_path, config["trader"])
     run_name = config.get("name", config_path.stem)
     round_number = int(config.get("round", 1))
-    data_dir = Path(config.get("data_dir", default_data_dir_for_round(round_number)))
-    days = tuple(config.get("days", [-2, -1, 0]))
+    data_dir = _config_data_dir(config, config_path, round_number)
+    days = _config_days(config)
     fill_model_name = config.get("fill_model", "base")
-    fill_model_config_path = Path(str(config["fill_config"])).resolve() if config.get("fill_config") else None
+    fill_model_config_path = _optional_config_path(config, config_path, "fill_config")
     perturbation = PerturbationConfig(**config.get("perturbation", {}))
     access_scenario = access_scenario_from_dict(config.get("access_scenario"))
     mc_sessions = int(config.get("mc_sessions", 24))
@@ -927,9 +998,10 @@ def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[s
     weights.update(config.get("score_weights", {}))
 
     rows: List[Dict[str, object]] = []
-    for idx, variant in enumerate(config["variants"]):
-        spec = TraderSpec(name=variant["name"], path=trader_path, overrides=variant.get("overrides"))
-        variant_dir = output_dir / variant["name"]
+    for idx, variant in enumerate(_config_variants(config, config_path)):
+        variant_name = str(variant.get("name") or f"variant_{idx}")
+        spec = TraderSpec(name=variant_name, path=trader_path, overrides=variant.get("overrides"))
+        variant_dir = output_dir / variant_name
         replay = run_replay(
             trader_spec=spec,
             days=days,
@@ -938,7 +1010,7 @@ def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[s
             perturbation=perturbation,
             fill_model_config_path=fill_model_config_path,
             output_dir=variant_dir / "replay",
-            run_name=f"{run_name}_{variant['name']}_replay",
+            run_name=f"{run_name}_{variant_name}_replay",
             round_number=round_number,
             access_scenario=access_scenario,
             register=False,
@@ -953,7 +1025,7 @@ def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[s
             fill_model_config_path=fill_model_config_path,
             output_dir=variant_dir / "monte_carlo",
             base_seed=mc_seed + idx * 1000,
-            run_name=f"{run_name}_{variant['name']}_mc",
+            run_name=f"{run_name}_{variant_name}_mc",
             workers=mc_workers,
             round_number=round_number,
             access_scenario=access_scenario,
@@ -977,7 +1049,7 @@ def run_optimize_from_config(config_path: Path, output_dir: Path) -> List[Dict[s
             + weights["limit_breaches"] * float(limit_breaches)
         )
         rows.append({
-            "variant": variant["name"],
+            "variant": variant_name,
             "overrides": describe_overrides(spec.overrides),
             "replay_final_pnl": replay.summary["final_pnl"],
             "replay_gross_pnl_before_maf": replay.summary.get("gross_pnl_before_maf"),

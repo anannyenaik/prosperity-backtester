@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 _DASHBOARD_DIST = Path(__file__).parent.parent / "dashboard" / "dist"
-_DASHBOARD_HTML = Path(__file__).parent.parent / "visualizer" / "dashboard.html"
+_DASHBOARD_HTML = Path(__file__).parent.parent / "legacy_dashboard" / "dashboard.html"
 
 
 def _dashboard_metadata(path: Path) -> dict:
@@ -167,7 +167,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self._send_file(file_path, ct)
                 return
 
-        # Fallback: serve legacy visualizer
+        # Fallback for environments where the React build has not been produced.
         if _DASHBOARD_HTML.is_file():
             self._send_file(_DASHBOARD_HTML, "text/html")
             return

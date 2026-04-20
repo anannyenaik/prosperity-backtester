@@ -135,7 +135,7 @@ export function Inspect() {
         kicker="Inspect shell / timestamp window"
         title="Focused run"
         accent="analysis"
-        description="A lab-grade slice view for fair, mid, fills, inventory and PnL around a selected timestamp."
+        description="Focused fair, mid, fill, inventory and PnL rows around a selected timestamp."
         meta={<BundleBadge payload={payload} />}
         action={<ProductToggle />}
       />
@@ -240,7 +240,7 @@ export function Inspect() {
         </div>
 
         <div className="space-y-5">
-          <Card title="Projected annotations" kicker="Right rail">
+          <Card title="Window annotations" kicker="Right rail">
             <div className="space-y-3">
               {[
                 {

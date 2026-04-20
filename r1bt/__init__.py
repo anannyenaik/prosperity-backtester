@@ -1,10 +1,38 @@
-"""r1mcbt - Round 1 Monte Carlo backtester."""
-from .engine import run_session, SessionResult
-from .replay import run_replay, ReplayResult
-from .simulate import load_calibration, build_samplers, PRODUCTS
+"""Compatibility wrapper for the former package name.
 
-__all__ = [
-    "run_session", "SessionResult",
-    "run_replay", "ReplayResult",
-    "load_calibration", "build_samplers", "PRODUCTS",
-]
+Use :mod:`prosperity_backtester` for new code.
+"""
+from __future__ import annotations
+
+import importlib
+import sys
+
+import prosperity_backtester as _impl
+from prosperity_backtester import *  # noqa: F401,F403
+
+__all__ = _impl.__all__
+
+_SUBMODULES = (
+    "behavior",
+    "dashboard",
+    "datamodel",
+    "dataset",
+    "engine",
+    "experiments",
+    "fair_value",
+    "fill_models",
+    "live_export",
+    "metadata",
+    "noise",
+    "platform",
+    "replay",
+    "reports",
+    "round2",
+    "scenarios",
+    "server",
+    "simulate",
+    "trader_adapter",
+)
+
+for _name in _SUBMODULES:
+    sys.modules[f"{__name__}.{_name}"] = importlib.import_module(f"prosperity_backtester.{_name}")

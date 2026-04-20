@@ -7,7 +7,7 @@ Takes a list of SessionResults from the engine and produces:
   3. session_summary.csv - machine-readable per-session row
 
 The JSON schema matches (a subset of) the original Prosperity 4 dashboard so the
-same visualizer logic can read both.
+same dashboard logic can read both.
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from .engine import SessionResult
 from .simulate import PRODUCTS
 
 
-# ──────────────────────── statistical helpers ──────────────────────── #
+# Statistical helpers
 
 def quantile(values: List[float], q: float) -> float:
     if not values:
@@ -147,7 +147,7 @@ def normal_fit(values: List[float], bins: int = 40, points: int = 200) -> Dict[s
     bw = float(edges[1] - edges[0])
     centers = [(edges[i] + edges[i + 1]) / 2.0 for i in range(len(counts))]
     expected = [normal_pdf(c, mu, sigma) * len(values) * bw for c in centers]
-    # R² vs expected
+    # R^2 vs expected
     amean = statistics.fmean(counts)
     sst = sum((c - amean) ** 2 for c in counts)
     sse = sum((a - b) ** 2 for a, b in zip(counts, expected))
@@ -183,7 +183,7 @@ def linear_regression(x: List[float], y: List[float]) -> Dict[str, Any]:
             "line": line, "diagnosis": diag}
 
 
-# ──────────────────────── dashboard builder ──────────────────────── #
+# Dashboard builder
 
 def build_dashboard(results: List[SessionResult], algorithm_path: str,
                     meta: Dict[str, Any]) -> Dict[str, Any]:
@@ -257,15 +257,15 @@ def build_dashboard(results: List[SessionResult], algorithm_path: str,
         "generatorModel": {
             "ASH_COATED_OSMIUM": {
                 "name": "Stationary Latent Fair",
-                "formula": "x_{t+1} = x_t - κ·(x_t - 10000) + ε_t",
+                "formula": "x_{t+1} = x_t - kappa * (x_t - 10000) + epsilon_t",
                 "notes": ["Mean-reverting toward 10000",
                           "Bot quotes centered on round(x_t) with empirical spreads"],
             },
             "INTARIAN_PEPPER_ROOT": {
                 "name": "Linear Drift + Noise",
-                "formula": "x_{t+1} = x_t + μ + ε_t,  μ ≈ +0.108/tick",
+                "formula": "x_{t+1} = x_t + mu + epsilon_t, mu approx +0.108/tick",
                 "notes": ["Deterministic upward drift across all observed days",
-                          "Small residual noise (σ ≈ 1.2)"],
+                          "Small residual noise (sigma approx 1.2)"],
             },
         },
         "products": {

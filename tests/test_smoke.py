@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from r1bt.dataset import load_round1_dataset
-from r1bt.live_export import load_live_export
-from r1bt.server import _find_bundles
+from prosperity_backtester.dataset import load_round1_dataset
+from prosperity_backtester.live_export import load_live_export
+from prosperity_backtester.server import _find_bundles
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -15,12 +15,19 @@ def test_round1_files_present():
 
 
 def test_live_export_loader_reads_metadata():
-    export = load_live_export(ROOT / 'live_exports' / '259168' / '259168.log')
+    export = load_live_export(ROOT / 'live_exports' / '259168' / '259168.json')
     assert export.profit is not None
     assert export.graph_points
     assert export.final_positions
     assert export.own_trade_history
     assert len(export.own_trade_history) < len(export.trade_history)
+
+
+def test_r1bt_compatibility_imports_still_work():
+    from r1bt.datamodel import Order
+    from prosperity_backtester.datamodel import Order as PrimaryOrder
+
+    assert Order is PrimaryOrder
 
 
 def test_server_bundle_discovery_uses_manifest_metadata(tmp_path):

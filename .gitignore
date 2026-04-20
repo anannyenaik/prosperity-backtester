@@ -6,6 +6,7 @@ __pycache__/
 .mypy_cache/
 .venv/
 venv/
+*.egg-info/
 
 # Node
 dashboard/node_modules/
@@ -21,4 +22,3 @@ demo_outputs/**
 # Local environment
 .env
 .env.*
-

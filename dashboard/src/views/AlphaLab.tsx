@@ -173,7 +173,7 @@ export function AlphaLab() {
         <DataTable rows={data.robustnessRows} cols={robustnessCols} maxRows={12} striped />
       </Card>
 
-      <Card title="Next-test queue" subtitle="Actions are generated from evidence and exploitability, not from raw metric novelty.">
+      <Card title="Next-test queue" subtitle="Actions are derived from evidence and exploitability, not from raw metric novelty.">
         {data.nextTests.length > 0 ? (
           <DataTable rows={data.nextTests} cols={nextTestCols} maxRows={10} striped />
         ) : (

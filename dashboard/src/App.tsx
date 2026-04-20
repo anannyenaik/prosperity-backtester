@@ -56,14 +56,14 @@ function LandingScreen() {
   return (
     <div className="mx-auto grid min-h-[calc(100vh-132px)] w-full max-w-[1380px] items-center gap-8 px-4 py-10 md:px-7 md:py-12 lg:grid-cols-[minmax(0,0.98fr)_minmax(380px,0.78fr)] lg:items-stretch lg:gap-12 xl:gap-14">
       <section className="flex min-w-0 flex-col justify-center lg:pr-4">
-        <div className="hud-label chapter-rule mb-4 text-accent">PROSPERITY LAB / ROUND 2</div>
+        <div className="hud-label chapter-rule mb-4 text-accent">PROSPERITY RESEARCH / ROUND 2</div>
         <h1 className="font-display max-w-[760px] text-[2.9rem] font-extrabold uppercase leading-[0.88] tracking-normal text-txt md:text-[4.15rem] lg:text-[3.55rem] xl:text-[4.4rem] 2xl:text-[4.5rem]">
           <span className="block">Round 2</span>
           <span className="block">research</span>
-          <em className="font-serif block text-[0.74em] font-light normal-case leading-none tracking-normal text-accent-2">decision deck</em>
+          <em className="font-serif block text-[0.74em] font-light normal-case leading-none tracking-normal text-accent-2">decision workspace</em>
         </h1>
         <p className="mt-7 max-w-[640px] text-lg leading-8 text-txt-soft md:text-xl md:leading-9">
-          Load replay, Monte Carlo, calibration, comparison, optimisation or MAF scenario bundles and inspect the run as a trading lab instrument.
+          Load replay, Monte Carlo, calibration, comparison, optimisation or MAF scenario bundles and inspect the run evidence.
         </p>
 
         <div className="mt-9 grid max-w-[700px] grid-cols-1 gap-3 sm:grid-cols-3">
@@ -92,7 +92,7 @@ function LandingScreen() {
         <FileDrop />
         <ServerRunLoader />
         <div className="hud-label mt-5 border-t border-border pt-4 text-muted">
-          python -m r1bt replay / monte-carlo / compare / round2-scenarios
+          python -m prosperity_backtester replay / monte-carlo / compare / round2-scenarios
         </div>
       </section>
     </div>

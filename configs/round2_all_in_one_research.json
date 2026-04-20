@@ -1,5 +1,5 @@
 {
-  "name": "round2_all_in_one_research_bundle_scenarios",
+  "name": "round2_all_in_one_research",
   "round": 2,
   "data_dir": "data/round2",
   "days": [-1, 0, 1],

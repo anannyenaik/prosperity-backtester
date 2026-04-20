@@ -3,15 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from r1bt.dataset import load_round1_dataset
-from r1bt.experiments import TraderSpec, run_compare, run_monte_carlo, run_optimize_from_config, run_replay
-from r1bt.platform import PerturbationConfig
-from r1bt.trader_adapter import make_trader
+from prosperity_backtester.dataset import load_round1_dataset
+from prosperity_backtester.experiments import TraderSpec, run_compare, run_monte_carlo, run_optimize_from_config, run_replay
+from prosperity_backtester.platform import PerturbationConfig
+from prosperity_backtester.trader_adapter import make_trader
 
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data" / "round1"
-LIVE_EXPORT = ROOT / "live_exports" / "259168" / "259168.log"
+LIVE_EXPORT = ROOT / "live_exports" / "259168" / "259168.json"
 TRADER_V9 = ROOT / "examples" / "trader_round1_v9.py"
 STARTER = ROOT / "strategies" / "starter.py"
 MAIN_TRADER = ROOT / "strategies" / "trader.py"

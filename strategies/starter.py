@@ -9,7 +9,7 @@ from typing import Dict, List
 try:
     from datamodel import Order, OrderDepth, TradingState
 except ImportError:
-    from r1bt.datamodel import Order, OrderDepth, TradingState
+    from prosperity_backtester.datamodel import Order, OrderDepth, TradingState
 
 
 class Trader:

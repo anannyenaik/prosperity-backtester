@@ -1,132 +1,110 @@
-# Assumptions and approximation boundaries
+# Assumptions And Approximation Boundaries
 
-## Historical replay
+The platform is designed for robust local decisions. It separates exact mechanics from configurable assumptions so strategy rankings are not mistaken for official website PnL.
 
-### Exact
+## Exact Relative To Local Inputs
 
-- historical timestamps
-- historical visible book snapshots
-- visible-book aggressive fills
-- account updates from simulated fills
-- position limits after clamping
+- CSV schema validation.
+- Timestamp ordering and product presence checks.
+- Visible-book aggressive fills.
+- Trader state persistence through `traderData`.
+- Own-trade hand-off between ticks.
+- Cash, inventory, realised, unrealised and MTM accounting.
+- Deterministic replay over provided timestamps.
+- Synthetic latent fair inside Monte Carlo sessions.
 
-### Approximate
+## Approximate
 
-- passive queue position
-- same-price queue share
-- missed fills
-- adverse selection penalties
-- size-dependent slippage
-- re-entry assumptions
-- fill timing under latency-like delays
+- Passive queue position.
+- Same-price queue share.
+- Missed passive fills.
+- Adverse-selection penalties.
+- Size-dependent slippage.
+- Latency-like delayed action effects.
+- Historical `analysis_fair`.
+- Synthetic market generation.
+- Calibration and optimisation scores.
 
-## Fair value
+## Fair Value
 
-### Synthetic Monte Carlo
+Monte Carlo `analysis_fair` is the latent fair path used by the simulator.
 
-`analysis_fair` is exact relative to the simulator because it is the latent fair path used to generate books and trades.
+Historical replay `analysis_fair` is an inferred diagnostic proxy from market structure. It is useful for markout and placement analysis, but it is not an official hidden fair value.
 
-### Historical replay
+## Live-Export Calibration
 
-`analysis_fair` is inferred from market structure and should be treated as a diagnostic proxy, not as the official hidden exchange fair.
-
-## Live-export calibration
-
-Calibration is practical rather than perfect.
-
-It compares:
+Calibration compares replay output with fields available in a live export:
 
 - total profit
-- total PnL path RMSE
+- PnL path RMSE
+- per-product PnL where available
 - final position mismatch
-- fill count mismatch
-- fill quantity mismatch
-- passive vs aggressive fill mismatch
-- activity timing mismatch
 - inventory-path mismatch
-- per-product PnL mismatch where available
-- per-product path RMSE where live activity paths are available
-- optimism, pessimism and dominant error-source attribution
+- fill count and fill quantity mismatch
+- passive/aggressive fill mismatch
+- activity timing mismatch
 
-It does not claim exact reconstruction of the official matching engine.
+Only `tradeHistory` rows where `SUBMISSION` is buyer or seller are treated as own fills.
 
-Live `tradeHistory` can include market prints as well as own fills. The loader treats only rows where `SUBMISSION` is buyer or seller as own fills for calibration.
+Calibration cannot reconstruct rejected passive orders, exact queue priority or hidden website matching. Treat the best calibration candidate as a local setting, not as proof of exact website accuracy.
 
-## Empirical fills and slippage
+## Empirical Fill Profiles
 
-Empirical fill profiles are grounded in realised live fills:
+Empirical fill-profile derivation uses realised live fills and saves:
 
 - product
 - side
 - quantity
 - visible spread
 - touch distance
-- passive/aggressive label inferred from visible touch
+- inferred passive/aggressive label
 - liquidity regime
 
-Still configurable assumptions:
+The following remain configurable assumptions:
 
 - passive fill probability
 - same-price queue share
 - rejected passive order rate
 - size slippage curve
-- passive adverse-selection ticks
-- aggressive adverse-selection ticks
+- passive and aggressive adverse-selection ticks
 
-Unknown:
+## Scenario Analysis
 
-- rejected passive opportunities not shown in live exports
-- exact queue priority
-- hidden matching and website-only effects
+Scenario outputs are decision tools. They are useful for asking:
 
-## Calibrated scenarios
+- whether a script still wins under conservative fills
+- whether ranking changes under wider spreads or thinner depth
+- whether downside is acceptable under crash or slippage stress
+- whether an observed gain is larger than live-vs-sim mismatch
 
-Scenario outputs are decision tools.
+Small edges should survive multiple scenario families before they are trusted.
 
-Baseline, stress, crash, wider-spread, harsher-slippage and lower-fill-quality scenarios should be used to ask:
+## Round 2 MAF And Extra Access
 
-- does the strategy still win under conservative fills
-- does it collapse under thinner depth or shocks
-- is the gain larger than live-vs-sim mismatch
-- is the ranking stable across assumptions
+Grounded from the challenge statement:
 
-## Monte Carlo
-
-Monte Carlo is intended for:
-
-- robustness testing
-- parameter comparison
-- stability analysis
-- FV-path stress
-
-It is not intended as a literal forecast of official competition profit.
-
-## Round 2 MAF and extra quote access
-
-### Grounded
-
-- Round 2 keeps `ASH_COATED_OSMIUM` and `INTARIAN_PEPPER_ROOT`.
+- Round 2 trades `ASH_COATED_OSMIUM` and `INTARIAN_PEPPER_ROOT`.
 - A Market Access Fee may grant access to an extra 25% of quotes.
 - Only the top 50% of total MAF bids get the contract.
-- Losing bids do not pay and do not get the extra quote access.
+- Losing bids do not pay and do not get extra quote access.
 
-### Configurable locally
+Configurable locally:
 
-- contract won or not won
+- whether the contract is assumed won
 - MAF bid deducted from net PnL when the contract is won
 - deterministic or stochastic access
 - access quality
 - visible book volume uplift
-- passive fill rate uplift
-- missed fill reduction
+- passive fill-rate uplift
+- missed-fill reduction
 - fill opportunity volume uplift
 
-### Unknown website-only mechanics
+Unknown website-only mechanics:
 
-- exact extra quote selection
+- exact extra-quote selection
 - exact queue priority
-- how extra quotes translate into fills
+- same-price matching order
 - other teams' MAF bids
 - official hidden matching path
 
-Round 2 outputs should be read as scenario comparisons and sensitivity analysis, not exact website reconstruction.
+Round 2 outputs should be read as sensitivity analysis and ranking evidence.

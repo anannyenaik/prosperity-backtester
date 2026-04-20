@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from r1bt.experiments import DEFAULT_DATA_DIR, TraderSpec, calibrate_against_live_export
+from prosperity_backtester.experiments import DEFAULT_DATA_DIR, TraderSpec, calibrate_against_live_export
 
 
 def main() -> None:

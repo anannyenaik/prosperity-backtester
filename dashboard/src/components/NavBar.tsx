@@ -66,7 +66,7 @@ export function NavBar() {
             </div>
             <div>
               <div className="font-display text-sm font-extrabold uppercase tracking-[0.22em] text-txt">Prosperity Lab</div>
-              <div className="hud-label mt-1 text-muted">Round 2 platform</div>
+              <div className="hud-label mt-1 text-muted">Research platform</div>
             </div>
           </div>
         </div>

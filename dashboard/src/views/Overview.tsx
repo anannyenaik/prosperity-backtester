@@ -55,7 +55,7 @@ export function Overview() {
   return (
     <div className="space-y-5">
       <PageHeader
-        kicker="Overview / bundle observatory"
+        kicker="Overview / bundle review"
         title="Strategy state"
         accent="at a glance"
         description="Bundle-aware run metadata, integrity checks and the metrics that are genuinely present in the loaded dashboard JSON."

@@ -8,14 +8,14 @@ simulator:
   - Strategy cannot self-cross (best_ask.owner must be BOT for a buy to cross)
   - Simulated takers sweep the best price regardless of owner; strategy-owned
     levels that get hit update the ledger with the correct sign
-  - Position limit (±80 per product): if cumulative long or short orders for a
+  - Position limit (+/-80 per product): if cumulative long or short orders for a
     product would breach the limit, the entire batch for that product is dropped
     (matches the Rust engine's behavior)
-  - MTM: cash + position × latent_fair (NOT mid price - latent is more faithful)
+  - MTM: cash + position x latent_fair (not mid price, because latent fair is more faithful)
 
 Session structure:
   - Each session runs a configurable number of days (default 3, like round 1)
-  - Each day is 10,000 ticks × TIMESTAMP_STEP=100 → timestamp 0..999,900
+  - Each day is 10,000 ticks x TIMESTAMP_STEP=100, timestamp 0..999,900
   - Timestamps across days are offset by 1,000,000 each (matches Prosperity convention)
   - Each new day resets the book but NOT the trader (trader_data persists across
     days within a session, like the live competition)
@@ -109,7 +109,7 @@ class SessionResult:
     per_product_pnl: Dict[str, float]
     per_product_final_position: Dict[str, int]
     per_product_cash: Dict[str, float]
-    # For the "slope / R²" metrics that the dashboard uses
+    # For the "slope / R^2" metrics that the dashboard uses
     total_slope_per_step: float
     total_r2: float
     per_product_slope_per_step: Dict[str, float]
@@ -118,7 +118,7 @@ class SessionResult:
     traces: Dict[str, List[TickTrace]] = field(default_factory=dict)
 
 
-# ───────────────────────── book helpers ───────────────────────── #
+# Book helpers
 
 def _sim_book_from_bot(book: BotBook) -> SimBook:
     return SimBook(
@@ -144,7 +144,7 @@ def _insert_passive(levels: List[Level], new_level: Level, descending: bool):
 def _enforce_position_limits(orders_by_product: Dict[str, List[Order]],
                              ledgers: Dict[str, Ledger]) -> Dict[str, List[Order]]:
     """Same semantics as the Rust enforce_strategy_limits: if cumulative long or
-    short for a product would breach the ±80 limit, the ENTIRE batch for that
+    short for a product would breach the +/-80 limit, the entire batch for that
     product is discarded. This matches the live competition's batch-rejection."""
     out = {}
     for product, orders in orders_by_product.items():
@@ -158,7 +158,7 @@ def _enforce_position_limits(orders_by_product: Dict[str, List[Order]],
     return out
 
 
-# ───────────────────────── order execution ───────────────────────── #
+# Order execution
 
 def _execute_strategy_orders(product: str, timestamp: int, book: SimBook,
                              ledger: Ledger, orders: List[Order]) -> List[Fill]:
@@ -253,7 +253,7 @@ def _fill_involves_strategy(fill: Fill) -> bool:
     return fill.buyer == "SUBMISSION" or fill.seller == "SUBMISSION"
 
 
-# ───────────────────────── running-linear-fit helper ───────────────────────── #
+# Running-linear-fit helper
 
 class RunningFit:
     """Online OLS on (step_index, mtm) - mirrors Rust RunningLinearFit."""
@@ -288,7 +288,7 @@ class RunningFit:
         return (c * c) / (vx * vy)
 
 
-# ───────────────────────── session runner ───────────────────────── #
+# Session runner
 
 def _seed_for_session(base_seed: int, session_id: int) -> int:
     # Xorshift-style mix, deterministic + independent streams across sessions
@@ -368,11 +368,11 @@ def run_session(trader, session_id: int, calib: dict, samplers: dict,
                 result = ({p: [] for p in PRODUCTS}, 0, trader_data)
 
             orders_raw, conversions, trader_data = result
-            # Normalize: missing products → empty lists
+            # Normalise missing products to empty lists.
             orders = {p: orders_raw.get(p, []) if orders_raw else [] for p in PRODUCTS}
             orders = _enforce_position_limits(orders, ledgers)
 
-            # Convert bot books → SimBooks for this tick
+            # Convert bot books to SimBooks for this tick.
             live_books = {p: _sim_book_from_bot(bot_books[p]) for p in PRODUCTS}
 
             own_trades_tick: Dict[str, List[Trade]] = {p: [] for p in PRODUCTS}

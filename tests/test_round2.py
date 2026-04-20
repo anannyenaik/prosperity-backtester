@@ -4,10 +4,10 @@ import json
 import random
 from pathlib import Path
 
-from r1bt.dataset import load_round2_dataset
-from r1bt.experiments import TraderSpec, run_replay, run_round2_scenario_compare_from_config
-from r1bt.platform import PerturbationConfig
-from r1bt.round2 import AccessScenario
+from prosperity_backtester.dataset import load_round2_dataset
+from prosperity_backtester.experiments import TraderSpec, run_replay, run_round2_scenario_compare_from_config
+from prosperity_backtester.platform import PerturbationConfig
+from prosperity_backtester.round2 import AccessScenario
 
 
 ROOT = Path(__file__).resolve().parent.parent

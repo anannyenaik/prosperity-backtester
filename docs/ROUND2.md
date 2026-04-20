@@ -1,184 +1,135 @@
-# Round 2 Research Workflow
+# Round 2 Workflow
 
-## Result
+Round 2 support is an explicit scenario workflow for Market Access Fee decisions and extra-quote assumptions. It is intended for comparing scripts across plausible local assumptions, not for claiming exact website reconstruction.
 
-The platform now supports Round 2 as an explicit research mode with configurable Market Access Fee scenarios, access/no-access comparisons, MAF sensitivity, Monte Carlo robustness, dashboard metadata and saved decision artefacts.
+## Inputs
 
-It does not claim to reconstruct the hidden website mechanics. The extra 25% quote access is modelled as a configurable local assumption so scripts can be compared across plausible worlds.
-
-## Gap Analysis
-
-Already strong before this upgrade:
-
-- deterministic replay over historical CSVs
-- visible-book aggressive fills
-- configurable passive fill presets and perturbations
-- Monte Carlo sessions with sample paths
-- strategy comparison, sweeps and optimisation
-- live-export calibration diagnostics where export fields exist
-- product-level behaviour diagnostics for OSMIUM and PEPPER
-- dashboard bundle loading, inspect mode and product dives
-
-Missing or weak for Round 2:
-
-- CSV loading was tied to `prices_round_1_day_*.csv`
-- Round 2 was not represented in manifests or dashboard metadata
-- no MAF fee accounting
-- no explicit access/no-access scenario object
-- no scenario sweep for access quality, contract win/loss or MAF values
-- no scenario-by-scenario winner table
-- no access marginal value or break-even MAF output
-- Monte Carlo comparison did not align around Round 2 access assumptions
-- docs did not separate known facts from configurable assumptions and unknown website-only behaviour
-
-## Design
-
-Round 2 support has three layers.
-
-### Deterministic Replay
-
-Use `--round 2` or a config with `"round": 2`.
-
-The loader expects Round 2 CSVs named:
+Round 2 CSV files use the same schema as the Round 1 public files:
 
 ```text
 prices_round_2_day_<day>.csv
 trades_round_2_day_<day>.csv
 ```
 
-The schema is the same as the current Round 1 CSV schema. Products remain:
+Default location:
+
+```text
+data/round2/
+```
+
+Supported products:
 
 - `ASH_COATED_OSMIUM`
 - `INTARIAN_PEPPER_ROOT`
 
-### Scenario Layer
+## Access Scenario Fields
 
-The access model is defined by `r1bt.round2.AccessScenario`.
+`prosperity_backtester.round2.AccessScenario` defines the local MAF/access assumption.
 
 Important fields:
 
-- `enabled`: extra quote access assumption is active
-- `contract_won`: MAF auction is assumed won
-- `maf_bid`: fee deducted from net PnL only when `contract_won` is true
-- `mode`: `none`, `deterministic` or `stochastic`
-- `extra_quote_fraction`: default `0.25`
-- `access_quality`: how useful the extra 25% is locally
-- `access_probability`: tick-level probability for stochastic access
-- `book_volume_share`: how much access affects observed book volume
-- `passive_fill_rate_multiplier`
-- `passive_fill_rate_bonus`
-- `missed_fill_reduction`
-- `trade_volume_share`
+- `enabled`: whether extra quote access is active.
+- `contract_won`: whether the MAF auction is assumed won.
+- `mode`: `none`, `deterministic` or `stochastic`.
+- `maf_bid`: fee deducted from net PnL only when `contract_won` is true.
+- `extra_quote_fraction`: default `0.25`.
+- `access_quality`: how useful the extra 25% quote access is locally.
+- `access_probability`: tick-level activation probability for stochastic access.
+- `book_volume_share`: how access affects visible book volume.
+- `passive_fill_rate_multiplier`: multiplicative passive fill uplift.
+- `passive_fill_rate_bonus`: additive passive fill uplift.
+- `missed_fill_reduction`: reduction in missed passive fills.
+- `trade_volume_share`: fill-opportunity volume uplift.
 
-Every replay stores:
-
-- gross PnL before MAF
-- MAF cost
-- net final PnL
-- access scenario metadata
-
-### Monte Carlo Layer
-
-Round 2 scenario configs can run Monte Carlo under each access assumption. Pairwise comparisons use aligned seeds within each scenario so the difference distribution is more useful than comparing unrelated random paths.
-
-Outputs include:
-
-- MC mean, standard deviation, P05, P50, P95
-- expected shortfall
-- positive rate
-- pairwise mean difference
-- pairwise win rate
-- likely winner by scenario
+Every replay stores gross PnL before MAF, MAF cost, net final PnL and access metadata.
 
 ## Commands
 
-Replay a Round 2 trader with no access:
+Inspect Round 2 data:
 
 ```bash
-python -m r1bt replay strategies/trader.py --round 2 --data-dir data/round2 --days 0 --fill-mode base
+python -m prosperity_backtester inspect --round 2 --data-dir data/round2 --days 0 --json
+```
+
+Replay with no extra access:
+
+```bash
+python -m prosperity_backtester replay strategies/trader.py --round 2 --data-dir data/round2 --days 0 --fill-mode base
 ```
 
 Replay with deterministic extra access and a 750 MAF:
 
 ```bash
-python -m r1bt replay strategies/trader.py --round 2 --data-dir data/round2 --days 0 --fill-mode base --with-extra-access --access-mode deterministic --maf-bid 750 --access-quality 0.75 --access-passive-multiplier 1.12 --access-missed-reduction 0.02
+python -m prosperity_backtester replay strategies/trader.py --round 2 --data-dir data/round2 --days 0 --fill-mode base --with-extra-access --access-mode deterministic --maf-bid 750 --access-quality 0.75 --access-passive-multiplier 1.12 --access-missed-reduction 0.02
 ```
 
-Compare two traders under one access assumption:
+Compare two scripts under one access assumption:
 
 ```bash
-python -m r1bt compare strategies/trader.py examples/trader_round1_v9.py --names current candidate --round 2 --data-dir data/round2 --days 0 --with-extra-access --access-mode stochastic --access-quality 0.8 --access-probability 0.65 --maf-bid 1000
+python -m prosperity_backtester compare strategies/trader.py examples/trader_round1_v9.py --names current candidate --round 2 --data-dir data/round2 --days 0 --with-extra-access --access-mode stochastic --access-quality 0.8 --access-probability 0.65 --maf-bid 1000
 ```
 
-Run the full Round 2 scenario grid:
+Run the standard Round 2 grid. This is the quick checked-in decision config: one day, replay-only, three MAF points and two trader variants.
 
 ```bash
-python -m r1bt round2-scenarios configs/round2_scenarios.json
+python -m prosperity_backtester round2-scenarios configs/round2_scenarios.json
+```
+
+Run the all-in-one comparison config:
+
+```bash
+python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_research.json --output-dir backtests/round2_all_in_one_research_bundle
 ```
 
 Serve the dashboard:
 
 ```bash
-python -m r1bt serve --port 5555
+python -m prosperity_backtester serve --port 5555
 ```
 
-Then load the generated `dashboard.json` and open the `Round 2` tab.
+Then load the generated `dashboard.json` and open the Round 2 tab.
 
-## Scenario Config
+## Scenario Bundle Outputs
 
-`configs/round2_scenarios.json` is the starting point.
+- `round2_scenarios.csv`: one row per trader and scenario.
+- `round2_winners.csv`: replay and Monte Carlo winners by scenario.
+- `round2_pairwise_mc.csv`: pairwise Monte Carlo differences where MC is enabled.
+- `round2_maf_sensitivity.csv`: rows useful for fee sensitivity and break-even MAF review.
+- `dashboard.json`: dashboard-ready payload with the same scenario evidence.
+- `manifest.json`: lightweight metadata for dashboard discovery.
 
-It supports:
+## Reading Round 2 Results
 
-- multiple strategy variants
-- multiple access scenarios
-- `maf_values` expansion
-- optional Monte Carlo per scenario
-- fixed seeds and worker count
+- `final_pnl` is net of MAF when the contract is won.
+- `gross_pnl_before_maf` is the result before MAF deduction.
+- `marginal_access_pnl_before_maf` compares access scenario gross PnL against the no-access baseline for the same trader.
+- `break_even_maf_vs_no_access` estimates how much fee the access benefit can absorb locally.
+- `ranking_changed_vs_no_access` flags whether access assumptions changed the replay winner.
+- Pairwise MC rows are aligned by seed inside a scenario so the difference distribution is more meaningful.
 
-The main CSV outputs are:
+## Recommended Decision Flow
 
-- `round2_scenarios.csv`
-- `round2_winners.csv`
-- `round2_pairwise_mc.csv`
-- `round2_maf_sensitivity.csv`
+1. Replay each serious script with no access and inspect product PnL, inventory and drawdown.
+2. Run `round2-scenarios` with no-access, low-quality access, base access and stochastic access.
+3. Review `round2_winners.csv` for winner stability.
+4. Review `round2_maf_sensitivity.csv` for access value before the fee.
+5. Run targeted Monte Carlo on leading scripts if replay gaps are small.
+6. Prefer scripts that remain strong under low-quality access and conservative fees.
 
-The dashboard payload contains the same data under `round2`.
+## Limits
 
-## Calibration
+Known:
 
-Existing live-export calibration still works. Round 2 access metadata can be passed to calibration commands, but exact live alignment remains limited by whatever the website export exposes.
+- MAF may grant access to an extra 25% of quotes.
+- Only the top 50% of total MAF bids get the contract.
+- Losing bidders do not pay and do not get access.
 
-Useful mismatch checks remain:
+Unknown:
 
-- product-level PnL error
-- fill count error
-- final position mismatch
-- path RMSE
-- dominant error source
+- exact extra-quote selection
+- exact queue priority
+- same-price priority
+- other teams' bids
+- official realised PnL under the hidden matching engine
 
-## Honest Limitations
-
-Known from the challenge statement:
-
-- paying an MAF may grant access to an extra 25% of quotes
-- only the top 50% of total MAF bids get the contract
-- losing bidders do not pay and do not get access
-
-Configurable local assumptions:
-
-- whether the contract is won
-- how useful the extra quote access is
-- whether access is deterministic or stochastic
-- how access affects visible volume, passive fills and fill opportunities
-- MAF values to test
-
-Unknown without website feedback:
-
-- exact quote selection behind the extra 25%
-- exact queue priority and matching behaviour
-- whether extra quotes mainly change book volume, passive fill odds or trade opportunity volume
-- other teams' MAF bids
-- official realised PnL path under the hidden matching engine
-
-Use this tool for robust relative decisions, not false precision.
+Use Round 2 mode for robust relative decisions, not false precision.

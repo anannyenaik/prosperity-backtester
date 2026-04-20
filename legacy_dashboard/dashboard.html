@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>r1mcbt team dashboard</title>
+  <title>Prosperity Backtester dashboard</title>
   <style>
     :root {
       --bg: #f4f7fb;
@@ -157,8 +157,8 @@
 <body>
   <header>
     <div>
-      <h1>r1mcbt Round 1 research cockpit</h1>
-      <div class="subtitle">Replay, Monte Carlo, calibration, optimisation and behaviour analysis for ASH_COATED_OSMIUM and INTARIAN_PEPPER_ROOT. Load one or more dashboard bundles and inspect them like a research product, not a static report.</div>
+      <h1>Prosperity research dashboard</h1>
+      <div class="subtitle">Replay, Monte Carlo, calibration, optimisation and behaviour analysis for ASH_COATED_OSMIUM and INTARIAN_PEPPER_ROOT. Load one or more dashboard bundles for side-by-side review.</div>
     </div>
     <div class="header-badges">
       <div class="badge">Replay</div>
@@ -676,15 +676,15 @@
       ].join('');
 
       const runCards = [
-        metricCard('span-4', `${product} MTM`, formatNum(productSummary.final_mtm), `Realised ${formatNum(productSummary.realised)} · Unrealised ${formatNum(productSummary.unrealised)}`, productSummary.final_mtm >= 0 ? 'good' : 'bad'),
+        metricCard('span-4', `${product} MTM`, formatNum(productSummary.final_mtm), `Realised ${formatNum(productSummary.realised)} / Unrealised ${formatNum(productSummary.unrealised)}`, productSummary.final_mtm >= 0 ? 'good' : 'bad'),
         metricCard('span-4', `${product} cap usage`, formatNum((behaviour.cap_usage_ratio || 0) * 100, 1) + '%', `Peak |position| ${formatInt(behaviour.peak_abs_position)} of 80`),
         metricCard('span-4', `${product} fill markout +5`, formatNum(behaviour.average_fill_markout_5), 'Signed five-tick markout versus analysis fair'),
       ].join('');
 
       const extraBlocks = [];
       if (mc) {
-        extraBlocks.push(metricCard('span-4', 'MC mean', formatNum(mc.mean), `P05 ${formatNum(mc.p05)} · ES05 ${formatNum(mc.expected_shortfall_05)}`));
-        extraBlocks.push(metricCard('span-4', 'MC positive rate', formatNum((mc.positive_rate || 0) * 100, 1) + '%', `Std ${formatNum(mc.std)} · mean DD ${formatNum(mc.mean_max_drawdown)}`));
+        extraBlocks.push(metricCard('span-4', 'MC mean', formatNum(mc.mean), `P05 ${formatNum(mc.p05)} / ES05 ${formatNum(mc.expected_shortfall_05)}`));
+        extraBlocks.push(metricCard('span-4', 'MC positive rate', formatNum((mc.positive_rate || 0) * 100, 1) + '%', `Std ${formatNum(mc.std)} / mean DD ${formatNum(mc.mean_max_drawdown)}`));
         extraBlocks.push(metricCard('span-4', 'MC sessions', formatInt(mc.session_count), 'Synthetic robustness sessions in this bundle'));
       }
       if (validation && Object.keys(validation).length) {

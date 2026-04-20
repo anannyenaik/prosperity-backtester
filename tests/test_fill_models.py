@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from r1bt.fill_models import FILL_MODELS, derive_empirical_fill_profile, resolve_fill_model
+from prosperity_backtester.fill_models import FILL_MODELS, derive_empirical_fill_profile, resolve_fill_model
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -60,7 +60,7 @@ def test_fill_model_config_can_be_loaded(tmp_path):
 
 def test_empirical_fill_profile_derivation_writes_artifacts(tmp_path):
     artefact = derive_empirical_fill_profile(
-        [ROOT / "live_exports" / "259168" / "259168.log"],
+        [ROOT / "live_exports" / "259168" / "259168.json"],
         tmp_path,
         profile_name="test_live",
     )

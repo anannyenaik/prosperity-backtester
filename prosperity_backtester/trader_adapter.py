@@ -20,6 +20,7 @@ def install_datamodel_aliases() -> None:
     """
     aliases = {
         "datamodel": internal_datamodel,
+        "prosperity_backtester.datamodel": internal_datamodel,
         "r1bt.datamodel": internal_datamodel,
         "prosperity3bt.datamodel": internal_datamodel,
         "prosperity4mcbt.datamodel": internal_datamodel,

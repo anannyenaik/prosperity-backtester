@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from r1bt.experiments import DEFAULT_DATA_DIR, TraderSpec, run_replay
-from r1bt.platform import PerturbationConfig
+from prosperity_backtester.experiments import DEFAULT_DATA_DIR, TraderSpec, run_replay
+from prosperity_backtester.platform import PerturbationConfig
 
 
 def main() -> None:

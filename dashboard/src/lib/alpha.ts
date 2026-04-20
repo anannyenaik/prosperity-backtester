@@ -920,7 +920,7 @@ function buildComparisonHypothesis(payload: DashboardPayload, comparePayload?: D
       confidence,
       sampleSize: 2,
       support: supported ? 'Active run beats the selected comparison replay.' : 'Active run does not beat the selected comparison replay.',
-      exploitabilityNow: 'Low without a generated comparison bundle',
+      exploitabilityNow: 'Low without a comparison bundle',
       currentCapture: `Delta ${formatNumber(gap)}`,
       edgeSize: formatNumber(gap),
       frequency: '2 loaded replays',
@@ -991,7 +991,7 @@ function buildCrossDayHypothesis(payload: DashboardPayload): AlphaHypothesis | n
     ],
     againstEvidence: [
       evidence('Worst day', formatNumber(minPnl), 'Weakest available day', minPnl < 0 ? 'bad' : 'neutral'),
-      evidence('Sample limit', formatInt(finalPnls.length), 'Only generated day rows are available', 'warn'),
+      evidence('Sample limit', formatInt(finalPnls.length), 'Only saved day rows are available', 'warn'),
     ],
   })
 }

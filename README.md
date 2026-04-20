@@ -1,294 +1,173 @@
-# Prosperity research platform
+# Prosperity Backtester
 
-Round 1 and Round 2 research platform for:
+Internal research platform for Prosperity Round 1 and Round 2 strategy work on:
 
 - `ASH_COATED_OSMIUM`
 - `INTARIAN_PEPPER_ROOT`
 
-The platform covers deterministic replay, configurable fill models, Round 2 Market Access Fee scenarios, Monte Carlo robustness, live-export calibration, comparison, sweeps, optimisation, trader compatibility, reproducible output bundles and a React dashboard.
+It supports deterministic replay, configurable fill models, trader comparison, parameter sweeps, optimisation, Monte Carlo robustness checks, live-export calibration, Round 2 Market Access Fee scenarios and a React dashboard for reviewing output bundles.
 
-Round 2 support is a decision tool, not a fake website clone. It separates known facts, configurable assumptions and unknown website-only mechanics.
+Use it for relative strategy selection, execution-risk diagnosis and handoff-ready research evidence. It is not an official exchange simulator.
 
-## What changed in v5
-
-- Added empirical fill-profile derivation from live exports, with own fills filtered to `SUBMISSION` trades.
-- Added product-specific fill assumptions and liquidity-regime overrides.
-- Added size-dependent slippage, passive adverse-selection fields and per-product slippage reporting.
-- Added fitted latent noise profiles using current R1/R2 values: OSMIUM `3.70`, PEPPER `3.22`.
-- Added calibrated `scenario-compare` for baseline, stress, crash, spread/depth, harsh-slippage and lower-fill-quality checks.
-- Expanded live-vs-sim diagnostics with fill quantity, passive/aggressive mismatch, inventory-path error and activity timing.
-- Added the dashboard Alpha Lab, a bundle-aware hypothesis registry for public-data, local-BT, website-only and rejected alpha candidates.
-
-## What changed in v4
-
-- Rebuilt the dashboard as a polished signal observatory with React, Vite, TypeScript, Tailwind and Recharts.
-- Added first-class Round 2 mode for `prices_round_2_day_*.csv` / `trades_round_2_day_*.csv`.
-- Added configurable MAF and extra-quote access scenarios.
-- Added Round 2 scenario sweeps, MAF sensitivity, scenario winners and pairwise Monte Carlo ranking diagnostics.
-- Added a Round 2 dashboard tab with access assumptions, break-even MAF and ranking stability.
-- Added a dedicated inspect mode for timestamp-window analysis.
-- Added stronger product deep dives for OSMIUM and PEPPER.
-- Added richer behaviour counts for dashboard diagnostics and product deep dives.
-- Fixed Monte Carlo fair-value bands so P10/P25/P50/P75/P90 are all available.
-- Fixed optimisation dashboard ordering so higher scores rank first.
-- Fixed local server run discovery so the dashboard can load bundles from the repo root.
-- Cleaned dashboard styling, typography and chart theming around a dark quant-lab system.
-
-## Repo layout
+## Repository Layout
 
 ```text
 analysis/                 Thin validation and calibration entry scripts
-configs/                  Named sweep and optimisation configs
-data/round1/              Historical Round 1 CSV inputs
-data/round2/              Optional Round 2 CSV inputs using round_2 filenames
-dashboard/                React/Vite dashboard source
-docs/                     Architecture, assumptions and audit notes
-examples/                 Example real trader files and config copies
-live_exports/             Prosperity export bundle examples
-r1bt/                     Core replay, MC, calibration and reporting package
-strategies/               Local starter and working strategy files
-tests/                    Backend smoke and unit tests
-visualizer/               Legacy static dashboard fallback
+configs/                  Sweep, optimisation, scenario and Round 2 configs
+data/round1/              Round 1 public CSV inputs
+data/round2/              Round 2 public CSV inputs
+dashboard/                React/Vite dashboard source and tracked build output
+docs/                     Architecture, workflow and assumption notes
+examples/                 Example trader script fixtures
+legacy_dashboard/         Static dashboard fallback used when no React build exists
+live_exports/             Tracked live-export fixture data for calibration tests
+prosperity_backtester/    Core replay, simulation, calibration and reporting package
+r1bt/                     Compatibility wrapper for older local imports
+strategies/               Starter and working strategy files
+tests/                    Backend and dashboard adapter checks
 ```
 
-Generated outputs are written to `backtests/` unless an `--output-dir` is provided. The directory is ignored so large replay and Monte Carlo bundles do not ship by accident.
+Generated research bundles are written to `backtests/` unless `--output-dir` is supplied. `backtests/`, local logs, virtual environments, caches and `dashboard/node_modules/` are ignored.
 
-## Install
+## Setup
 
-Python runtime has no required third-party dependency.
-
-For tests:
+Python runtime code uses the standard library only. Tests use `pytest`.
 
 ```bash
 python -m pip install -e ".[dev]"
 python -m pytest -q
 ```
 
-For the dashboard:
+Dashboard setup:
 
 ```bash
 cd dashboard
 npm ci
+npm test
 npm run build
 ```
 
-Do not commit `dashboard/node_modules/`.
+The installed console command is `prosperity-backtester`. All examples below use `python -m prosperity_backtester` because it works without installation. The older `python -m r1bt` and `r1mcbt` entry points are kept only for compatibility.
 
-## Core workflows
+## Core Commands
 
-Inspect the data:
+Inspect input data:
 
 ```bash
-python -m r1bt inspect --data-dir data/round1 --days -2 -1 0 --json
+python -m prosperity_backtester inspect --data-dir data/round1 --days -2 -1 0 --json
+python -m prosperity_backtester inspect --round 2 --data-dir data/round2 --days 0 --json
 ```
 
 Replay one trader:
 
 ```bash
-python -m r1bt replay strategies/trader.py --name main_strategy --data-dir data/round1 --days -2 -1 0 --fill-mode empirical_baseline
+python -m prosperity_backtester replay strategies/trader.py --name current --data-dir data/round1 --days -2 -1 0 --fill-mode empirical_baseline
 ```
 
-Replay against a live export:
+Replay against a tracked live export:
 
 ```bash
-python -m r1bt replay examples/trader_round1_v9.py --name live_v9 --data-dir data/round1 --days 0 --fill-mode base --live-export live_exports/259168/259168.log
+python -m prosperity_backtester replay examples/trader_round1_v9.py --name live_v9 --data-dir data/round1 --days 0 --fill-mode base --live-export live_exports/259168/259168.json
+```
+
+Compare trader scripts:
+
+```bash
+python -m prosperity_backtester compare strategies/trader.py examples/trader_round1_v9.py --names current candidate --data-dir data/round1 --days 0 --fill-mode empirical_baseline
 ```
 
 Run Monte Carlo:
 
 ```bash
-python -m r1bt monte-carlo examples/trader_round1_v9.py --name live_v9 --days 0 --fill-mode empirical_baseline --noise-profile fitted --quick
+python -m prosperity_backtester monte-carlo strategies/trader.py --name current --days 0 --fill-mode empirical_baseline --noise-profile fitted --quick
 ```
 
-Compare traders:
+Run a parameter sweep or optimisation:
 
 ```bash
-python -m r1bt compare strategies/trader.py examples/trader_round1_v9.py --names main_strategy live_v9 --data-dir data/round1 --days 0 --fill-mode empirical_baseline
+python -m prosperity_backtester sweep configs/pepper_sweep.json
+python -m prosperity_backtester optimize configs/pepper_optimize_quick.json
 ```
 
-Run a sweep:
+Derive and use empirical fill assumptions:
 
 ```bash
-python -m r1bt sweep configs/pepper_sweep.json
+python -m prosperity_backtester derive-fill-profile live_exports/259168/259168.json --profile-name live_empirical
+python -m prosperity_backtester calibrate examples/trader_round1_v9.py --name live_v9 --data-dir data/round1 --days 0 --live-export live_exports/259168/259168.json --quick
 ```
 
-Run optimisation:
+Run calibrated robustness scenarios:
 
 ```bash
-python -m r1bt optimize configs/pepper_optimize_quick.json
+python -m prosperity_backtester scenario-compare configs/research_scenarios.json
 ```
 
-Run calibration:
+## Comparing Trader Scripts
+
+Use `compare` when you want one fixed replay assumption across multiple scripts.
 
 ```bash
-python -m r1bt calibrate examples/trader_round1_v9.py --name live_v9 --data-dir data/round1 --days 0 --live-export live_exports/259168/259168.log --quick
+python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --names current starter --data-dir data/round1 --days -2 -1 0 --fill-mode empirical_baseline
 ```
 
-Derive an empirical fill profile:
+Good review sequence:
 
-```bash
-python -m r1bt derive-fill-profile live_exports/259168/259168.log --profile-name live_empirical
+1. Run replay for each serious script and inspect product PnL, drawdown, fills and inventory.
+2. Run `compare` under one fixed fill model to get a clean ranking.
+3. Run `scenario-compare` to check the ranking under conservative fills, wider spreads, thinner depth, slippage and crash assumptions.
+4. Run targeted Monte Carlo on the leading scripts and compare mean, median, P05 and drawdown.
+5. Prefer a script that wins across assumptions and has explainable per-product behaviour.
+
+Parameter overrides can be supplied in sweep and optimisation configs using dotted paths such as:
+
+```json
+{
+  "PARAMS.INTARIAN_PEPPER_ROOT.trend_slope": 0.0015
+}
 ```
 
-Run the calibrated robustness grid:
+## Round 2 Workflow
 
-```bash
-python -m r1bt scenario-compare configs/research_scenarios.json
-```
-
-Compare no-slippage versus harsher-slippage assumptions:
-
-```bash
-python -m r1bt replay strategies/trader.py --data-dir data/round1 --days 0 --fill-mode empirical_baseline --slippage-multiplier 0
-python -m r1bt replay strategies/trader.py --data-dir data/round1 --days 0 --fill-mode slippage_stress --slippage-multiplier 1.5
-```
-
-## Round 2 workflow
-
-Inspect Round 2 data:
-
-```bash
-python -m r1bt inspect --round 2 --data-dir data/round2 --days 0 --json
-```
+Round 2 uses the same products and CSV schema with `prices_round_2_day_<day>.csv` and `trades_round_2_day_<day>.csv`.
 
 Replay with no extra access:
 
 ```bash
-python -m r1bt replay strategies/trader.py --round 2 --data-dir data/round2 --days 0 --fill-mode base
+python -m prosperity_backtester replay strategies/trader.py --round 2 --data-dir data/round2 --days 0 --fill-mode base
 ```
 
 Replay with a local extra-access assumption and MAF deduction:
 
 ```bash
-python -m r1bt replay strategies/trader.py --round 2 --data-dir data/round2 --days 0 --fill-mode base --with-extra-access --access-mode deterministic --maf-bid 750 --access-quality 0.75 --access-passive-multiplier 1.12 --access-missed-reduction 0.02
+python -m prosperity_backtester replay strategies/trader.py --round 2 --data-dir data/round2 --days 0 --fill-mode base --with-extra-access --access-mode deterministic --maf-bid 750 --access-quality 0.75 --access-passive-multiplier 1.12 --access-missed-reduction 0.02
 ```
 
-Compare current and candidate scripts under one access assumption:
+Run the standard Round 2 decision grid. This checked-in config is intentionally quick: one day, replay-only, three MAF points and two trader variants.
 
 ```bash
-python -m r1bt compare strategies/trader.py examples/trader_round1_v9.py --names current candidate --round 2 --data-dir data/round2 --days 0 --with-extra-access --access-mode stochastic --access-quality 0.8 --access-probability 0.65 --maf-bid 1000
+python -m prosperity_backtester round2-scenarios configs/round2_scenarios.json
 ```
 
-Run the Round 2 decision grid:
+Run the all-in-one Round 2 comparison config:
 
 ```bash
-python -m r1bt round2-scenarios configs/round2_scenarios.json
+python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_research.json --output-dir backtests/round2_all_in_one_research_bundle
 ```
 
-Key outputs:
-
-- `round2_scenarios.csv`
-- `round2_winners.csv`
-- `round2_pairwise_mc.csv`
-- `round2_maf_sensitivity.csv`
-- dashboard `Round 2` tab
-
-## Round 2 all-in-one research bundle
-
-Use `round2_all_in_one_research_bundle` as the shared output folder for serious Round 2 study. It should collect every bundle needed to compare scripts, inspect risk and make an upload decision without guessing which file answers which question.
-
-Recommended contents:
-
-- Replay bundles for each strategy: inspect one script at full detail. Use these for total PnL, per-product PnL, realised/unrealised/MTM paths, fills, orders, inventory, max drawdown, cap usage, behaviour summaries and markout metrics.
-- Compare bundle: rank scripts under one fixed replay assumption. Use this for the clean head-to-head table and first-pass winner.
-- Round 2 scenario bundle: test the same scripts across no-access, extra-access and MAF assumptions. Use `round2_winners.csv` for scenario winners and `round2_maf_sensitivity.csv` for fee sensitivity.
-- Targeted Monte Carlo bundles: stress the leading scripts on synthetic paths. Use mean, median and P05 to check robustness rather than relying on one replay print.
-- Optional calibration bundle: tune or validate fill assumptions against live exports when useful export data exists.
-
-How to read the outputs:
-
-- Total PnL: final net result after any MAF deduction.
-- Per-product PnL: identifies whether the edge comes from OSMIUM, PEPPER or both.
-- Realised, unrealised and MTM: separates closed trades, open inventory value and full mark-to-market path.
-- Fills and orders: shows execution quality and activity level; high orders with low fills can mean passive quoting is not converting.
-- Inventory and cap usage: shows how much position risk the script takes and whether it sits near limits.
-- Max drawdown: largest peak-to-trough loss in the run.
-- Behaviour and markout metrics: checks whether fills are favourable after 1 or 5 ticks, and whether quote placement is helping.
-- Scenario winners: shows which script wins under each Round 2 access/MAF assumption.
-- MAF sensitivity: shows how much fee a script can absorb before access is no longer worth it.
-- Monte Carlo mean, median and P05: mean is average robustness, median is typical run, P05 is downside risk.
-
-Dashboard mapping:
-
-- Replay bundles feed the Overview, Replay, product dive, Inspect and behaviour views.
-- Compare bundles feed the Comparison view.
-- Round 2 scenario bundles feed the Round 2 view and comparison-style tables. Replay-specific tabs can be empty because scenario bundles contain aggregate rows, not a full tick-by-tick session.
-- Monte Carlo bundles feed the Monte Carlo view.
-- Calibration bundles feed the Calibration view.
-
-Recommended workflow:
-
-1. Inspect replay bundles for each script and check PnL source, inventory, drawdown, fills and limit breaches.
-2. Inspect the compare bundle for the direct ranking under one fixed assumption.
-3. Inspect the scenario bundle for winner stability across access quality and MAF levels.
-4. Inspect Monte Carlo bundles for mean, median, P05 and drawdown robustness.
-5. Pick the script that wins broadly, survives downside checks and has acceptable inventory/execution behaviour.
-
-How to judge a winner:
-
-- Prefer scripts that win across scenarios, not only one setting.
-- Prefer robust mean and median performance with a tolerable P05, not one lucky replay print.
-- Use this local backtester for ranking, risk diagnosis and decision support, not exact website PnL prediction.
-
-Round 2 limitations:
-
-- The MAF cutoff is website-only because other teams' bids are not known.
-- Extra-access usefulness is approximate locally.
-- Passive fills, queue position and same-price priority are approximate.
-
-Template note: [docs/bundle_templates/round2_all_in_one_research_bundle/README.md](docs/bundle_templates/round2_all_in_one_research_bundle/README.md) is a compact README for the bundle folder itself.
-
-See [docs/ROUND2.md](docs/ROUND2.md) for the gap analysis, design plan, scenario fields and limitations.
-See [docs/CALIBRATED_RESEARCH.md](docs/CALIBRATED_RESEARCH.md) for the calibrated fill, slippage, noise, scenario and validation workflow.
+Round 2 outputs are scenario evidence. They model known MAF rules and configurable access assumptions, but cannot know other teams' bids, exact extra-quote selection or hidden queue priority.
 
 ## Dashboard
 
-The dashboard is bundle-aware. It reads the bundle `type` from `dashboard.json` first, then falls back to the actual payload sections when older or partial bundles are loaded. Tabs intentionally show a compatibility message instead of zero-valued cards when the loaded bundle does not contain the required schema.
-
-Dashboard compatibility:
-
-- Overview: works for every recognised bundle and only shows metrics present in that bundle.
-- Alpha Lab: works on any bundle with replay, Monte Carlo, comparison or Round 2 evidence. It classifies hypotheses as public-data edge, local-BT edge, website-only edge or weak / rejected.
-- Replay: requires a `replay` bundle with top-level replay series.
-- Inspect, Osmium and Pepper: require replay-style per-tick series such as PnL, inventory, fair value, fills or orders.
-- Monte Carlo: requires a `monte_carlo` bundle with `monteCarlo.summary`.
-- Calibration: requires a `calibration` bundle.
-- Comparison: works with `comparison` bundles, compatible `round2_scenarios` comparison diagnostics, or two distinct loaded replay summaries.
-- Optimisation: requires an `optimization` bundle.
-- Round 2: requires a `round2_scenarios` bundle.
-
-If a tab is unavailable, that is usually intentional: for example, a Round 2 scenario bundle contains aggregate scenario rows, not per-tick replay data, while a Monte Carlo bundle contains distribution and sample-path data, not a top-level replay summary.
-
-### Alpha Lab usage note
-
-Use Alpha Lab as an evidence engine, not an idea board. It builds a hypothesis registry from the bundle sections that are actually present:
-
-- Replay rows feed residual, imbalance, markout, inventory, cap usage, one-sided state and recycle diagnostics.
-- Monte Carlo bundles feed robustness and saved sample-path diagnostics.
-- Comparison bundles feed current-vs-baseline capture checks.
-- Round 2 scenario bundles feed MAF, access sensitivity and ranking-stability checks.
-
-Interpret the classifications strictly:
-
-- `Public-data edge`: a candidate signal from public CSV or derived book/fair rows. It still needs replay and MC validation.
-- `Local-BT edge`: evidence that depends on local fills, markouts, scenario assumptions or synthetic paths.
-- `Website-only edge`: evidence blocked by hidden website mechanics such as MAF cutoff, extra quote selection or queue priority.
-- `Weak / rejected`: too little support, adverse evidence or too much noise for implementation work.
-
-Missing metrics stay unavailable. Alpha Lab should not turn absent replay rows, fill rows or scenario rows into zero-valued evidence.
-
-Build the dashboard once:
+Build the dashboard:
 
 ```bash
-cd dashboard
-npm install
-npm run build
+npm run build --prefix dashboard
 ```
 
-Serve it from the repo root:
+Serve the repo root:
 
 ```bash
-python -m r1bt serve --port 5555
+python -m prosperity_backtester serve --port 5555
 ```
 
 Open:
@@ -297,22 +176,20 @@ Open:
 http://127.0.0.1:5555/
 ```
 
-You can drag one or more `dashboard.json` bundles into the app, or use "Load from local server" to discover bundles under the served directory.
-
-The server lists bundles from `manifest.json` metadata where possible, so local discovery stays fast even when a generated `dashboard.json` is large. Selecting a bundle still loads the full dashboard payload.
+You can drag one or more `dashboard.json` bundles into the app, or use **Load from local server** to discover bundles under the served directory. The server reads `manifest.json` first when available, so discovery stays fast for large bundles.
 
 During dashboard development:
 
 ```bash
-cd dashboard
-npm run dev
+python -m prosperity_backtester serve --port 5555
+npm run dev --prefix dashboard
 ```
 
-The Vite dev server proxies `/api` to `http://127.0.0.1:5555`, so keep `python -m r1bt serve` running in another terminal if you want local run discovery.
+The Vite dev server proxies `/api` to `http://127.0.0.1:5555`.
 
-## Output bundle
+## Bundle Types
 
-Replay bundles include:
+Replay bundles:
 
 - `dashboard.json`
 - `manifest.json`
@@ -326,38 +203,84 @@ Replay bundles include:
 - `behaviour_summary.csv`
 - `behaviour_series.csv`
 
-Monte Carlo bundles additionally include:
+Monte Carlo bundles add:
 
 - `sample_paths/`
 - `sessions/`
 
-Comparison, calibration and optimisation bundles include their matching CSV tables and manifests.
+Comparison bundles add:
 
-Round 2 scenario bundles additionally include:
+- `comparison.csv`
+
+Optimisation bundles add:
+
+- `optimization.csv`
+
+Calibration bundles add:
+
+- `calibration_grid.csv`
+- `empirical_profile/empirical_fill_profile.json`
+
+Round 2 scenario bundles add:
 
 - `round2_scenarios.csv`
 - `round2_winners.csv`
 - `round2_pairwise_mc.csv`
 - `round2_maf_sensitivity.csv`
 
-Calibrated scenario bundles additionally include:
+Calibrated scenario bundles add:
 
 - `scenario_results.csv`
 - `scenario_winners.csv`
 - `robustness_ranking.csv`
 - `scenario_pairwise_mc.csv`
 
-Empirical fill-profile bundles include:
+Every generated parent output directory receives `run_registry.jsonl`.
 
-- `empirical_fill_profile.json`
-- `empirical_fill_rows.csv`
-- `empirical_fill_summary.csv`
+## Interpreting Outputs
 
-The parent output directory receives `run_registry.jsonl`.
+- `final_pnl`: net result after any MAF deduction.
+- `gross_pnl_before_maf`: strategy PnL before a winning MAF fee is deducted.
+- `per_product`: source of PnL by product.
+- `realised`, `unrealised`, `mtm`: closed PnL, open inventory value and full mark-to-market value.
+- `fills` and `orders`: execution activity. High order count with low fills can indicate passive quotes are not converting.
+- `inventory_series`: position path and limit pressure.
+- `max_drawdown`: largest peak-to-trough loss in the run.
+- `behaviour_summary`: cap usage, fill mix, markouts and product-level diagnostics.
+- `fair_value_series`: diagnostic fair-value proxy on historical replay and latent fair in Monte Carlo.
+- `round2_winners.csv`: scenario winners under each Round 2 assumption.
+- `round2_maf_sensitivity.csv`: access value before and after tested MAF levels.
+- Monte Carlo `mean`, `p50`, `p05` and expected shortfall: average, typical, downside and tail-risk evidence.
 
-## Add a trader
+## Config Files
 
-Add a Python file with the normal Prosperity contract:
+Configs are JSON objects. Relative paths are resolved from the current working directory when they exist there, otherwise from the config file location.
+
+Common fields:
+
+- `name`: output/run label.
+- `round`: `1` or `2`.
+- `data_dir`: input CSV directory.
+- `days`: list of days to load.
+- `trader`: base trader path.
+- `traders`: explicit list of trader objects with `name`, `path` and optional `overrides`.
+- `variants`: parameter variants for sweep, optimisation or scenario comparison.
+- `fill_model`: built-in fill model name.
+- `fill_config`: optional empirical fill-profile JSON.
+- `perturbation`: replay or Monte Carlo perturbation fields.
+- `mc_sessions`, `mc_sample_sessions`, `mc_seed`, `mc_workers`: Monte Carlo controls.
+
+Useful starting points:
+
+- `configs/pepper_sweep.json`
+- `configs/pepper_optimize_quick.json`
+- `configs/research_scenarios.json`
+- `configs/round2_scenarios.json`
+- `configs/round2_all_in_one_research.json`
+
+## Trader Compatibility
+
+Add a Python file with the standard Prosperity contract:
 
 ```python
 class Trader:
@@ -365,75 +288,50 @@ class Trader:
         return orders, conversions, trader_data
 ```
 
-Supported import styles include:
+Supported import styles:
 
 - `from datamodel import ...`
-- `from r1bt.datamodel import ...`
+- `from prosperity_backtester.datamodel import ...`
 - `from prosperity3bt.datamodel import ...`
 - `from prosperity4mcbt.datamodel import ...`
 
-Parameter overrides are supported through sweep and optimisation configs.
-
-## Exact vs approximate
+## Assumptions And Limits
 
 Exact relative to local inputs:
 
-- Round 1 CSV ingestion and schema checks
-- Round 2 CSV ingestion and schema checks when files are present
-- Live-export parsing where fields are present
-- Visible-book aggressive fills
-- Trader state persistence
-- Cash, inventory, realised, unrealised and MTM accounting
-- Deterministic replay over provided timestamps
-- Synthetic latent fair inside Monte Carlo
+- CSV schema validation and timestamp ordering.
+- Visible-book aggressive fills.
+- Trader state and own-trade hand-off.
+- Cash, inventory, realised, unrealised and MTM accounting.
+- Deterministic replay over provided timestamps.
+- Synthetic latent fair inside Monte Carlo.
 
 Approximate:
 
-- Passive fills and queue position
-- Same-price queue share
-- Adverse selection penalties
-- Size-dependent slippage
-- Empirical fill probabilities when rejected passive opportunities are not visible
-- Extra-quote access usefulness under MAF scenarios
-- Historical analysis fair
-- Synthetic market generation
-- Calibration and optimisation scores
+- Passive queue position and same-price priority.
+- Missed passive fills.
+- Adverse selection and size-dependent slippage.
+- Empirical fill probabilities when rejected passive opportunities are not visible.
+- Historical analysis fair.
+- Synthetic market generation.
+- Calibration and optimisation scores.
+- Round 2 extra-access usefulness and MAF bid cutoff.
 
-The important distinction is that Monte Carlo `analysis_fair` is the simulator latent fair, while historical replay `analysis_fair` is an inferred diagnostic proxy.
+Use the platform to rank scripts, find fragility and prepare upload decisions. Treat small PnL gaps as suspect until they survive conservative fills, scenario checks and Monte Carlo downside tests.
 
-## Tests
+## Verification
+
+Recommended checks before sharing a research branch:
 
 ```bash
-python -m pip install -e ".[dev]"
+python -m compileall -q prosperity_backtester r1bt analysis strategies tests
 python -m pytest -q
 npm test --prefix dashboard
 npm run build --prefix dashboard
 ```
 
-With `uv`, the backend tests can also be run without changing the project dependencies:
+With `uv`:
 
 ```bash
 uv run --with pytest pytest -q
 ```
-
-## Generated files
-
-Keep these out of submissions and commits:
-
-- `backtests/` output bundles
-- `dashboard/node_modules/`
-- `.venv/`
-- `.pytest_cache/`
-- `__pycache__/`
-- `*.log`
-
-The dashboard build output in `dashboard/dist/` is small and useful when serving the app directly with `python -m r1bt serve`. Rebuild it after dashboard source changes.
-
-## Remaining limitations
-
-- True queue position is not known from public data.
-- The official Round 2 extra-quote selection and matching mechanics are not known locally.
-- Other teams' MAF bids are not known locally.
-- Live exports may not expose enough detail for exact inventory-path reconstruction.
-- Historical fair value is inferred, not official hidden fair.
-- Very large Monte Carlo batches may eventually justify moving the hot loop out of Python.
