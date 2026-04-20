@@ -17,6 +17,7 @@ Round 2 support is a decision tool, not a fake website clone. It separates known
 - Added fitted latent noise profiles using current R1/R2 values: OSMIUM `3.70`, PEPPER `3.22`.
 - Added calibrated `scenario-compare` for baseline, stress, crash, spread/depth, harsh-slippage and lower-fill-quality checks.
 - Expanded live-vs-sim diagnostics with fill quantity, passive/aggressive mismatch, inventory-path error and activity timing.
+- Added the dashboard Alpha Lab, a bundle-aware hypothesis registry for public-data, local-BT, website-only and rejected alpha candidates.
 
 ## What changed in v4
 
@@ -59,7 +60,7 @@ Python runtime has no required third-party dependency.
 For tests:
 
 ```bash
-python -m pip install pytest
+python -m pip install -e ".[dev]"
 python -m pytest -q
 ```
 
@@ -247,6 +248,7 @@ The dashboard is bundle-aware. It reads the bundle `type` from `dashboard.json` 
 Dashboard compatibility:
 
 - Overview: works for every recognised bundle and only shows metrics present in that bundle.
+- Alpha Lab: works on any bundle with replay, Monte Carlo, comparison or Round 2 evidence. It classifies hypotheses as public-data edge, local-BT edge, website-only edge or weak / rejected.
 - Replay: requires a `replay` bundle with top-level replay series.
 - Inspect, Osmium and Pepper: require replay-style per-tick series such as PnL, inventory, fair value, fills or orders.
 - Monte Carlo: requires a `monte_carlo` bundle with `monteCarlo.summary`.
@@ -256,6 +258,24 @@ Dashboard compatibility:
 - Round 2: requires a `round2_scenarios` bundle.
 
 If a tab is unavailable, that is usually intentional: for example, a Round 2 scenario bundle contains aggregate scenario rows, not per-tick replay data, while a Monte Carlo bundle contains distribution and sample-path data, not a top-level replay summary.
+
+### Alpha Lab usage note
+
+Use Alpha Lab as an evidence engine, not an idea board. It builds a hypothesis registry from the bundle sections that are actually present:
+
+- Replay rows feed residual, imbalance, markout, inventory, cap usage, one-sided state and recycle diagnostics.
+- Monte Carlo bundles feed robustness and saved sample-path diagnostics.
+- Comparison bundles feed current-vs-baseline capture checks.
+- Round 2 scenario bundles feed MAF, access sensitivity and ranking-stability checks.
+
+Interpret the classifications strictly:
+
+- `Public-data edge`: a candidate signal from public CSV or derived book/fair rows. It still needs replay and MC validation.
+- `Local-BT edge`: evidence that depends on local fills, markouts, scenario assumptions or synthetic paths.
+- `Website-only edge`: evidence blocked by hidden website mechanics such as MAF cutoff, extra quote selection or queue priority.
+- `Weak / rejected`: too little support, adverse evidence or too much noise for implementation work.
+
+Missing metrics stay unavailable. Alpha Lab should not turn absent replay rows, fill rows or scenario rows into zero-valued evidence.
 
 Build the dashboard once:
 
@@ -384,6 +404,7 @@ The important distinction is that Monte Carlo `analysis_fair` is the simulator l
 ## Tests
 
 ```bash
+python -m pip install -e ".[dev]"
 python -m pytest -q
 npm test --prefix dashboard
 npm run build --prefix dashboard

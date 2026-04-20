@@ -5,6 +5,7 @@ import { NavBar } from './components/NavBar'
 import { FileDrop } from './components/FileDrop'
 import { ServerRunLoader } from './components/ServerRunLoader'
 import { Overview } from './views/Overview'
+import { AlphaLab } from './views/AlphaLab'
 import { Round2 } from './views/Round2'
 import { Replay } from './views/Replay'
 import { MonteCarlo } from './views/MonteCarlo'
@@ -18,6 +19,7 @@ import type { TabId } from './types'
 
 const VIEWS: Record<TabId, React.ComponentType> = {
   overview: Overview,
+  alpha: AlphaLab,
   round2: Round2,
   replay: Replay,
   montecarlo: MonteCarlo,

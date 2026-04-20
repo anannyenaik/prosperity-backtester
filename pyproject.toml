@@ -8,6 +8,7 @@ dependencies = []  # stdlib only for runtime
 
 [project.optional-dependencies]
 analysis = ["pandas>=2.0", "numpy>=1.24"]
+dev = ["pytest>=8.0"]
 
 [project.scripts]
 r1mcbt = "r1bt.__main__:main"

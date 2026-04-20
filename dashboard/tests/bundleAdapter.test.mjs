@@ -151,6 +151,7 @@ test('detects each supported bundle type from explicit metadata', () => {
 test('replay bundle supports replay tabs and blocks Monte Carlo without fake zeros', () => {
   const replay = replayPayload()
   assert.equal(getTabAvailability(replay, 'replay').supported, true)
+  assert.equal(getTabAvailability(replay, 'alpha').supported, true)
   const mcAvailability = getTabAvailability(replay, 'montecarlo')
   assert.equal(mcAvailability.supported, false)
   assert.match(mcAvailability.message, /not available for this bundle type/)
@@ -160,6 +161,7 @@ test('replay bundle supports replay tabs and blocks Monte Carlo without fake zer
 test('Monte Carlo bundle supports MC tab and does not pretend replay data exists', () => {
   const mc = monteCarloPayload()
   assert.equal(getTabAvailability(mc, 'montecarlo').supported, true)
+  assert.equal(getTabAvailability(mc, 'alpha').supported, true)
   assert.equal(interpretBundle(mc).hasReplaySummary, false)
   const replayAvailability = getTabAvailability(mc, 'replay')
   assert.equal(replayAvailability.supported, false)
@@ -169,6 +171,7 @@ test('Monte Carlo bundle supports MC tab and does not pretend replay data exists
 test('Round 2 scenario bundle supports Round 2 and compatible comparison diagnostics only', () => {
   const scenario = round2Payload()
   assert.equal(getTabAvailability(scenario, 'round2').supported, true)
+  assert.equal(getTabAvailability(scenario, 'alpha').supported, true)
   assert.equal(getTabAvailability(scenario, 'compare').supported, true)
   assert.equal(getTabAvailability(scenario, 'inspect').supported, false)
   assert.match(getTabAvailability(scenario, 'inspect').message, /Load a replay bundle/)

@@ -465,6 +465,7 @@ export const POSITION_LIMIT = 80
 
 export type TabId =
   | 'overview'
+  | 'alpha'
   | 'round2'
   | 'replay'
   | 'montecarlo'

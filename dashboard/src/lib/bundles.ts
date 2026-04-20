@@ -170,6 +170,22 @@ export function getTabAvailability(
     }
   }
 
+  if (tab === 'alpha') {
+    const hasEvidence =
+      bundle.hasReplaySummary ||
+      bundle.hasReplayPath ||
+      bundle.hasMonteCarlo ||
+      bundle.hasComparisonRows ||
+      bundle.hasRound2Rows
+    if (hasEvidence) {
+      return available('Alpha Lab evidence available', 'Alpha Lab will classify only the evidence present in this bundle.')
+    }
+    return incompatible(
+      'Alpha Lab evidence is not present.',
+      `${bundle.badge} does not contain replay, Monte Carlo, comparison or Round 2 rows for hypothesis scoring.`,
+    )
+  }
+
   if (tab === 'replay') {
     if (bundle.type !== 'replay') {
       return incompatible(
