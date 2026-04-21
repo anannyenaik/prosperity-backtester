@@ -192,6 +192,8 @@ def _mc_phase_line(case: dict[str, object]) -> str | None:
         for key in ("sample_row_compaction_seconds", "dashboard_build_seconds", "bundle_write_seconds")
     )
     backend = case.get("monte_carlo_backend") or case.get("engine_backend") or "unknown"
+    rust_wall = phase.get("rust_internal_wall_seconds")
+    rust_suffix = f", rust-parallel-wall {_format_phase_seconds(rust_wall)}" if rust_wall is not None else ""
     return (
         f"- `{case['case']}` [{backend}]: market generation {_format_phase_seconds(phase.get('market_generation_seconds'))}, "
         f"trader {_format_phase_seconds(phase.get('trader_seconds'))}, "
@@ -199,6 +201,7 @@ def _mc_phase_line(case: dict[str, object]) -> str | None:
         f"path metrics {_format_phase_seconds(phase.get('path_metrics_seconds'))}, "
         f"reporting {_format_phase_seconds(reporting_seconds)}, "
         f"wall {_format_phase_seconds(phase.get('session_execution_wall_seconds'))}"
+        f"{rust_suffix}"
     )
 
 
@@ -290,7 +293,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-dir", default="data/round1", help="Historical data directory")
     parser.add_argument("--fill-mode", default="empirical_baseline", help="Replay and compare fill mode")
     parser.add_argument("--mc-fill-mode", default="base", help="Monte Carlo fill mode")
-    parser.add_argument("--mc-backend", default=None, choices=["auto", "classic", "streaming"], help="Optional Monte Carlo backend override for repos that support it")
+    parser.add_argument("--mc-backend", default=None, choices=["auto", "classic", "streaming", "rust"], help="Optional Monte Carlo backend override for repos that support it")
     parser.add_argument("--mc-synthetic-tick-limit", type=int, default=250, help="Synthetic tick cap for Monte Carlo benchmark cases")
     parser.add_argument("--workers", nargs="*", type=int, default=[1, 2, 4], help="Worker counts for quick and default Monte Carlo cases")
     parser.add_argument("--quick-sessions", type=int, default=64)
@@ -299,6 +302,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--default-sample-sessions", type=int, default=10)
     parser.add_argument("--heavy-sessions", type=int, default=192)
     parser.add_argument("--heavy-sample-sessions", type=int, default=16)
+    parser.add_argument("--ceiling-sessions", type=int, default=768)
+    parser.add_argument("--ceiling-sample-sessions", type=int, default=24)
     return parser
 
 
@@ -414,7 +419,8 @@ def main(argv: list[str] | None = None) -> None:
             case_name=f"pack_{preset}",
             command=_python_command(
                 python_executable,
-                "analysis/research_pack.py",
+                "-m",
+                "analysis.research_pack",
                 preset,
                 "--trader",
                 trader,
@@ -557,6 +563,46 @@ def main(argv: list[str] | None = None) -> None:
                 output_profile="light",
             ),
         ))
+
+    ceiling_dir = _case_output(f"mc_ceiling_light_w{max_worker}", output_root)
+    cases.append(_run_case(
+        case_name=f"mc_ceiling_light_w{max_worker}",
+        command=_python_command(
+            python_executable,
+            "-m",
+            "prosperity_backtester",
+            "monte-carlo",
+            mc_trader,
+            "--name",
+            "benchmark",
+            "--days",
+            "0",
+            "--fill-mode",
+            args.mc_fill_mode,
+            "--noise-profile",
+            "fitted",
+            "--sessions",
+            str(args.ceiling_sessions),
+            "--sample-sessions",
+            str(args.ceiling_sample_sessions),
+            "--workers",
+            str(max_worker),
+            *mc_backend_args,
+            "--synthetic-tick-limit",
+            str(args.mc_synthetic_tick_limit),
+            "--output-dir",
+            str(ceiling_dir),
+        ),
+        repo_root=repo_root,
+        output_dir=ceiling_dir,
+        case_meta=_mc_case_meta(
+            tier="ceiling",
+            workers=max_worker,
+            session_count=args.ceiling_sessions,
+            sample_session_count=args.ceiling_sample_sessions,
+            output_profile="light",
+        ),
+    ))
 
     mc_full_dir = _case_output("mc_default_full_w1", output_root)
     cases.append(_run_case(

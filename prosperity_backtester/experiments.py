@@ -20,6 +20,8 @@ from .mc_backends import (
     new_profile as new_mc_profile,
     normalise_monte_carlo_backend,
     prepare_streaming_simulation_context,
+    resolve_monte_carlo_backend,
+    run_rust_backend,
     run_streaming_synthetic_session,
 )
 from .platform import PerturbationConfig, SessionArtefacts, generate_synthetic_market_days, run_market_session
@@ -149,15 +151,23 @@ def _mc_runtime_context(
     monte_carlo_backend: str | None = None,
     data_scope: Dict[str, object] | None = None,
 ) -> Dict[str, object]:
+    resolved = normalise_monte_carlo_backend(monte_carlo_backend) if monte_carlo_backend else None
+    rust_active = resolved == "rust" and int(sessions) > 0
+    if rust_active:
+        engine_backend = "rust"
+        parallelism = "rayon" if int(workers) > 1 else "single_thread"
+    else:
+        engine_backend = "python"
+        parallelism = "process_pool" if int(workers) > 1 and int(sessions) > 0 else "single_process"
     runtime_context: Dict[str, object] = {
-        "engine_backend": "python",
-        "parallelism": "process_pool" if int(workers) > 1 and int(sessions) > 0 else "single_process",
+        "engine_backend": engine_backend,
+        "parallelism": parallelism,
         "worker_count": int(workers) if int(sessions) > 0 else 1,
         "session_count": int(sessions),
         "sample_session_count": int(sample_sessions),
     }
-    if monte_carlo_backend is not None and int(sessions) > 0:
-        runtime_context["monte_carlo_backend"] = normalise_monte_carlo_backend(monte_carlo_backend)
+    if resolved is not None and int(sessions) > 0:
+        runtime_context["monte_carlo_backend"] = resolved
     if data_scope is not None:
         runtime_context["data_scope"] = data_scope
     return runtime_context
@@ -276,6 +286,8 @@ def _run_monte_carlo_chunk(task: Dict[str, object]) -> Dict[str, object]:
     assert isinstance(fill_model, FillModel)
     days = tuple(int(day) for day in task["days"])
     module = load_trader_module(trader_spec.path, trader_spec.overrides)
+    if backend == "rust":
+        raise RuntimeError("Rust Monte Carlo backend is orchestrated outside the Python chunk runner")
     streaming_context = prepare_streaming_simulation_context(perturbation) if backend == "streaming" else None
     results: List[SessionArtefacts] = []
     profile = new_mc_profile(backend)
@@ -366,10 +378,17 @@ def _run_monte_carlo_profiled(
     sample_sessions = max(0, min(int(sample_sessions), int(sessions)))
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
     fill_model = resolve_fill_model(fill_model_name, fill_model_config_path)
-    resolved_backend = normalise_monte_carlo_backend(monte_carlo_backend)
+    resolved_backend = resolve_monte_carlo_backend(
+        monte_carlo_backend,
+        access_scenario=access_scenario,
+        print_trader_output=print_trader_output,
+    )
     worker_count = max(1, int(workers))
     if worker_count > 1:
         worker_count = min(worker_count, sessions, os.cpu_count() or worker_count)
+    profile = new_mc_profile(resolved_backend)
+    precomputed_path_bands: Dict[str, Dict[str, List[Dict[str, object]]]] | None = None
+    results: List[SessionArtefacts]
     base_task = {
         "sample_sessions": sample_sessions,
         "base_seed": base_seed,
@@ -384,32 +403,33 @@ def _run_monte_carlo_profiled(
         "print_trader_output": print_trader_output,
         "monte_carlo_backend": resolved_backend,
     }
-    chunk_tasks = [
-        base_task | {"session_indices": chunk}
-        for chunk in _session_chunks(sessions, worker_count)
-    ]
     execution_started = time.perf_counter()
-    if worker_count == 1:
-        chunk_outputs = [_run_monte_carlo_chunk(task) for task in chunk_tasks]
-    else:
-        with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as executor:
-            chunk_outputs = list(executor.map(_run_monte_carlo_chunk, chunk_tasks))
-    execution_seconds = time.perf_counter() - execution_started
-    profile = new_mc_profile(resolved_backend)
-    results = [
-        result
-        for chunk_output in chunk_outputs
-        for result in chunk_output["results"]
-    ]
-    for chunk_output in chunk_outputs:
-        chunk_profile = chunk_output["profile"]
+    if resolved_backend == "rust":
+        rust_run = run_rust_backend(
+            trader_name=trader_spec.name,
+            trader_path=trader_spec.path,
+            trader_overrides=trader_spec.overrides,
+            fill_model=fill_model,
+            perturb=perturbation,
+            days=days,
+            session_indices=tuple(range(sessions)),
+            run_name=run_name,
+            path_bucket_count=output_options.max_mc_path_rows_per_product,
+            workers=worker_count,
+            access_scenario=access_scenario,
+            print_trader_output=print_trader_output,
+            base_seed=base_seed,
+        )
+        results = list(rust_run.sessions)
+        precomputed_path_bands = rust_run.path_bands
         for key in (
             "session_count",
             "sampled_session_count",
             "classic_session_count",
             "streaming_session_count",
+            "rust_session_count",
         ):
-            profile[key] = int(profile.get(key, 0) or 0) + int(chunk_profile.get(key, 0) or 0)
+            profile[key] = int(rust_run.profile.get(key, profile.get(key, 0)) or 0)
         for key in (
             "market_generation_seconds",
             "state_build_seconds",
@@ -419,7 +439,83 @@ def _run_monte_carlo_profiled(
             "postprocess_seconds",
             "session_total_seconds",
         ):
-            profile[key] = float(profile.get(key, 0.0) or 0.0) + float(chunk_profile.get(key, 0.0) or 0.0)
+            profile[key] = float(rust_run.profile.get(key, profile.get(key, 0.0)) or 0.0)
+        rust_internal_wall = rust_run.profile.get("session_execution_wall_seconds")
+        if rust_internal_wall is not None:
+            profile["rust_internal_wall_seconds"] = float(rust_internal_wall)
+        if sample_sessions > 0:
+            sample_worker_count = min(worker_count, sample_sessions)
+            sample_task = dict(base_task)
+            sample_task["sample_sessions"] = sample_sessions
+            sample_task["monte_carlo_backend"] = "classic"
+            sample_chunk_tasks = [
+                sample_task | {"session_indices": chunk}
+                for chunk in _session_chunks(sample_sessions, sample_worker_count)
+            ]
+            if sample_worker_count == 1:
+                sample_outputs = [_run_monte_carlo_chunk(task) for task in sample_chunk_tasks]
+            else:
+                with concurrent.futures.ProcessPoolExecutor(max_workers=sample_worker_count) as executor:
+                    sample_outputs = list(executor.map(_run_monte_carlo_chunk, sample_chunk_tasks))
+            sampled_results = [
+                result
+                for chunk_output in sample_outputs
+                for result in chunk_output["results"]
+            ]
+            for chunk_output in sample_outputs:
+                chunk_profile = chunk_output["profile"]
+                profile["sampled_session_count"] = sample_sessions
+                profile["classic_session_count"] = int(profile.get("classic_session_count", 0) or 0) + int(chunk_profile.get("classic_session_count", 0) or 0)
+                for key in (
+                    "market_generation_seconds",
+                    "state_build_seconds",
+                    "trader_seconds",
+                    "execution_seconds",
+                    "path_metrics_seconds",
+                    "postprocess_seconds",
+                    "session_total_seconds",
+                ):
+                    profile[key] = float(profile.get(key, 0.0) or 0.0) + float(chunk_profile.get(key, 0.0) or 0.0)
+            by_name = {result.run_name: result for result in results}
+            for result in sampled_results:
+                by_name[result.run_name] = result
+            results = list(by_name.values())
+    else:
+        chunk_tasks = [
+            base_task | {"session_indices": chunk}
+            for chunk in _session_chunks(sessions, worker_count)
+        ]
+        if worker_count == 1:
+            chunk_outputs = [_run_monte_carlo_chunk(task) for task in chunk_tasks]
+        else:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as executor:
+                chunk_outputs = list(executor.map(_run_monte_carlo_chunk, chunk_tasks))
+        results = [
+            result
+            for chunk_output in chunk_outputs
+            for result in chunk_output["results"]
+        ]
+        for chunk_output in chunk_outputs:
+            chunk_profile = chunk_output["profile"]
+            for key in (
+                "session_count",
+                "sampled_session_count",
+                "classic_session_count",
+                "streaming_session_count",
+                "rust_session_count",
+            ):
+                profile[key] = int(profile.get(key, 0) or 0) + int(chunk_profile.get(key, 0) or 0)
+            for key in (
+                "market_generation_seconds",
+                "state_build_seconds",
+                "trader_seconds",
+                "execution_seconds",
+                "path_metrics_seconds",
+                "postprocess_seconds",
+                "session_total_seconds",
+            ):
+                profile[key] = float(profile.get(key, 0.0) or 0.0) + float(chunk_profile.get(key, 0.0) or 0.0)
+    execution_seconds = time.perf_counter() - execution_started
     results.sort(key=lambda artefact: artefact.run_name)
     sort_seconds = time.perf_counter() - execution_started - execution_seconds
     compact_seconds = 0.0
@@ -451,6 +547,8 @@ def _run_monte_carlo_profiled(
         phase_timings["dashboard_build_seconds"] = 0.0
         phase_timings["bundle_write_seconds"] = 0.0
         phase_timings["session_execution_wall_seconds"] = round(execution_seconds, 6)
+        if "rust_internal_wall_seconds" in profile:
+            phase_timings["rust_internal_wall_seconds"] = round(float(profile["rust_internal_wall_seconds"]), 6)
         runtime_context["phase_timings_seconds"] = phase_timings
         dashboard_started = time.perf_counter()
         dashboard = build_dashboard_payload(
@@ -464,6 +562,7 @@ def _run_monte_carlo_profiled(
             access_scenario=access_scenario.to_dict(),
             monte_carlo_results=results,
             monte_carlo_rows=monte_carlo_rows,
+            monte_carlo_path_bands=precomputed_path_bands,
             dataset_reports=[],
             output_options=output_options,
             runtime_context=runtime_context,
@@ -499,6 +598,8 @@ def _run_monte_carlo_profiled(
     final_profile["dashboard_build_seconds"] = round(dashboard_seconds, 6)
     final_profile["bundle_write_seconds"] = round(write_seconds, 6)
     final_profile["session_execution_wall_seconds"] = round(execution_seconds, 6)
+    if "rust_internal_wall_seconds" in profile:
+        final_profile["rust_internal_wall_seconds"] = round(float(profile["rust_internal_wall_seconds"]), 6)
     return results, final_profile
 
 

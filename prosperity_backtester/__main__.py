@@ -355,7 +355,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Examples:\n"
             "  python -m prosperity_backtester monte-carlo strategies/trader.py --quick --noise-profile fitted\n"
             "  python -m prosperity_backtester monte-carlo strategies/trader.py --sessions 256 --sample-sessions 16 --workers 4\n"
-            "  python -m prosperity_backtester monte-carlo strategies/trader.py --sessions 256 --workers 4 --mc-backend classic\n"
+            "  python -m prosperity_backtester monte-carlo strategies/trader.py --sessions 256 --workers 4 --mc-backend rust\n"
         ),
     )
     add_shared(mc)
@@ -363,7 +363,7 @@ def build_parser() -> argparse.ArgumentParser:
     mc.add_argument("--sample-sessions", type=int, default=10)
     mc.add_argument("--seed", type=int, default=20260418)
     mc.add_argument("--workers", type=int, default=1, help="Parallel worker processes for Monte Carlo sessions")
-    mc.add_argument("--mc-backend", default="auto", choices=["auto", "classic", "streaming"], help="Monte Carlo execution backend. 'classic' always materialises synthetic market days, while 'streaming' keeps sampled sessions full and streams unsampled sessions.")
+    mc.add_argument("--mc-backend", default="auto", choices=["auto", "classic", "streaming", "rust"], help="Monte Carlo execution backend. 'auto' selects 'rust' if cargo is on PATH, else 'streaming'. 'classic' materialises full synthetic market days per session (highest fidelity, slowest). 'streaming' skips materialisation for unsampled sessions (fastest single-worker). 'rust' offloads unsampled sessions to a compiled Rayon engine and shines at --workers 2+ (IPC overhead makes it similar to streaming at workers=1).")
     mc.add_argument("--quick", action="store_true", help="Use quick preset: 64 sessions, 8 sampled runs")
     mc.add_argument("--heavy", action="store_true", help="Use heavy preset: 512 sessions, 32 sampled runs")
 

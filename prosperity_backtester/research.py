@@ -11,7 +11,7 @@ from typing import Dict, Sequence
 from .dataset import load_round_dataset
 from .experiments import TraderSpec, _dataset_reports, default_data_dir_for_round, run_compare, run_monte_carlo, run_replay
 from .fill_models import resolve_fill_model
-from .mc_backends import normalise_monte_carlo_backend
+from .mc_backends import resolve_monte_carlo_backend
 from .platform import PerturbationConfig, run_market_session, summarise_monte_carlo_sessions
 from .reports import build_dashboard_payload, compact_replay_rows, write_replay_bundle
 from .round2 import AccessScenario, NO_ACCESS_SCENARIO
@@ -299,7 +299,11 @@ def run_research_pack(
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
     output_root = output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
-    resolved_mc_backend = normalise_monte_carlo_backend(mc_backend)
+    resolved_mc_backend = resolve_monte_carlo_backend(
+        mc_backend,
+        access_scenario=access_scenario,
+        print_trader_output=False,
+    )
 
     replay_dir = output_root / "replay"
     compare_dir = output_root / "compare"

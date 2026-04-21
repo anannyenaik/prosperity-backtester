@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 import contextlib
+import json
+import os
 import random
+import shutil
+import subprocess
+import sys
+import tempfile
 import time
 from copy import deepcopy
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Mapping, Sequence
 
 from .datamodel import Listing, Observation, Trade, TradingState
 from .dataset import BookSnapshot, DayDataset, TradePrint
-from .fill_models import FillModel
+from .fill_models import FillModel, ProductFillConfig
 from .metadata import CURRENCY, PRODUCTS, TIMESTAMP_STEP
 from .platform import (
     OrderSchedule,
@@ -21,6 +28,7 @@ from .platform import (
     _execute_order_batch,
     _finalize_slippage_accumulator,
     _new_slippage_accumulator,
+    _position_limit_for,
     _record_slippage_fill,
     _scaled_snapshot,
     snapshot_to_order_depth,
@@ -36,9 +44,10 @@ from .simulate import (
     simulate_latent_fair,
 )
 
-MONTE_CARLO_BACKENDS = ("classic", "streaming")
+MONTE_CARLO_BACKENDS = ("classic", "streaming", "rust")
 DEFAULT_MONTE_CARLO_BACKEND = "streaming"
 AUTO_MONTE_CARLO_BACKEND = "auto"
+RUST_MONTE_CARLO_BACKEND = "rust"
 
 _PROFILE_KEYS = (
     "market_generation_seconds",
@@ -58,6 +67,16 @@ class StreamingSimulationContext:
     tick_count: int
 
 
+@dataclass(frozen=True)
+class RustBackendRun:
+    sessions: list[SessionArtefacts]
+    path_bands: Dict[str, Dict[str, list[Dict[str, object]]]]
+    profile: Dict[str, object]
+
+
+_RUST_BINARY_CACHE: tuple[Path, Path] | None = None
+
+
 def normalise_monte_carlo_backend(value: str | None) -> str:
     text = str(value or AUTO_MONTE_CARLO_BACKEND).strip().lower().replace("-", "_")
     if text in {"", AUTO_MONTE_CARLO_BACKEND}:
@@ -75,6 +94,7 @@ def new_profile(backend: str) -> Dict[str, object]:
         "sampled_session_count": 0,
         "classic_session_count": 0,
         "streaming_session_count": 0,
+        "rust_session_count": 0,
         **{key: 0.0 for key in _PROFILE_KEYS},
     }
 
@@ -99,6 +119,7 @@ def finalise_profile(profile: Mapping[str, object]) -> Dict[str, object]:
         "sampled_session_count": int(profile.get("sampled_session_count", 0) or 0),
         "classic_session_count": int(profile.get("classic_session_count", 0) or 0),
         "streaming_session_count": int(profile.get("streaming_session_count", 0) or 0),
+        "rust_session_count": int(profile.get("rust_session_count", 0) or 0),
         **rounded,
     }
 
@@ -117,6 +138,277 @@ def prepare_streaming_simulation_context(perturb: PerturbationConfig) -> Streami
         calibration=calibration,
         samplers=build_samplers(calibration),
         tick_count=tick_count,
+    )
+
+
+def rust_backend_supported(
+    *,
+    access_scenario: AccessScenario | None = None,
+    print_trader_output: bool = False,
+) -> bool:
+    access_scenario = access_scenario or NO_ACCESS_SCENARIO
+    return not access_scenario.enabled and not print_trader_output
+
+
+def resolve_monte_carlo_backend(
+    requested_backend: str | None,
+    *,
+    access_scenario: AccessScenario | None = None,
+    print_trader_output: bool = False,
+) -> str:
+    text = str(requested_backend or AUTO_MONTE_CARLO_BACKEND).strip().lower().replace("-", "_")
+    if text not in {"", AUTO_MONTE_CARLO_BACKEND}:
+        return normalise_monte_carlo_backend(text)
+    if rust_backend_supported(access_scenario=access_scenario, print_trader_output=print_trader_output):
+        binary = ensure_rust_backend_binary()
+        if binary is not None:
+            return RUST_MONTE_CARLO_BACKEND
+    return DEFAULT_MONTE_CARLO_BACKEND
+
+
+def ensure_rust_backend_binary() -> tuple[Path, Path] | None:
+    global _RUST_BINARY_CACHE
+    if _RUST_BINARY_CACHE is not None:
+        binary_path, rust_bin_dir = _RUST_BINARY_CACHE
+        if binary_path.is_file():
+            return _RUST_BINARY_CACHE
+        _RUST_BINARY_CACHE = None
+
+    cargo_exe = _find_cargo_executable()
+    if cargo_exe is None:
+        return None
+    rust_bin_dir = cargo_exe.parent
+    project_root = Path(__file__).resolve().parent.parent
+    manifest_path = project_root / "rust_mc_engine" / "Cargo.toml"
+    binary_name = "prosperity-rust-mc.exe" if os.name == "nt" else "prosperity-rust-mc"
+    binary_path = project_root / "rust_mc_engine" / "target" / "release" / binary_name
+    env = os.environ.copy()
+    env["PATH"] = os.pathsep.join([str(rust_bin_dir), env.get("PATH", "")])
+    try:
+        print(f"[prosperity-backtester] Building Rust MC engine (one-time, ~30-90s)…", flush=True)
+        subprocess.run(
+            [str(cargo_exe), "build", "--release", "--manifest-path", str(manifest_path)],
+            cwd=project_root,
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        print("[prosperity-backtester] Rust MC engine built.", flush=True)
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    if not binary_path.is_file():
+        return None
+    _RUST_BINARY_CACHE = (binary_path, rust_bin_dir)
+    return _RUST_BINARY_CACHE
+
+
+def _find_cargo_executable() -> Path | None:
+    direct = shutil.which("cargo")
+    if direct:
+        return Path(direct).resolve()
+    user_home = Path.home()
+    candidates = [
+        user_home / ".cargo" / "bin" / ("cargo.exe" if os.name == "nt" else "cargo"),
+    ]
+    if os.name == "nt":
+        for rust_dir in Path("C:/Program Files").glob("Rust*"):
+            candidates.append(rust_dir / "bin" / "cargo.exe")
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
+def _serialise_histogram(values: Mapping[object, object]) -> Dict[str, object]:
+    ordered = sorted(
+        ((int(key) if not isinstance(key, float) or float(key).is_integer() else float(key), int(weight)) for key, weight in values.items()),
+        key=lambda item: item[0],
+    )
+    return {
+        "values": [int(value) for value, _weight in ordered],
+        "weights": [int(weight) for _value, weight in ordered],
+    }
+
+
+def _product_fill_payload(config: ProductFillConfig) -> Dict[str, object]:
+    return {
+        "passive_fill_rate": float(config.passive_fill_rate),
+        "same_price_queue_share": float(config.same_price_queue_share),
+        "queue_pressure": float(config.queue_pressure),
+        "missed_fill_probability": float(config.missed_fill_probability),
+        "passive_adverse_selection_ticks": float(config.passive_adverse_selection_ticks),
+        "aggressive_slippage_ticks": float(config.aggressive_slippage_ticks),
+        "aggressive_adverse_selection_ticks": float(config.aggressive_adverse_selection_ticks),
+        "size_slippage_threshold": int(config.size_slippage_threshold),
+        "size_slippage_rate": float(config.size_slippage_rate),
+        "size_slippage_power": float(config.size_slippage_power),
+        "max_size_slippage_ticks": float(config.max_size_slippage_ticks),
+        "wide_spread_threshold": int(config.wide_spread_threshold) if config.wide_spread_threshold is not None else None,
+        "thin_depth_threshold": int(config.thin_depth_threshold),
+    }
+
+
+def _serialise_fill_model(fill_model: FillModel) -> Dict[str, object]:
+    products_payload: Dict[str, object] = {}
+    for product in PRODUCTS:
+        base_config = fill_model.product_overrides.get(product, fill_model.base_product_config())
+        products_payload[product] = {
+            "normal": _product_fill_payload(base_config.with_regime("normal")),
+            "thin_depth": _product_fill_payload(base_config.with_regime("thin_depth")),
+            "wide_spread": _product_fill_payload(base_config.with_regime("wide_spread")),
+            "one_sided": _product_fill_payload(base_config.with_regime("one_sided")),
+        }
+    return {
+        "fill_rate_multiplier": float(fill_model.fill_rate_multiplier),
+        "missed_fill_additive": float(fill_model.missed_fill_additive),
+        "slippage_multiplier": float(fill_model.slippage_multiplier),
+        "products": products_payload,
+    }
+
+
+def _serialise_simulation_context(context: StreamingSimulationContext) -> Dict[str, object]:
+    products_payload: Dict[str, object] = {}
+    for product in PRODUCTS:
+        calibration = context.calibration[product]
+        products_payload[product] = {
+            "start_candidates": [float(value) for value in calibration.get("start_candidates", [])],
+            "drift_per_tick": float(calibration.get("drift_per_tick", 0.0)),
+            "simulation_noise_std": float(calibration.get("simulation_noise_std", 0.0)),
+            "trade_active_prob": float(calibration.get("trade_active_prob", 0.0)),
+            "second_trade_prob": float(calibration.get("second_trade_prob", 0.0)),
+            "trade_buy_prob": float(calibration.get("trade_buy_prob", 0.0)),
+            "bot3_bid_rate": float(calibration.get("bot3_bid_rate", 0.0)),
+            "bot3_ask_rate": float(calibration.get("bot3_ask_rate", 0.0)),
+            "outer_spread": _serialise_histogram(calibration["outer_spread_counts"]),
+            "inner_spread": _serialise_histogram(calibration["inner_spread_counts"]),
+            "outer_bid_vol": _serialise_histogram(calibration["outer_bid_vol_counts"]),
+            "inner_bid_vol": _serialise_histogram(calibration["inner_bid_vol_counts"]),
+            "trade_qty": _serialise_histogram(calibration["trade_qty_counts"]),
+        }
+    return {"products": products_payload}
+
+
+def _serialise_perturbation(perturb: PerturbationConfig) -> Dict[str, object]:
+    return {
+        "passive_fill_scale": float(perturb.passive_fill_scale),
+        "missed_fill_additive": float(perturb.missed_fill_additive),
+        "spread_shift_ticks": int(perturb.spread_shift_ticks),
+        "order_book_volume_scale": float(perturb.order_book_volume_scale),
+        "price_noise_std": float(perturb.price_noise_std),
+        "latency_ticks": max(0, int(perturb.latency_ticks)),
+        "adverse_selection_ticks": float(perturb.adverse_selection_ticks),
+        "slippage_multiplier": float(perturb.slippage_multiplier),
+        "reentry_probability": float(perturb.reentry_probability),
+        "trade_matching_mode": str(perturb.trade_matching_mode),
+        "position_limits": {
+            product: max(1, int(_position_limit_for(product, perturb)))
+            for product in PRODUCTS
+        },
+        "shock_tick": None if perturb.shock_tick is None else max(0, int(perturb.shock_tick)),
+        "shock_by_product": {
+            product: float(perturb.shock_for(product))
+            for product in PRODUCTS
+            if float(perturb.shock_for(product)) != 0.0
+        },
+    }
+
+
+def run_rust_backend(
+    *,
+    trader_name: str,
+    trader_path: Path,
+    trader_overrides: Dict[str, object] | None,
+    fill_model: FillModel,
+    perturb: PerturbationConfig,
+    days: Sequence[int],
+    session_indices: Sequence[int],
+    run_name: str,
+    path_bucket_count: int,
+    workers: int,
+    access_scenario: AccessScenario | None = None,
+    print_trader_output: bool = False,
+    base_seed: int,
+) -> RustBackendRun:
+    access_scenario = access_scenario or NO_ACCESS_SCENARIO
+    if not rust_backend_supported(access_scenario=access_scenario, print_trader_output=print_trader_output):
+        raise RuntimeError("Rust Monte Carlo backend is not supported for this configuration")
+    binary = ensure_rust_backend_binary()
+    if binary is None:
+        raise RuntimeError("Rust Monte Carlo backend is unavailable on this machine")
+    binary_path, rust_bin_dir = binary
+    context = prepare_streaming_simulation_context(perturb)
+    worker_script = Path(__file__).resolve().with_name("rust_strategy_worker.py")
+    env = os.environ.copy()
+    env["PATH"] = os.pathsep.join([str(binary_path.parent), str(rust_bin_dir), env.get("PATH", "")])
+    with tempfile.TemporaryDirectory(prefix="prosperity_rust_mc_") as temp_dir_text:
+        temp_dir = Path(temp_dir_text)
+        overrides_path: Path | None = None
+        if trader_overrides:
+            overrides_path = temp_dir / "trader_overrides.json"
+            overrides_path.write_text(json.dumps(trader_overrides, sort_keys=True), encoding="utf-8")
+        config_path = temp_dir / "config.json"
+        output_path = temp_dir / "output.json"
+        payload = {
+            "run_name": run_name,
+            "trader_path": str(Path(trader_path).resolve()),
+            "trader_overrides_path": None if overrides_path is None else str(overrides_path.resolve()),
+            "python_bin": sys.executable,
+            "worker_script": str(worker_script.resolve()),
+            "base_seed": int(base_seed),
+            "days": [int(day) for day in days],
+            "session_indices": [int(index) for index in session_indices],
+            "worker_count": max(1, int(workers)),
+            "tick_count": int(context.tick_count),
+            "path_bucket_count": max(0, int(path_bucket_count)),
+            "print_trader_output": bool(print_trader_output),
+            "fill_model": _serialise_fill_model(fill_model),
+            "perturbation": _serialise_perturbation(perturb),
+            "simulation": _serialise_simulation_context(context),
+        }
+        config_path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
+        subprocess.run(
+            [str(binary_path), str(config_path), str(output_path)],
+            cwd=Path(__file__).resolve().parent.parent,
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        run_payload = json.loads(output_path.read_text(encoding="utf-8"))
+    profile = dict(run_payload.get("profile") or {})
+    sessions: list[SessionArtefacts] = []
+    for row in run_payload.get("sessions", []):
+        summary = dict(row["summary"])
+        access_payload = summary.get("access_scenario")
+        if not isinstance(access_payload, dict) or not access_payload:
+            access_payload = access_scenario.to_dict()
+        sessions.append(
+            SessionArtefacts(
+                run_name=str(row["run_name"]),
+                trader_name=trader_name,
+                mode="monte_carlo",
+                fill_model=fill_model.to_dict(),
+                perturbations=perturb.to_dict(),
+                summary=summary,
+                session_rows=list(row.get("session_rows") or []),
+                orders=[],
+                fills=[],
+                inventory_series=[],
+                pnl_series=[],
+                validation={},
+                fair_value_series=[],
+                fair_value_summary={},
+                behaviour={"summary": {}, "per_product": {}, "series": []},
+                behaviour_series=[],
+                access_scenario=access_payload,
+                path_metrics=[],
+            )
+        )
+    return RustBackendRun(
+        sessions=sessions,
+        path_bands=dict(run_payload.get("path_bands") or {}),
+        profile=profile,
     )
 
 

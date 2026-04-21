@@ -512,22 +512,56 @@ def _compact_behaviour(behaviour: Dict[str, object]) -> Dict[str, object]:
     return {key: value for key, value in behaviour.items() if key != "series"}
 
 
+def _cap_preview_rows(rows: Sequence[Dict[str, object]], options: OutputOptions, *, multiplier: int = 2) -> List[Dict[str, object]]:
+    limit = int(options.max_series_rows_per_product)
+    if limit <= 0:
+        return [dict(row) for row in rows]
+    hard_limit = max(1, limit * max(1, int(multiplier)))
+    if len(rows) <= hard_limit:
+        return [dict(row) for row in rows]
+    if hard_limit == 1:
+        return [dict(rows[-1])]
+    indices = {
+        min(len(rows) - 1, round(idx * (len(rows) - 1) / (hard_limit - 1)))
+        for idx in range(hard_limit)
+    }
+    return [dict(rows[idx]) for idx in sorted(indices)]
+
+
 def _sample_run_payload(
     result: SessionArtefacts,
     options: OutputOptions,
     replay_rows: Dict[str, List[Dict[str, object]]] | None = None,
 ) -> Dict[str, object]:
     rows = replay_rows or compact_replay_rows(result, options)
+    inventory_preview = _cap_preview_rows(rows["inventorySeries"], options)
+    pnl_preview = _cap_preview_rows(rows["pnlSeries"], options)
+    fair_preview = _cap_preview_rows(rows["fairValueSeries"], options)
+    fills_preview = _cap_preview_rows(rows["fills"], options)
+    order_intent_preview = _cap_preview_rows(rows["orderIntent"], options)
+    behaviour_preview = _cap_preview_rows(rows["behaviourSeries"], options)
     return {
         "runName": result.run_name,
         "summary": result.summary,
-        "inventorySeries": rows["inventorySeries"],
-        "pnlSeries": rows["pnlSeries"],
-        "fills": rows["fills"],
-        "orderIntent": rows["orderIntent"],
-        "fairValueSeries": rows["fairValueSeries"],
+        "inventorySeries": inventory_preview,
+        "inventorySeriesPreviewTruncated": len(inventory_preview) < len(rows["inventorySeries"]),
+        "inventorySeriesTotalCount": len(rows["inventorySeries"]),
+        "pnlSeries": pnl_preview,
+        "pnlSeriesPreviewTruncated": len(pnl_preview) < len(rows["pnlSeries"]),
+        "pnlSeriesTotalCount": len(rows["pnlSeries"]),
+        "fills": fills_preview,
+        "fillsPreviewTruncated": len(fills_preview) < len(rows["fills"]),
+        "fillsTotalCount": len(rows["fills"]),
+        "orderIntent": order_intent_preview,
+        "orderIntentPreviewTruncated": len(order_intent_preview) < len(rows["orderIntent"]),
+        "orderIntentTotalCount": len(rows["orderIntent"]),
+        "fairValueSeries": fair_preview,
+        "fairValueSeriesPreviewTruncated": len(fair_preview) < len(rows["fairValueSeries"]),
+        "fairValueSeriesTotalCount": len(rows["fairValueSeries"]),
         "behaviour": _compact_behaviour(result.behaviour),
-        "behaviourSeries": rows["behaviourSeries"],
+        "behaviourSeries": behaviour_preview,
+        "behaviourSeriesPreviewTruncated": len(behaviour_preview) < len(rows["behaviourSeries"]),
+        "behaviourSeriesTotalCount": len(rows["behaviourSeries"]),
     }
 
 
@@ -823,6 +857,8 @@ def build_dashboard_payload(
     scenario_analysis: Dict[str, object] | None = None,
     replay_rows: Dict[str, List[Dict[str, object]]] | None = None,
     monte_carlo_rows: Dict[str, Dict[str, List[Dict[str, object]]]] | None = None,
+    monte_carlo_path_bands: Dict[str, Dict[str, List[Dict[str, object]]]] | None = None,
+    monte_carlo_path_band_method: Dict[str, object] | None = None,
     output_options: OutputOptions | None = None,
     runtime_context: Dict[str, object] | None = None,
 ) -> Dict[str, object]:
@@ -897,7 +933,7 @@ def build_dashboard_payload(
             for result in monte_carlo_results
             if result.inventory_series
         ]
-        path_bands = _aggregate_mc_path_bands(monte_carlo_results)
+        path_bands = monte_carlo_path_bands or _aggregate_mc_path_bands(monte_carlo_results)
         has_all_session_bands = any(
             rows
             for metric_bands in path_bands.values()
@@ -908,7 +944,7 @@ def build_dashboard_payload(
                 "analysisFair": path_bands["analysisFair"],
                 "mid": path_bands["mid"],
             }
-            path_band_method = _path_band_method(monte_carlo_results, output_options)
+            path_band_method = monte_carlo_path_band_method or _path_band_method(monte_carlo_results, output_options)
         else:
             fair_value_bands = {
                 "analysisFair": fair_path_bands(sample_runs, "analysis_fair"),
