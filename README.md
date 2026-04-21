@@ -9,6 +9,15 @@ It supports deterministic replay, configurable fill models, trader comparison, p
 
 Use it for relative strategy selection, execution-risk diagnosis and handoff-ready research evidence. It is not an official exchange simulator.
 
+## Copyright
+
+Copyright (c) 2026 Anannye Naik. All rights reserved.
+
+No licence is granted to copy, modify, distribute or reuse the original code or
+documentation in this repository without prior written permission. Third-party
+or public datasets and other third-party material remain under their own terms.
+See [LICENSE](LICENSE).
+
 ## Repository Layout
 
 ```text
