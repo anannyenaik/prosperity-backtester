@@ -1,14 +1,10 @@
-# Output Benchmarks
+# Benchmarks
 
-Use the benchmark helper when you want a quick, reproducible view of what light mode saves and what full mode costs.
+Use the benchmark helpers when you want reproducible storage and runtime evidence.
 
-For runtime diagnosis rather than storage footprint, use:
+Use `analysis/benchmark_outputs.py` for storage footprint and `analysis/benchmark_runtime.py` for runtime.
 
-```bash
-python analysis/profile_replay.py strategies/trader.py --compare-trader strategies/starter.py --data-dir data/round1 --fill-mode empirical_baseline
-```
-
-## Reproducible Command
+## Storage Benchmark
 
 ```bash
 python analysis/benchmark_outputs.py --output-dir backtests/repo_output_benchmark
@@ -36,28 +32,59 @@ Measured on 2026-04-21 with the default command above:
 | `mc_light` | 3.89 MB | 6 | Light Monte Carlo keeps exact final distribution stats and all-session path bands without duplicate sample files. |
 | `mc_full` | 7.48 MB | 18 | Full Monte Carlo roughly doubles bundle size because sample-path files, session manifests and sidecars are written explicitly. |
 
-## Runtime Diagnosis
+## Runtime Benchmark
 
-Measured on 2026-04-21.
+Reproducible command:
 
-Baseline public `main` was a clean clone at commit `3808b3e`.
+```bash
+python analysis/benchmark_runtime.py --output-dir backtests/runtime_benchmark
+```
 
-| Case | Public `main` | Current repo | What changed |
+To compare against an earlier report from another worktree or clone:
+
+```bash
+python analysis/benchmark_runtime.py --output-dir backtests/runtime_benchmark --compare-report path/to/benchmark_report.json
+```
+
+Default runtime benchmark fixture:
+
+- replay and compare use `strategies/trader.py` against tracked day `0`
+- pack cases use `analysis/research_pack.py`
+- Monte Carlo uses `examples/benchmark_trader.py`
+- Monte Carlo synthetic sessions are capped to `250` ticks so quick, default and heavy tiers all stay local and reproducible
+- workers default to `1 2 4`
+
+Measured on 2026-04-21 against:
+
+- clean `HEAD` worktree at commit `fd9db66`
+- current working tree with the changes in this pass
+
+| Case | Clean `HEAD` | Current repo | What changed |
 | --- | ---: | ---: | --- |
-| day `0` light replay, `strategies/trader.py` | `14.1s` | `2.5s` | Replay rows are compacted once and then reused for the dashboard plus bundle write. |
-| day `0` light compare, `strategies/trader.py` vs `strategies/starter.py` | `3.1s` | `2.7s` | Day-0 compare stays cheap enough for routine branch testing. |
-| day `0` Monte Carlo, `examples/benchmark_trader.py`, `8` sessions, `2` samples, `1` worker | timed out after `124s` | `18.9s` | Sample-session compaction is cached and reused instead of being rebuilt twice. |
-| same Monte Carlo case, `4` workers | timed out after `124s` | `10.4s` | Worker parallelism becomes useful once reporting overhead is removed. |
-| fast pack, `strategies/trader.py` | not available on public `main` | `6.1s` | Replay, compare and smoke Monte Carlo now have an explicit routine preset. |
-| validation pack, `strategies/trader.py` | not available on public `main` | `24.5s` | Three-day validation is deliberate but still local-iteration friendly. |
+| day `0` light replay, `strategies/trader.py` | `2.440s` | `2.326s` | Replay stays fast while provenance and newer UX metadata are preserved. |
+| day `0` light compare, `strategies/trader.py` vs `strategies/starter.py` | `2.369s` | `2.503s` | Compare is still short-loop friendly while now exposing merged PnL, limit overrides and richer manifests. |
+| fast pack | `7.747s` | `5.561s` | The daily pack benefits from cheaper Monte Carlo reporting and better reuse. |
+| validation pack | `22.188s` | `20.653s` | Three-day validation stays deliberate but improves slightly. |
+| Monte Carlo quick light, `64/8`, `1` worker | `2.994s` | `2.690s` | Unsampled sessions no longer build full replay artefacts. |
+| Monte Carlo default light, `100/10`, `1` worker | `5.020s` | `4.166s` | One-worker practical throughput improves by about `17%`. |
+| Monte Carlo heavy light, `192/16`, `1` worker | `10.578s` | `7.221s` | One-worker heavy throughput improves by about `31.7%`. |
+| Monte Carlo default full, `100/10`, `1` worker | `5.940s` | `4.450s` | Even full-profile Monte Carlo benefits from skipping unnecessary non-sample work. |
+| Monte Carlo default full without sample-path files and session manifests, `1` worker | `5.397s` | `3.961s` | The cost of debug artefacts is now easier to isolate and control. |
 
-`analysis/profile_replay.py` on the current repo reports the slowest public day as day `0`, with about:
+`analysis/profile_replay.py` on the current repo reports the slowest replay day as day `-1`, with about:
 
-- `1.74s` in the market session
-- `0.74s` in replay-row compaction
-- `0.35s` in dashboard build plus bundle write
+- `1.641s` in the market session
+- `0.775s` in replay-row compaction
+- `0.603s` in bundle write
 
-The practical bottleneck was duplicate reporting work, not the core simulator. That is why the current repo focuses on faster Python reporting and clearer workflow separation rather than introducing a Rust backend prematurely.
+Focused Monte Carlo profiling on the tracked `250`-tick fixture now shows the main remaining cost centres as:
+
+- `run_market_session`
+- `generate_synthetic_market_days`
+- all-session path-band aggregation
+- bundle writing and initial git provenance capture
+
+The main improvement in this pass is that unsampled Monte Carlo sessions stop paying for full fair-value, behaviour and replay-series construction. That is why the one-worker default and heavy cases improve materially without needing a compiled backend.
 
 ## Files By Mode
 

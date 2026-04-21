@@ -72,7 +72,7 @@ python -m prosperity_backtester inspect --round 2 --data-dir data/round2 --days 
 Replay one trader. This now defaults to day `0` for routine work:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --name current --data-dir data/round1 --fill-mode empirical_baseline
+python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline
 ```
 
 Replay against a tracked live export:
@@ -84,14 +84,16 @@ python -m prosperity_backtester replay examples/trader_round1_v9.py --name live_
 Replay with stricter or disabled passive trade-print matching when you want a trust check against optimistic fill assumptions:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --name current --data-dir data/round1 --fill-mode empirical_baseline --match-trades worse
-python -m prosperity_backtester replay strategies/trader.py --name current --data-dir data/round1 --fill-mode empirical_baseline --match-trades none
+python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --match-trades worse
+python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --match-trades none
+python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --limit INTARIAN_PEPPER_ROOT:40 --print-trader-output
 ```
 
 Compare trader scripts. This also defaults to day `0`:
 
 ```bash
-python -m prosperity_backtester compare strategies/trader.py examples/trader_round1_v9.py --names current candidate --data-dir data/round1 --fill-mode empirical_baseline
+python -m prosperity_backtester compare strategies/trader.py examples/trader_round1_v9.py --names current candidate --data data/round1 --fill-mode empirical_baseline
+python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --names current starter --data data/round1 --fill-mode empirical_baseline --merge-pnl
 ```
 
 Run Monte Carlo:
@@ -137,18 +139,19 @@ python analysis/profile_replay.py strategies/trader.py --compare-trader strategi
 
 Measured on 2026-04-21 with the current `strategies/trader.py`:
 
-- default day-0 replay: about `2.5s`
-- default day-0 compare: about `2.7s`
-- fast pack: about `6.1s`
-- validation pack: about `24.5s`
-- full-day Monte Carlo with `8` sessions and `2` saved samples: about `18.9s` on `1` worker, about `10.4s` on `4` workers
+- default day-0 replay: about `2.33s`
+- default day-0 compare: about `2.50s`
+- fast pack: about `6.79s`
+- validation pack: about `24.42s`
 
-Measured from a clean clone of public `main` at commit `3808b3e` on the same date:
+Measured with `analysis/benchmark_runtime.py` on the tracked `250`-tick Monte Carlo fixture:
 
-- the same day-0 replay took about `14.1s`
-- the same full-day Monte Carlo case ran past `124s` before timing out
+- default light Monte Carlo: about `4.17s` on `1` worker, `2.30s` on `4` workers
+- heavy light Monte Carlo: about `7.22s` on `1` worker, `3.72s` on `4` workers
+- versus clean `HEAD`, one-worker default Monte Carlo improved by about `17%`
+- versus clean `HEAD`, one-worker heavy Monte Carlo improved by about `31.7%`
 
-Most of the gain came from removing duplicate replay-row compaction in the reporting path. The practical blocker was not the core session engine, so a Rust rewrite is not justified yet.
+The main gain comes from no longer building full replay artefacts for unsampled Monte Carlo sessions. Exact all-session path bands are still preserved.
 
 Forensic work is still deliberate full-profile work and should be treated as a minute-scale task rather than part of the normal branch loop.
 
@@ -157,6 +160,8 @@ Forensic work is still deliberate full-profile work and should be treated as a m
 Compared with simpler replay backtesters, this repo now keeps a short daily loop through day-0 defaults, `--match-trades`, per-day PnL output, `--open`, and `serve --latest`, while still carrying compare, optimisation, calibration, scenarios and Round 2 research.
 
 Compared with Monte Carlo-first repos, the current performance story is practical rather than architectural. Use light mode, explicit fast and validation packs, and `--workers` once session counts are high enough. Reach for a lower-level backend only if future profiling shows the session engine, rather than reporting and bundle construction, becoming the true bottleneck.
+
+See [docs/REFERENCE_COMPARISON.md](docs/REFERENCE_COMPARISON.md) for the detailed comparison against the Chris Roberts and Nabayan Saha public repos.
 
 Run a parameter sweep or optimisation:
 
@@ -245,6 +250,8 @@ Serve the repo root:
 ```bash
 python -m prosperity_backtester serve --port 5555
 python -m prosperity_backtester serve --latest
+python -m prosperity_backtester serve --latest-type replay
+python -m prosperity_backtester serve --latest-type monte-carlo
 ```
 
 Open:
@@ -253,7 +260,7 @@ Open:
 http://127.0.0.1:5555/
 ```
 
-You can drag one or more `dashboard.json` bundles into the app, use **Open latest run**, or use **Browse local server** to discover bundles under the served directory. The server reads `manifest.json` first when available, so discovery stays fast for large bundles.
+You can drag one or more `dashboard.json` bundles into the app, use **Open latest run**, **Latest replay**, **Latest MC**, or **Latest compare**, or use **Browse local server** to discover bundles under the served directory. The server reads `manifest.json` and `run_registry.jsonl` first when available, so discovery stays fast for large bundles and keeps workflow metadata visible.
 
 To finish a workflow and jump straight into the written bundle:
 
@@ -285,6 +292,21 @@ The helper uses `examples/benchmark_trader.py`, copies the first 250 timestamps 
 - `benchmark_report.md`
 
 The default benchmark case uses 4 Monte Carlo sessions and 2 saved samples so it stays quick. Use `--trader`, `--sessions`, `--sample-sessions` or `--fixture-timestamps` when you need strategy-specific numbers. See [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+
+## Runtime Benchmark
+
+Benchmark the day-to-day loop, pack tiers and Monte Carlo scaling:
+
+```bash
+python analysis/benchmark_runtime.py --output-dir backtests/runtime_benchmark
+```
+
+This writes:
+
+- `benchmark_report.json`
+- `benchmark_report.md`
+
+Use `--compare-report` to compare the current repo against an earlier report from another worktree or clone.
 
 ## Bundle Types
 
@@ -339,6 +361,10 @@ Every `manifest.json` also records:
 - bundle data contract
 - canonical, sidecar and debug file lists
 - total bundle size and file count
+- command provenance
+- workflow tier
+- backend, parallelism and worker metadata
+- git commit, branch and dirty-worktree state when available
 
 ## Interpreting Outputs
 
@@ -357,6 +383,10 @@ Every `manifest.json` also records:
 - `round2_maf_sensitivity.csv`: access value before and after tested MAF levels.
 - Monte Carlo `mean`, `p50`, `p05` and expected shortfall: average, typical, downside and tail-risk evidence.
 - Monte Carlo `pathBands`: all-session analysis fair, mid, inventory and PnL quantiles for path diagnostics. Sampled runs remain examples, not the source of the bands.
+
+## New Round Handoff
+
+Use [docs/NEW_ROUND_CHECKLIST.md](docs/NEW_ROUND_CHECKLIST.md) when a new round drops. It covers data onboarding, product registration, mechanism hooks, templates, trust checks, benchmark refresh and docs updates.
 
 ## Config Files
 

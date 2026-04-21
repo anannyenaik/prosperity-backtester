@@ -34,6 +34,13 @@ export interface ServerRunMeta {
   sizeBytes?: number | null
   dashboardSizeBytes?: number | null
   fileCount?: number | null
+  workflowTier?: string | null
+  engineBackend?: string | null
+  parallelism?: string | null
+  workerCount?: number | null
+  gitCommit?: string | null
+  gitDirty?: boolean | null
+  source?: string | null
 }
 
 export const useStore = create<DashboardStore>((set, get) => ({

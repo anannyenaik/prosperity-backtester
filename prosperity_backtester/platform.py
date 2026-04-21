@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import contextlib
 import csv
+import io
 import json
 import math
 import random
@@ -8,7 +10,7 @@ import statistics
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from .datamodel import Listing, Observation, Order, OrderDepth, Trade, TradingState
 from .dataset import BookSnapshot, DayDataset, TradePrint
@@ -36,6 +38,7 @@ class PerturbationConfig:
     reentry_probability: float = 1.0
     trade_matching_mode: str = "all"
     inventory_limit_scale: float = 1.0
+    position_limits_by_product: Dict[str, int] = field(default_factory=dict)
     synthetic_tick_limit: Optional[int] = None
     shock_tick: Optional[int] = None
     shock_by_product: Dict[str, float] = field(default_factory=dict)
@@ -208,6 +211,8 @@ def _scaled_snapshot(
 
 
 def _position_limit_for(product: str, perturb: PerturbationConfig) -> int:
+    if product in perturb.position_limits_by_product:
+        return max(1, int(perturb.position_limits_by_product[product]))
     base = PRODUCT_METADATA[product].position_limit
     return max(1, int(round(base * perturb.inventory_limit_scale)))
 
@@ -690,6 +695,177 @@ def _summarise_slippage(fills_log: Sequence[Dict[str, object]]) -> Dict[str, obj
     }
 
 
+def _new_slippage_accumulator() -> Dict[str, object]:
+    return {
+        "per_product": {
+            product: {
+                "slippage_cost": 0.0,
+                "slippage_qty": 0,
+                "slippage_fill_count": 0,
+                "average_slippage_ticks": 0.0,
+                "average_size_slippage_ticks": 0.0,
+                "size_slippage_tick_qty": 0.0,
+                "aggressive_slippage_cost": 0.0,
+                "passive_adverse_cost": 0.0,
+            }
+            for product in PRODUCTS
+        },
+        "total_cost": 0.0,
+        "total_qty": 0,
+        "total_slip_ticks": 0.0,
+        "total_size_ticks": 0.0,
+    }
+
+
+def _record_slippage_fill(accumulator: Dict[str, object], fill: Mapping[str, object]) -> None:
+    product = str(fill.get("product"))
+    per_product = accumulator.get("per_product", {})
+    if product not in per_product:
+        return
+    qty = abs(int(fill.get("quantity", 0)))
+    slip_ticks = float(fill.get("slippage_ticks") or 0.0)
+    size_ticks = float(fill.get("size_slippage_ticks") or 0.0)
+    cost = slip_ticks * qty
+    bucket = per_product[product]
+    bucket["slippage_cost"] = float(bucket["slippage_cost"]) + cost
+    bucket["slippage_qty"] = int(bucket["slippage_qty"]) + qty
+    bucket["slippage_fill_count"] = int(bucket["slippage_fill_count"]) + 1
+    bucket["size_slippage_tick_qty"] = float(bucket["size_slippage_tick_qty"]) + size_ticks * qty
+    if str(fill.get("kind", "")).startswith("aggressive"):
+        bucket["aggressive_slippage_cost"] = float(bucket["aggressive_slippage_cost"]) + cost
+    else:
+        bucket["passive_adverse_cost"] = float(bucket["passive_adverse_cost"]) + cost
+    accumulator["total_cost"] = float(accumulator["total_cost"]) + cost
+    accumulator["total_qty"] = int(accumulator["total_qty"]) + qty
+    accumulator["total_slip_ticks"] = float(accumulator["total_slip_ticks"]) + slip_ticks * qty
+    accumulator["total_size_ticks"] = float(accumulator["total_size_ticks"]) + size_ticks * qty
+
+
+def _finalize_slippage_accumulator(accumulator: Mapping[str, object]) -> Dict[str, object]:
+    per_product = {
+        product: dict(values)
+        for product, values in (accumulator.get("per_product") or {}).items()
+    }
+    for bucket in per_product.values():
+        qty = int(bucket.get("slippage_qty", 0) or 0)
+        if qty > 0:
+            bucket["average_slippage_ticks"] = float(bucket["slippage_cost"]) / qty
+            bucket["average_size_slippage_ticks"] = float(bucket["size_slippage_tick_qty"]) / qty
+    total_qty = int(accumulator.get("total_qty", 0) or 0)
+    total_cost = float(accumulator.get("total_cost", 0.0) or 0.0)
+    total_slip_ticks = float(accumulator.get("total_slip_ticks", 0.0) or 0.0)
+    total_size_ticks = float(accumulator.get("total_size_ticks", 0.0) or 0.0)
+    return {
+        "total_slippage_cost": total_cost,
+        "total_slippage_qty": total_qty,
+        "average_slippage_ticks": 0.0 if total_qty == 0 else total_slip_ticks / total_qty,
+        "average_size_slippage_ticks": 0.0 if total_qty == 0 else total_size_ticks / total_qty,
+        "per_product": per_product,
+    }
+
+
+class _NullWriter:
+    def write(self, _text: str) -> int:
+        return 0
+
+    def flush(self) -> None:
+        return None
+
+
+class _StreamingPathMetricCollector:
+    def __init__(self, market_days: Sequence[DayDataset], max_rows_per_product: int):
+        self._rows: List[Dict[str, object]] = []
+        self._bucket_index_by_product = {product: 0 for product in PRODUCTS}
+        self._state: Dict[tuple[str, int], Dict[str, object]] = {}
+        day_count = max(1, len(market_days))
+        per_day_limit = 0 if max_rows_per_product <= 0 else max(1, max_rows_per_product // day_count)
+        for product in PRODUCTS:
+            for day_dataset in market_days:
+                length = len(day_dataset.timestamps)
+                ranges = (
+                    [(idx, idx + 1) for idx in range(length)]
+                    if per_day_limit <= 0 or length <= per_day_limit
+                    else _path_bucket_ranges(length, per_day_limit)
+                )
+                self._state[(product, int(day_dataset.day))] = {
+                    "ranges": ranges,
+                    "row_index": 0,
+                    "bucket_cursor": 0,
+                    "current": None,
+                }
+
+    def add(
+        self,
+        *,
+        day: int,
+        product: str,
+        timestamp: int,
+        analysis_fair: float | None,
+        mid: float | None,
+        inventory: int,
+        pnl: float | None,
+    ) -> None:
+        state = self._state.get((product, int(day)))
+        if state is None:
+            return
+        ranges = state["ranges"]
+        cursor = int(state["bucket_cursor"])
+        row_index = int(state["row_index"])
+        if cursor >= len(ranges):
+            return
+        start, end = ranges[cursor]
+        bucket = state["current"]
+        if bucket is None:
+            bucket = {
+                "day": int(day),
+                "timestamp": int(timestamp),
+                "product": product,
+                "analysis_fair": analysis_fair,
+                "mid": mid,
+                "inventory": inventory,
+                "pnl": pnl,
+                "bucket_index": self._bucket_index_by_product[product],
+                "bucket_start_timestamp": int(timestamp),
+                "bucket_end_timestamp": int(timestamp),
+                "bucket_count": end - start,
+            }
+        bucket["timestamp"] = int(timestamp)
+        bucket["analysis_fair"] = analysis_fair
+        bucket["mid"] = mid
+        bucket["inventory"] = inventory
+        bucket["pnl"] = pnl
+        bucket["bucket_end_timestamp"] = int(timestamp)
+        for metric, value in (
+            ("analysis_fair", analysis_fair),
+            ("mid", mid),
+            ("inventory", float(inventory)),
+            ("pnl", pnl),
+        ):
+            if value is None:
+                continue
+            min_key = f"{metric}_bucket_min"
+            max_key = f"{metric}_bucket_max"
+            last_key = f"{metric}_bucket_last"
+            numeric = float(value)
+            if min_key not in bucket or numeric < float(bucket[min_key]):
+                bucket[min_key] = numeric
+            if max_key not in bucket or numeric > float(bucket[max_key]):
+                bucket[max_key] = numeric
+            bucket[last_key] = numeric
+        row_index += 1
+        state["row_index"] = row_index
+        if row_index >= end:
+            self._rows.append(dict(bucket))
+            self._bucket_index_by_product[product] += 1
+            state["bucket_cursor"] = cursor + 1
+            state["current"] = None
+        else:
+            state["current"] = bucket
+
+    def rows(self) -> List[Dict[str, object]]:
+        return list(self._rows)
+
+
 
 
 def run_market_session(
@@ -705,6 +881,7 @@ def run_market_session(
     capture_path_metrics: bool = False,
     path_bucket_count: int = 800,
     access_scenario: AccessScenario | None = None,
+    print_trader_output: bool = False,
 ) -> SessionArtefacts:
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
     ledgers = {product: ProductLedger() for product in PRODUCTS}
@@ -718,7 +895,18 @@ def run_market_session(
     pnl_series: List[Dict[str, object]] = []
     session_rows: List[Dict[str, object]] = []
     total_limit_breaches = 0
+    total_order_count = 0
+    total_fill_count = 0
     global_step = 0
+    running_peak = float("-inf")
+    max_drawdown = 0.0
+    stdout_sink = _NullWriter()
+    slippage_accumulator = _new_slippage_accumulator()
+    path_metric_collector = (
+        _StreamingPathMetricCollector(market_days, max(0, int(path_bucket_count)))
+        if capture_path_metrics and not capture_full_output
+        else None
+    )
 
     for day_dataset in market_days:
         for ts in day_dataset.timestamps:
@@ -747,7 +935,11 @@ def run_market_session(
                 position={product: ledgers[product].position for product in PRODUCTS},
                 observations=Observation({}, {}),
             )
-            result = trader.run(state)
+            if print_trader_output:
+                result = trader.run(state)
+            else:
+                with contextlib.redirect_stdout(stdout_sink):
+                    result = trader.run(state)
             if not isinstance(result, tuple) or len(result) != 3:
                 raise RuntimeError(f"Trader returned unexpected result at {ts}: {result!r}")
             submitted_orders_raw, conversions, trader_data = result
@@ -758,6 +950,7 @@ def run_market_session(
 
             own_trades_tick = {product: [] for product in PRODUCTS}
             market_trades_tick = {product: [] for product in PRODUCTS}
+            total_mtm_for_tick = 0.0
 
             for product in PRODUCTS:
                 snapshot = tick_snapshots[product]
@@ -780,44 +973,50 @@ def run_market_session(
 
                 best_bid = snapshot.bids[0][0] if snapshot.bids else None
                 best_ask = snapshot.asks[0][0] if snapshot.asks else None
-                _product_config, fill_regime = fill_model.config_for(product, snapshot.bids, snapshot.asks)
-                for order in due_orders.get(product, []):
-                    qty = int(order.quantity)
-                    order_role = "passive"
-                    distance_to_touch = None
-                    if qty > 0 and best_ask is not None:
-                        order_role = "aggressive" if int(order.price) >= int(best_ask) else "passive"
-                        distance_to_touch = int(best_ask) - int(order.price)
-                    elif qty < 0 and best_bid is not None:
-                        order_role = "aggressive" if int(order.price) <= int(best_bid) else "passive"
-                        distance_to_touch = int(order.price) - int(best_bid)
-                    orders_log.append({
-                        "timestamp": ts,
-                        "product": product,
-                        "submitted_price": int(order.price),
-                        "submitted_quantity": qty,
-                        "position_before": state.position.get(product, 0),
-                        "fill_model": fill_model.name,
-                        "latency_ticks": perturb.latency_ticks,
-                        "day": day_dataset.day,
-                        "best_bid": best_bid,
-                        "best_ask": best_ask,
-                        "mid": snapshot.mid,
-                        "reference_fair": snapshot.reference_fair,
-                        "order_role": order_role,
-                        "distance_to_touch": distance_to_touch,
-                        "fill_regime": fill_regime,
-                        "access_scenario": access_scenario.name,
-                        "access_active": access_extra_fraction > 0,
-                        "access_extra_fraction": access_extra_fraction,
-                    })
+                product_orders = due_orders.get(product, [])
+                total_order_count += len(product_orders)
+                if capture_full_output:
+                    _product_config, fill_regime = fill_model.config_for(product, snapshot.bids, snapshot.asks)
+                    for order in product_orders:
+                        qty = int(order.quantity)
+                        order_role = "passive"
+                        distance_to_touch = None
+                        if qty > 0 and best_ask is not None:
+                            order_role = "aggressive" if int(order.price) >= int(best_ask) else "passive"
+                            distance_to_touch = int(best_ask) - int(order.price)
+                        elif qty < 0 and best_bid is not None:
+                            order_role = "aggressive" if int(order.price) <= int(best_bid) else "passive"
+                            distance_to_touch = int(order.price) - int(best_bid)
+                        orders_log.append({
+                            "timestamp": ts,
+                            "product": product,
+                            "submitted_price": int(order.price),
+                            "submitted_quantity": qty,
+                            "position_before": state.position.get(product, 0),
+                            "fill_model": fill_model.name,
+                            "latency_ticks": perturb.latency_ticks,
+                            "day": day_dataset.day,
+                            "best_bid": best_bid,
+                            "best_ask": best_ask,
+                            "mid": snapshot.mid,
+                            "reference_fair": snapshot.reference_fair,
+                            "order_role": order_role,
+                            "distance_to_touch": distance_to_touch,
+                            "fill_regime": fill_regime,
+                            "access_scenario": access_scenario.name,
+                            "access_active": access_extra_fraction > 0,
+                            "access_extra_fraction": access_extra_fraction,
+                        })
+                total_fill_count += len(product_fills)
                 for fill in product_fills:
-                    fill["day"] = day_dataset.day
-                    fill["mid"] = snapshot.mid
-                    fill["reference_fair"] = snapshot.reference_fair
-                    fill["best_bid"] = best_bid
-                    fill["best_ask"] = best_ask
-                    fills_log.append(fill)
+                    _record_slippage_fill(slippage_accumulator, fill)
+                    if capture_full_output:
+                        fill["day"] = day_dataset.day
+                        fill["mid"] = snapshot.mid
+                        fill["reference_fair"] = snapshot.reference_fair
+                        fill["best_bid"] = best_bid
+                        fill["best_ask"] = best_ask
+                        fills_log.append(fill)
                     if fill["side"] == "buy":
                         own_trades_tick[product].append(Trade(product, fill["price"], fill["quantity"], "SUBMISSION", "BOT", ts))
                     else:
@@ -828,15 +1027,33 @@ def run_market_session(
                         Trade(residual.symbol, residual.price, residual.quantity, residual.buyer, residual.seller, residual.timestamp)
                     )
 
-                pnl_row, inventory_row = _record_series_row(ts, product, ledgers[product], snapshot)
-                pnl_row["day"] = day_dataset.day
-                inventory_row["day"] = day_dataset.day
-                pnl_series.append(pnl_row)
-                inventory_series.append(inventory_row)
+                if capture_full_output:
+                    pnl_row, inventory_row = _record_series_row(ts, product, ledgers[product], snapshot)
+                    pnl_row["day"] = day_dataset.day
+                    inventory_row["day"] = day_dataset.day
+                    pnl_series.append(pnl_row)
+                    inventory_series.append(inventory_row)
+                    total_mtm_for_tick += float(pnl_row["mtm"])
+                else:
+                    mark = snapshot.reference_fair if snapshot.reference_fair is not None else snapshot.mid
+                    product_mtm = ledgers[product].mtm(mark)
+                    total_mtm_for_tick += float(product_mtm)
+                    if path_metric_collector is not None:
+                        path_metric_collector.add(
+                            day=day_dataset.day,
+                            product=product,
+                            timestamp=ts,
+                            analysis_fair=snapshot.reference_fair,
+                            mid=snapshot.mid,
+                            inventory=ledgers[product].position,
+                            pnl=product_mtm,
+                        )
 
             prev_own_trades = own_trades_tick
             prev_market_trades = market_trades_tick
             global_step += 1
+            running_peak = max(running_peak, total_mtm_for_tick)
+            max_drawdown = max(max_drawdown, running_peak - total_mtm_for_tick)
 
         maf_cost_for_row = access_scenario.maf_cost if day_dataset is market_days[-1] else 0.0
         gross_day_pnl = sum(ledgers[p].mtm(day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get(p).reference_fair if day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get(p) else None) for p in PRODUCTS)
@@ -858,7 +1075,7 @@ def run_market_session(
     for product in PRODUCTS:
         snap = final_day.books_by_timestamp[final_ts].get(product)
         final_marks[product] = None if snap is None else (snap.reference_fair if snap.reference_fair is not None else snap.mid)
-    slippage_summary = _summarise_slippage(fills_log)
+    slippage_summary = _summarise_slippage(fills_log) if capture_full_output else _finalize_slippage_accumulator(slippage_accumulator)
     per_product_summary = {
         product: {
             "cash": ledgers[product].cash,
@@ -872,61 +1089,57 @@ def run_market_session(
         }
         for product in PRODUCTS
     }
-    fair_rows = infer_market_fair_rows(market_days)
-    _apply_fill_markouts(fills_log, fair_rows)
-    fair_lookup = {(int(row["day"]), str(row["product"]), int(row["timestamp"])): row for row in fair_rows}
-    for row in orders_log:
-        fair_row = fair_lookup.get((int(row["day"]), str(row["product"]), int(row["timestamp"])))
-        analysis_fair = None if fair_row is None else fair_row.get("analysis_fair")
-        row["analysis_fair"] = analysis_fair
-        if analysis_fair is None:
-            row["signed_edge_to_analysis_fair"] = None
-        elif int(row["submitted_quantity"]) > 0:
-            row["signed_edge_to_analysis_fair"] = float(analysis_fair) - float(row["submitted_price"])
-        elif int(row["submitted_quantity"]) < 0:
-            row["signed_edge_to_analysis_fair"] = float(row["submitted_price"]) - float(analysis_fair)
-        else:
-            row["signed_edge_to_analysis_fair"] = None
-    for row in fills_log:
-        fair_row = fair_lookup.get((int(row["day"]), str(row["product"]), int(row["timestamp"])))
-        analysis_fair = None if fair_row is None else fair_row.get("analysis_fair")
-        row["analysis_fair"] = analysis_fair
-        if analysis_fair is None:
-            row["signed_edge_to_analysis_fair"] = None
-        elif row.get("side") == "buy":
-            row["signed_edge_to_analysis_fair"] = float(analysis_fair) - float(row["price"])
-        else:
-            row["signed_edge_to_analysis_fair"] = float(row["price"]) - float(analysis_fair)
+    if capture_full_output:
+        fair_rows = infer_market_fair_rows(market_days)
+        _apply_fill_markouts(fills_log, fair_rows)
+        fair_lookup = {(int(row["day"]), str(row["product"]), int(row["timestamp"])): row for row in fair_rows}
+        for row in orders_log:
+            fair_row = fair_lookup.get((int(row["day"]), str(row["product"]), int(row["timestamp"])))
+            analysis_fair = None if fair_row is None else fair_row.get("analysis_fair")
+            row["analysis_fair"] = analysis_fair
+            if analysis_fair is None:
+                row["signed_edge_to_analysis_fair"] = None
+            elif int(row["submitted_quantity"]) > 0:
+                row["signed_edge_to_analysis_fair"] = float(analysis_fair) - float(row["submitted_price"])
+            elif int(row["submitted_quantity"]) < 0:
+                row["signed_edge_to_analysis_fair"] = float(row["submitted_price"]) - float(analysis_fair)
+            else:
+                row["signed_edge_to_analysis_fair"] = None
+        for row in fills_log:
+            fair_row = fair_lookup.get((int(row["day"]), str(row["product"]), int(row["timestamp"])))
+            analysis_fair = None if fair_row is None else fair_row.get("analysis_fair")
+            row["analysis_fair"] = analysis_fair
+            if analysis_fair is None:
+                row["signed_edge_to_analysis_fair"] = None
+            elif row.get("side") == "buy":
+                row["signed_edge_to_analysis_fair"] = float(analysis_fair) - float(row["price"])
+            else:
+                row["signed_edge_to_analysis_fair"] = float(row["price"]) - float(analysis_fair)
 
-    fair_summary = summarize_fair_rows(fair_rows)
-    behaviour = analyse_behaviour(
-        orders=orders_log,
-        fills=fills_log,
-        inventory_series=inventory_series,
-        pnl_series=pnl_series,
-        fair_value_series=fair_rows,
-        include_series=capture_full_output,
-    )
-    path_metrics = (
-        _path_metric_rows(
+        fair_summary = summarize_fair_rows(fair_rows)
+        behaviour = analyse_behaviour(
+            orders=orders_log,
+            fills=fills_log,
             inventory_series=inventory_series,
             pnl_series=pnl_series,
-            fair_rows=fair_rows,
-            max_rows_per_product=max(0, int(path_bucket_count)),
+            fair_value_series=fair_rows,
+            include_series=True,
         )
-        if capture_path_metrics
-        else []
-    )
-    total_series = {}
-    for row in pnl_series:
-        total_series.setdefault((int(row["day"]), int(row["timestamp"])), 0.0)
-        total_series[(int(row["day"]), int(row["timestamp"]))] += float(row.get("mtm", 0.0))
-    total_path = [value for _, value in sorted(total_series.items())]
-    running_peak = float("-inf")
-    max_drawdown = 0.0
-    for value in total_path:
-        running_peak = max(running_peak, value)
-        max_drawdown = max(max_drawdown, running_peak - value)
+        path_metrics = (
+            _path_metric_rows(
+                inventory_series=inventory_series,
+                pnl_series=pnl_series,
+                fair_rows=fair_rows,
+                max_rows_per_product=max(0, int(path_bucket_count)),
+            )
+            if capture_path_metrics
+            else []
+        )
+    else:
+        fair_rows = []
+        fair_summary = {}
+        behaviour = {"summary": {}, "per_product": {}, "series": []}
+        path_metrics = [] if path_metric_collector is None else path_metric_collector.rows()
     gross_final_pnl = sum(item["final_mtm"] for item in per_product_summary.values())
     maf_cost = access_scenario.maf_cost
     summary = {
@@ -934,8 +1147,8 @@ def run_market_session(
         "gross_pnl_before_maf": gross_final_pnl,
         "maf_cost": maf_cost,
         "access_scenario": access_scenario.to_dict(),
-        "fill_count": len(fills_log),
-        "order_count": len(orders_log),
+        "fill_count": total_fill_count,
+        "order_count": total_order_count,
         "limit_breaches": total_limit_breaches,
         "max_drawdown": max_drawdown,
         "final_positions": {product: per_product_summary[product]["final_position"] for product in PRODUCTS},

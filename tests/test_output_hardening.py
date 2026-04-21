@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from prosperity_backtester.__main__ import _output_options_from_args, build_parser
+from prosperity_backtester.__main__ import _output_options_from_args, _perturb_from_args, build_parser
 from prosperity_backtester.experiments import TraderSpec, run_compare, run_replay, run_sweep_from_config
 from prosperity_backtester.metadata import PRODUCTS
 from prosperity_backtester.platform import PerturbationConfig, SessionArtefacts
@@ -284,6 +284,27 @@ def test_cli_output_policy_flags_can_disable_full_debug_extras():
     assert options.include_orders is False
     assert options.write_sample_path_files is False
     assert options.write_session_manifests is False
+
+
+def test_cli_limit_overrides_and_print_flag_are_parsed():
+    parser = build_parser()
+    args = parser.parse_args([
+        'replay',
+        'strategies/trader.py',
+        '--limit',
+        'ASH_COATED_OSMIUM:60',
+        '--limit',
+        'INTARIAN_PEPPER_ROOT:40',
+        '--print-trader-output',
+    ])
+
+    perturbation = _perturb_from_args(args)
+
+    assert perturbation.position_limits_by_product == {
+        'ASH_COATED_OSMIUM': 60,
+        'INTARIAN_PEPPER_ROOT': 40,
+    }
+    assert args.print_trader_output is True
 
 
 def test_prune_uses_folder_timestamp_not_mtime_and_validates_keep(tmp_path):

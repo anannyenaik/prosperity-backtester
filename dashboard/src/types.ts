@@ -11,6 +11,32 @@ export interface Meta {
   accessScenario?: AccessScenarioInfo
   outputProfile?: OutputProfileInfo
   createdAt: string
+  provenance?: ProvenanceInfo
+}
+
+export interface ProvenanceInfo {
+  workflow_tier?: string | null
+  command?: {
+    argv?: string[]
+    display?: string | null
+    cwd?: string | null
+  }
+  git?: {
+    root?: string | null
+    commit?: string | null
+    dirty?: boolean | null
+    branch?: string | null
+  }
+  runtime?: {
+    python_version?: string | null
+    executable?: string | null
+    engine_backend?: string | null
+    parallelism?: string | null
+    worker_count?: number | null
+    session_count?: number | null
+    sample_session_count?: number | null
+    [key: string]: unknown
+  }
 }
 
 export interface OutputProfileInfo {

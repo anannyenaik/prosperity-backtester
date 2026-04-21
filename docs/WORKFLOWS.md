@@ -15,8 +15,8 @@ Use this for normal branch testing.
 Default replay and compare now target day `0`:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --name current --data-dir data/round1 --fill-mode empirical_baseline
-python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --names current starter --data-dir data/round1 --fill-mode empirical_baseline
+python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline
+python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --names current starter --data data/round1 --fill-mode empirical_baseline --merge-pnl
 ```
 
 Use the bundled fast pack when you want the standard replay, compare and smoke Monte Carlo set in one go:
@@ -34,15 +34,16 @@ The fast pack writes only:
 
 Measured on 2026-04-21 with the current `strategies/trader.py` on this machine:
 
-- default day-0 replay: about `2.5s`
-- default day-0 compare: about `2.7s`
-- fast pack: about `6.1s`
+- default day-0 replay: about `2.33s`
+- default day-0 compare: about `2.50s`
+- fast pack: about `6.79s`
 
 Useful trust checks during the fast loop:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --name current --data-dir data/round1 --fill-mode empirical_baseline --match-trades worse
-python -m prosperity_backtester replay strategies/trader.py --name current --data-dir data/round1 --fill-mode empirical_baseline --match-trades none
+python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --match-trades worse
+python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --match-trades none
+python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --limit INTARIAN_PEPPER_ROOT:40 --print-trader-output
 ```
 
 ## Validation Loop
@@ -61,13 +62,13 @@ This gives:
 
 Measured on 2026-04-21 with the current `strategies/trader.py` on this machine:
 
-- validation pack: about `24.5s`
+- validation pack: about `24.42s`
 
 You can still run the parts separately when needed:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --name current --data-dir data/round1 --days -2 -1 0 --fill-mode empirical_baseline
-python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --names current starter --data-dir data/round1 --days -2 -1 0 --fill-mode empirical_baseline
+python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --days -2 -1 0 --fill-mode empirical_baseline
+python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --names current starter --data data/round1 --days -2 -1 0 --fill-mode empirical_baseline --merge-pnl
 ```
 
 ## Heavy Forensic Loop
@@ -117,10 +118,14 @@ python -m prosperity_backtester monte-carlo strategies/trader.py --name current 
 
 Review mean, median, P05, expected shortfall, drawdown and limit breaches. The dashboard path bands are computed from all sessions; saved sample runs are examples for qualitative inspection.
 
-Measured on 2026-04-21 with `examples/benchmark_trader.py` and full day `0`:
+Measured on 2026-04-21 with `analysis/benchmark_runtime.py` on the tracked `250`-tick Monte Carlo fixture:
 
-- `8` sessions, `2` samples, `1` worker: about `18.9s`
-- `8` sessions, `2` samples, `4` workers: about `10.4s`
+- quick light, `64` sessions, `8` samples, `1` worker: about `2.69s`
+- quick light, `64` sessions, `8` samples, `4` workers: about `2.24s`
+- default light, `100` sessions, `10` samples, `1` worker: about `4.17s`
+- default light, `100` sessions, `10` samples, `4` workers: about `2.30s`
+- heavy light, `192` sessions, `16` samples, `1` worker: about `7.22s`
+- heavy light, `192` sessions, `16` samples, `4` workers: about `3.72s`
 
 ## Sweep
 
@@ -182,14 +187,16 @@ python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_resea
 npm run build --prefix dashboard
 python -m prosperity_backtester serve --port 5555
 python -m prosperity_backtester serve --latest
+python -m prosperity_backtester serve --latest-type replay
+python -m prosperity_backtester serve --latest-type monte-carlo
 ```
 
-Open `http://127.0.0.1:5555/`, then use **Open latest run** or **Browse local server**.
+Open `http://127.0.0.1:5555/`, then use **Open latest run**, **Latest replay**, **Latest MC**, **Latest compare**, or **Browse local server**.
 
 To finish a run and open its bundle directly:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --data-dir data/round1 --fill-mode empirical_baseline --open
+python -m prosperity_backtester replay strategies/trader.py --data data/round1 --fill-mode empirical_baseline --open
 python -m prosperity_backtester monte-carlo strategies/trader.py --days 0 --fill-mode empirical_baseline --noise-profile fitted --quick --open
 ```
 

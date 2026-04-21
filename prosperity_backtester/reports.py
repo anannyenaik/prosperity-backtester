@@ -11,6 +11,7 @@ from typing import Dict, List, Sequence
 from .fair_value import fair_path_bands
 from .metadata import PRODUCTS
 from .platform import SessionArtefacts, describe_series, summarise_monte_carlo_sessions, write_rows_csv
+from .provenance import capture_provenance
 from .round2 import ASSUMPTION_REGISTRY
 from .storage import OutputOptions
 
@@ -760,6 +761,8 @@ def _comparison_diagnostics(rows: Sequence[Dict[str, object]]) -> Dict[str, obje
 def _write_registry_entry(output_dir: Path, dashboard_payload: Dict[str, object]) -> None:
     output_dir = output_dir.resolve()
     meta = dashboard_payload.get("meta", {})
+    provenance = meta.get("provenance") if isinstance(meta.get("provenance"), dict) else {}
+    runtime = provenance.get("runtime") if isinstance(provenance.get("runtime"), dict) else {}
     summary = dashboard_payload.get("summary", {})
     monte_carlo_summary = dashboard_payload.get("monteCarlo", {}).get("summary", {})
     calibration_best = dashboard_payload.get("calibration", {}).get("best", {})
@@ -773,6 +776,12 @@ def _write_registry_entry(output_dir: Path, dashboard_payload: Dict[str, object]
         "trader_name": meta.get("traderName"),
         "mode": meta.get("mode"),
         "round": meta.get("round"),
+        "workflow_tier": provenance.get("workflow_tier"),
+        "engine_backend": runtime.get("engine_backend"),
+        "parallelism": runtime.get("parallelism"),
+        "worker_count": runtime.get("worker_count"),
+        "git_commit": (provenance.get("git") or {}).get("commit") if isinstance(provenance.get("git"), dict) else None,
+        "git_dirty": (provenance.get("git") or {}).get("dirty") if isinstance(provenance.get("git"), dict) else None,
         "output_profile": (meta.get("outputProfile") or {}).get("profile") if isinstance(meta.get("outputProfile"), dict) else None,
         "access_scenario": (meta.get("accessScenario") or {}).get("name") if isinstance(meta.get("accessScenario"), dict) else None,
         "output_dir": str(output_dir),
@@ -815,9 +824,11 @@ def build_dashboard_payload(
     replay_rows: Dict[str, List[Dict[str, object]]] | None = None,
     monte_carlo_rows: Dict[str, Dict[str, List[Dict[str, object]]]] | None = None,
     output_options: OutputOptions | None = None,
+    runtime_context: Dict[str, object] | None = None,
 ) -> Dict[str, object]:
     output_options = output_options or DEFAULT_OUTPUT_OPTIONS
     access_scenario = access_scenario or {}
+    provenance = capture_provenance(runtime_context=runtime_context)
     assumptions: Dict[str, object] = {
         "exact": [
             "CSV and live-export parsing",
@@ -857,6 +868,7 @@ def build_dashboard_payload(
             "accessScenario": access_scenario,
             "outputProfile": output_options.to_manifest(),
             "createdAt": datetime.now(timezone.utc).isoformat(),
+            "provenance": provenance,
         },
         "products": list(PRODUCTS),
         "assumptions": assumptions,
@@ -996,17 +1008,31 @@ def _bundle_stats(rows: Sequence[Dict[str, object]]) -> Dict[str, object]:
     }
 
 
-def write_manifest(output_dir: Path, manifest: Dict[str, object], output_options: OutputOptions | None = None) -> None:
+def write_manifest(
+    output_dir: Path,
+    manifest: Dict[str, object],
+    output_options: OutputOptions | None = None,
+    runtime_context: Dict[str, object] | None = None,
+) -> None:
     output_options = output_options or DEFAULT_OUTPUT_OPTIONS
     output_dir.mkdir(parents=True, exist_ok=True)
     run_type = manifest.get("run_type") or manifest.get("mode")
+    internal_runtime_context = (
+        dict(manifest.get("runtime_context"))
+        if isinstance(manifest.get("runtime_context"), dict)
+        else {}
+    )
+    if runtime_context:
+        internal_runtime_context.update(runtime_context)
     payload = {
         "run_name": manifest.get("run_name") or output_dir.name,
         "schema_version": manifest.get("schema_version", DASHBOARD_SCHEMA_VERSION),
         "created_at": manifest.get("created_at") or datetime.now(timezone.utc).isoformat(),
         **manifest,
         "output_profile": output_options.to_manifest(),
+        "provenance": capture_provenance(runtime_context=internal_runtime_context, start=output_dir),
     }
+    payload.pop("runtime_context", None)
     if run_type and "data_contract" not in payload:
         payload["data_contract"] = _data_contract(str(run_type), output_options)
 
@@ -1061,6 +1087,7 @@ def write_replay_bundle(
     register: bool = True,
     replay_rows: Dict[str, List[Dict[str, object]]] | None = None,
     output_options: OutputOptions | None = None,
+    runtime_context: Dict[str, object] | None = None,
 ) -> None:
     output_options = output_options or DEFAULT_OUTPUT_OPTIONS
     rows = replay_rows or compact_replay_rows(artefact, output_options)
@@ -1102,7 +1129,7 @@ def write_replay_bundle(
         register=register,
         output_options=output_options,
     )
-    write_manifest(output_dir, _manifest_base(artefact), output_options)
+    write_manifest(output_dir, _manifest_base(artefact), output_options, runtime_context=runtime_context)
 
 
 def write_mc_bundle(
@@ -1112,6 +1139,7 @@ def write_mc_bundle(
     register: bool = True,
     replay_rows_by_run: Dict[str, Dict[str, List[Dict[str, object]]]] | None = None,
     output_options: OutputOptions | None = None,
+    runtime_context: Dict[str, object] | None = None,
 ) -> None:
     output_options = output_options or DEFAULT_OUTPUT_OPTIONS
     replay_rows_by_run = replay_rows_by_run or {}
@@ -1209,4 +1237,4 @@ def write_mc_bundle(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "python_version": sys.version,
         "platform": py_platform.platform(),
-    }, output_options)
+    }, output_options, runtime_context=runtime_context)

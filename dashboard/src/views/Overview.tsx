@@ -31,6 +31,9 @@ export function Overview() {
   const bundle = interpretBundle(payload)
   const meta = payload.meta
   const access = meta?.accessScenario ?? payload.summary?.access_scenario
+  const provenance = meta?.provenance
+  const runtime = provenance?.runtime
+  const git = provenance?.git
 
   const datasetRows = (payload.datasetReports ?? []).map((r) => ({
     day: r.day,
@@ -110,6 +113,26 @@ export function Overview() {
               { label: 'Session manifests', value: formatBool(meta.outputProfile.write_session_manifests) },
               { label: 'Child bundles', value: formatBool(meta.outputProfile.write_child_bundles) },
               { label: 'Compact JSON', value: formatBool(meta.outputProfile.compact_json) },
+            ]}
+          />
+        </Card>
+      )}
+
+      {provenance && (
+        <Card title="Runtime provenance">
+          <KVGrid
+            cols={2}
+            pairs={[
+              { label: 'Workflow tier', value: provenance.workflow_tier ?? 'manual' },
+              { label: 'Engine backend', value: runtime?.engine_backend ?? 'not recorded' },
+              { label: 'Parallelism', value: runtime?.parallelism ?? 'not recorded' },
+              { label: 'Worker count', value: runtime?.worker_count ?? 'not recorded' },
+              { label: 'Session count', value: runtime?.session_count ?? 'not recorded' },
+              { label: 'Sample sessions', value: runtime?.sample_session_count ?? 'not recorded' },
+              { label: 'Git branch', value: git?.branch ?? 'not recorded' },
+              { label: 'Git commit', value: git?.commit ? String(git.commit).slice(0, 12) : 'not recorded' },
+              { label: 'Git dirty', value: formatBool(git?.dirty) },
+              { label: 'Working dir', value: provenance.command?.cwd ?? 'not recorded' },
             ]}
           />
         </Card>

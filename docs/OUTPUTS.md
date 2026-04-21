@@ -154,8 +154,12 @@ CLI `--orders`, `--sample-path-files`, `--session-manifests`, `--no-series-sidec
 - `sidecar_files`
 - `debug_files`
 - `bundle_files` with per-file byte counts
+- `provenance.command` with argv, display form and working directory
+- `provenance.workflow_tier`
+- `provenance.runtime` with backend, parallelism, worker count and session counts when relevant
+- `provenance.git` with root, commit, branch and dirty-worktree state when available
 
-The dashboard server reads the manifest first, so large bundles stay discoverable without loading `dashboard.json`.
+The dashboard server reads the manifest and `run_registry.jsonl` first, so large bundles stay discoverable without loading `dashboard.json`.
 
 ## Benchmarking
 
@@ -166,6 +170,14 @@ python analysis/benchmark_outputs.py --output-dir backtests/repo_output_benchmar
 ```
 
 See [docs/BENCHMARKS.md](BENCHMARKS.md) for the current measured sizes and created files.
+
+For runtime rather than storage, use:
+
+```bash
+python analysis/benchmark_runtime.py --output-dir backtests/runtime_benchmark
+```
+
+This writes machine-readable `benchmark_report.json` and a concise `benchmark_report.md`.
 
 ## Retention
 

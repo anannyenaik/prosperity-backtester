@@ -77,14 +77,16 @@ Files:
 - `prosperity_backtester/experiments.py`
 - `prosperity_backtester/__main__.py`
 - `analysis/benchmark_outputs.py`
+- `analysis/benchmark_runtime.py`
 
 Responsibilities:
 
 - Run replay, Monte Carlo, comparison, sweep, optimisation, calibration and scenario workflows.
 - Load JSON config files with clear validation errors.
 - Resolve trader, data and fill-config paths.
+- Expose short replay and compare defaults plus convenience flags such as `--data`, `--merge-pnl`, `--limit`, `--print-trader-output` and `serve --latest-type`.
 - Keep CLI commands thin and reproducible.
-- Provide a lightweight, reproducible bundle-size benchmark workflow.
+- Provide lightweight, reproducible bundle-size and runtime benchmark workflows.
 
 ### Reporting
 
@@ -93,6 +95,7 @@ File:
 - `prosperity_backtester/reports.py`
 - `prosperity_backtester/storage.py`
 - `prosperity_backtester/benchmark.py`
+- `prosperity_backtester/provenance.py`
 
 Responsibilities:
 
@@ -101,6 +104,7 @@ Responsibilities:
 - Aggregate Monte Carlo path bands from every session.
 - Write CSV sidecars, manifests, sample paths and session manifests according to output policy.
 - Append `run_registry.jsonl` entries.
+- Record command, workflow-tier, runtime-backend and git provenance in both `dashboard.json` and `manifest.json`.
 - Preserve exact and approximate assumption notes in output bundles.
 - Preserve exact, compact, bucketed, qualitative and raw bundle data-contract notes.
 - Record canonical, sidecar and debug file lists plus total bundle size in `manifest.json`.
@@ -118,6 +122,7 @@ Responsibilities:
 
 - Load one or more `dashboard.json` bundles.
 - Discover local bundles through `/api/runs`.
+- Prefer `run_registry.jsonl` and `manifest.json` for low-cost discovery, latest-run routing and richer landing-screen metadata.
 - Render bundle-aware tabs for replay, comparison, Monte Carlo, calibration, optimisation, Round 2, Alpha Lab and product deep dives.
 - Show compatibility messages when a bundle does not contain the data required by a tab.
 
@@ -140,6 +145,7 @@ When adding a workflow, prefer extending this bundle contract over adding a one-
 
 - Python remains the backend because trader compatibility, debugging and config iteration matter more than raw throughput at current scale.
 - Light mode is the day-to-day research profile. It keeps exact summaries and fills, compact paths, compact quote intent and all-session Monte Carlo path bands in `dashboard.json`.
+- Monte Carlo work is chunked across workers, and unsampled sessions stream only the path metrics needed for final distributions and all-session path bands.
 - Monte Carlo sampled runs are intentionally qualitative examples. Population path bands come from every session through bucketed path metrics.
 - Full mode is for local debugging. It writes raw order rows, full series sidecars and sampled path files, but child bundles require an explicit `--save-child-bundles`.
 - Round 2 is modelled as scenario analysis, not as a claim about hidden website mechanics.

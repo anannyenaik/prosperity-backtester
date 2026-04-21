@@ -10,6 +10,8 @@ interface Props {
 export function BundleBadge({ payload, className }: Props) {
   const bundle = interpretBundle(payload)
   const profile = payload.meta?.outputProfile?.profile
+  const workflowTier = payload.meta?.provenance?.workflow_tier
+  const backend = payload.meta?.provenance?.runtime?.engine_backend
 
   return (
     <div className={clsx('inline-flex flex-wrap items-center gap-2', className)}>
@@ -26,6 +28,16 @@ export function BundleBadge({ payload, className }: Props) {
           )}
         >
           {profile} profile
+        </span>
+      )}
+      {workflowTier && (
+        <span className="hud-label rounded-lg border border-border bg-white/[0.025] px-3 py-2 text-muted">
+          {workflowTier}
+        </span>
+      )}
+      {backend && (
+        <span className="hud-label rounded-lg border border-border bg-white/[0.025] px-3 py-2 text-muted">
+          {backend}
         </span>
       )}
       {bundle.rawType !== bundle.type && (

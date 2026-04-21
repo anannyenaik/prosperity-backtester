@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, List, Sequence
 
 from .dataset import DayDataset, load_round_dataset
-from .fill_models import derive_empirical_fill_profile, resolve_fill_model
+from .fill_models import FillModel, derive_empirical_fill_profile, resolve_fill_model
 from .live_export import compare_live_export_summary, load_live_export
 from .platform import PerturbationConfig, SessionArtefacts, generate_synthetic_market_days, run_market_session
 from .reports import (
@@ -25,7 +25,7 @@ from .reports import (
 from .round2 import AccessScenario, NO_ACCESS_SCENARIO, access_scenario_from_dict, expand_scenarios
 from .scenarios import ResearchScenario, scenario_manifest, scenarios_from_config
 from .storage import OutputOptions
-from .trader_adapter import describe_overrides, make_trader
+from .trader_adapter import TraderLoadError, describe_overrides, load_trader_module, make_trader
 
 
 @dataclass
@@ -130,6 +130,7 @@ def run_replay(
     register: bool = True,
     write_bundle: bool = True,
     output_options: OutputOptions | None = None,
+    print_trader_output: bool = False,
 ) -> SessionArtefacts:
     output_options = output_options or OutputOptions()
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
@@ -151,12 +152,14 @@ def run_replay(
         mode="replay",
         capture_full_output=True,
         access_scenario=access_scenario,
+        print_trader_output=print_trader_output,
     )
     validation = {}
     if live_export is not None:
         validation = compare_live_export_summary(live_export, artefact)
         artefact.validation = validation
     if write_bundle:
+        runtime_context = {"engine_backend": "python", "parallelism": "single_process", "worker_count": 1}
         replay_rows = compact_replay_rows(artefact, output_options)
         dashboard = build_dashboard_payload(
             run_type="replay",
@@ -172,6 +175,7 @@ def run_replay(
             validation=validation,
             replay_rows=replay_rows,
             output_options=output_options,
+            runtime_context=runtime_context,
         )
         write_replay_bundle(
             output_dir,
@@ -180,12 +184,23 @@ def run_replay(
             register=register,
             replay_rows=replay_rows,
             output_options=output_options,
+            runtime_context=runtime_context,
         )
     return artefact
 
 
-def _run_monte_carlo_session(task: Dict[str, object]) -> SessionArtefacts:
-    session_idx = int(task["session_idx"])
+def _instantiate_worker_trader(module, trader_path: Path):
+    try:
+        trader = module.Trader()
+    except Exception as exc:  # pragma: no cover - exercised through workers
+        raise TraderLoadError(f"Trader() construction failed for {trader_path}: {exc}") from exc
+    if not callable(getattr(trader, "run", None)):
+        raise TraderLoadError(f"Trader instance does not define callable run(state): {trader_path}")
+    return trader
+
+
+def _run_monte_carlo_chunk(task: Dict[str, object]) -> List[SessionArtefacts]:
+    session_indices = [int(session_idx) for session_idx in task["session_indices"]]
     sample_sessions = int(task["sample_sessions"])
     base_seed = int(task["base_seed"])
     run_name = str(task["run_name"])
@@ -195,28 +210,44 @@ def _run_monte_carlo_session(task: Dict[str, object]) -> SessionArtefacts:
     assert isinstance(perturbation, PerturbationConfig)
     access_scenario = task.get("access_scenario") or NO_ACCESS_SCENARIO
     assert isinstance(access_scenario, AccessScenario)
+    fill_model = task["fill_model"]
+    assert isinstance(fill_model, FillModel)
     days = tuple(int(day) for day in task["days"])
-    fill_model_config_path = task.get("fill_model_config_path")
-    fill_model = resolve_fill_model(
-        str(task["fill_model_name"]),
-        Path(str(fill_model_config_path)) if fill_model_config_path else None,
-    )
-    market_days = generate_synthetic_market_days(days=days, seed=base_seed + session_idx * 17, perturb=perturbation)
-    trader, _module = make_trader(trader_spec.path, trader_spec.overrides)
-    return run_market_session(
-        trader=trader,
-        trader_name=trader_spec.name,
-        market_days=market_days,
-        fill_model=fill_model,
-        perturb=perturbation,
-        rng=random.Random(base_seed + session_idx * 31),
-        run_name=f"{run_name}_session_{session_idx:04d}",
-        mode="monte_carlo",
-        capture_full_output=session_idx < sample_sessions,
-        capture_path_metrics=bool(task.get("capture_path_metrics", False)),
-        path_bucket_count=int(task.get("path_bucket_count", 800)),
-        access_scenario=access_scenario,
-    )
+    module = load_trader_module(trader_spec.path, trader_spec.overrides)
+    results: List[SessionArtefacts] = []
+    for session_idx in session_indices:
+        market_days = generate_synthetic_market_days(days=days, seed=base_seed + session_idx * 17, perturb=perturbation)
+        trader = _instantiate_worker_trader(module, trader_spec.path)
+        results.append(
+            run_market_session(
+                trader=trader,
+                trader_name=trader_spec.name,
+                market_days=market_days,
+                fill_model=fill_model,
+                perturb=perturbation,
+                rng=random.Random(base_seed + session_idx * 31),
+                run_name=f"{run_name}_session_{session_idx:04d}",
+                mode="monte_carlo",
+                capture_full_output=session_idx < sample_sessions,
+                capture_path_metrics=bool(task.get("capture_path_metrics", False)),
+                path_bucket_count=int(task.get("path_bucket_count", 800)),
+                access_scenario=access_scenario,
+                print_trader_output=bool(task.get("print_trader_output", False)),
+            )
+        )
+    return results
+
+
+def _session_chunks(sessions: int, worker_count: int) -> List[List[int]]:
+    if sessions < 1:
+        return []
+    if worker_count <= 1:
+        return [list(range(sessions))]
+    chunk_count = min(sessions, max(worker_count, worker_count * 2))
+    groups: List[List[int]] = [[] for _ in range(chunk_count)]
+    for session_idx in range(sessions):
+        groups[session_idx % chunk_count].append(session_idx)
+    return [group for group in groups if group]
 
 
 def run_monte_carlo(
@@ -237,6 +268,7 @@ def run_monte_carlo(
     register: bool = True,
     write_bundle: bool = True,
     output_options: OutputOptions | None = None,
+    print_trader_output: bool = False,
 ) -> List[SessionArtefacts]:
     output_options = output_options or OutputOptions()
     if sessions < 1:
@@ -247,29 +279,41 @@ def run_monte_carlo(
     worker_count = max(1, int(workers))
     if worker_count > 1:
         worker_count = min(worker_count, sessions, os.cpu_count() or worker_count)
-    tasks = [
-        {
-            "session_idx": session_idx,
-            "sample_sessions": sample_sessions,
-            "base_seed": base_seed,
-            "run_name": run_name,
-            "trader_spec": trader_spec,
-            "perturbation": perturbation,
-            "access_scenario": access_scenario,
-            "days": tuple(days),
-            "fill_model_name": fill_model_name,
-            "fill_model_config_path": str(fill_model_config_path) if fill_model_config_path else None,
-            "capture_path_metrics": True,
-            "path_bucket_count": output_options.max_mc_path_rows_per_product,
-        }
-        for session_idx in range(sessions)
+    base_task = {
+        "sample_sessions": sample_sessions,
+        "base_seed": base_seed,
+        "run_name": run_name,
+        "trader_spec": trader_spec,
+        "perturbation": perturbation,
+        "access_scenario": access_scenario,
+        "days": tuple(days),
+        "fill_model": fill_model,
+        "capture_path_metrics": True,
+        "path_bucket_count": output_options.max_mc_path_rows_per_product,
+        "print_trader_output": print_trader_output,
+    }
+    chunk_tasks = [
+        base_task | {"session_indices": chunk}
+        for chunk in _session_chunks(sessions, worker_count)
     ]
     if worker_count == 1:
-        results = [_run_monte_carlo_session(task) for task in tasks]
+        results = [result for task in chunk_tasks for result in _run_monte_carlo_chunk(task)]
     else:
         with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as executor:
-            results = list(executor.map(_run_monte_carlo_session, tasks))
+            results = [
+                result
+                for chunk_results in executor.map(_run_monte_carlo_chunk, chunk_tasks)
+                for result in chunk_results
+            ]
+    results.sort(key=lambda artefact: artefact.run_name)
     if write_bundle:
+        runtime_context = {
+            "engine_backend": "python",
+            "parallelism": "process_pool" if worker_count > 1 else "single_process",
+            "worker_count": worker_count,
+            "session_count": sessions,
+            "sample_session_count": sample_sessions,
+        }
         monte_carlo_rows = {
             result.run_name: compact_replay_rows(result, output_options)
             for result in results
@@ -288,6 +332,7 @@ def run_monte_carlo(
             monte_carlo_rows=monte_carlo_rows,
             dataset_reports=[],
             output_options=output_options,
+            runtime_context=runtime_context,
         )
         write_mc_bundle(
             output_dir,
@@ -296,6 +341,7 @@ def run_monte_carlo(
             register=register,
             replay_rows_by_run=monte_carlo_rows,
             output_options=output_options,
+            runtime_context=runtime_context,
         )
     return results
 
@@ -313,6 +359,7 @@ def run_compare(
     access_scenario: AccessScenario | None = None,
     fill_model_config_path: Path | None = None,
     output_options: OutputOptions | None = None,
+    print_trader_output: bool = False,
 ) -> List[Dict[str, object]]:
     output_options = output_options or OutputOptions()
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
@@ -333,6 +380,7 @@ def run_compare(
             register=False,
             write_bundle=output_options.write_child_bundles,
             output_options=output_options,
+            print_trader_output=print_trader_output,
         )
         comparison_rows.append({
             "trader": trader_spec.name,
@@ -375,9 +423,15 @@ def run_compare(
         access_scenario=access_scenario.to_dict(),
         comparison_rows=comparison_rows,
         output_options=output_options,
+        runtime_context={"engine_backend": "python", "parallelism": "single_process", "worker_count": 1},
     )
     write_run_bundle(output_dir, dashboard, extra_csvs={"comparison.csv": comparison_rows}, output_options=output_options)
-    write_manifest(output_dir, {"run_type": "comparison", "run_name": run_name, "row_count": len(comparison_rows), "round": round_number, "access_scenario": access_scenario.to_dict()}, output_options)
+    write_manifest(
+        output_dir,
+        {"run_type": "comparison", "run_name": run_name, "row_count": len(comparison_rows), "round": round_number, "access_scenario": access_scenario.to_dict()},
+        output_options,
+        runtime_context={"engine_backend": "python", "parallelism": "single_process", "worker_count": 1},
+    )
     return comparison_rows
 
 
@@ -646,6 +700,13 @@ def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path,
         },
         comparison_rows=scenario_rows,
         output_options=output_options,
+        runtime_context={
+            "engine_backend": "python",
+            "parallelism": "process_pool" if mc_workers > 1 and mc_sessions > 0 else "single_process",
+            "worker_count": mc_workers if mc_sessions > 0 else 1,
+            "session_count": mc_sessions,
+            "sample_session_count": mc_sample_sessions,
+        },
     )
     write_run_bundle(
         output_dir,
@@ -658,14 +719,25 @@ def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path,
         },
         output_options=output_options,
     )
-    write_manifest(output_dir, {
-        "run_type": "round2_scenarios",
-        "run_name": run_name,
-        "round": round_number,
-        "scenario_count": len(scenarios),
-        "trader_count": len(trader_specs),
-        "mc_sessions": mc_sessions,
-    }, output_options)
+    write_manifest(
+        output_dir,
+        {
+            "run_type": "round2_scenarios",
+            "run_name": run_name,
+            "round": round_number,
+            "scenario_count": len(scenarios),
+            "trader_count": len(trader_specs),
+            "mc_sessions": mc_sessions,
+        },
+        output_options,
+        runtime_context={
+            "engine_backend": "python",
+            "parallelism": "process_pool" if mc_workers > 1 and mc_sessions > 0 else "single_process",
+            "worker_count": mc_workers if mc_sessions > 0 else 1,
+            "session_count": mc_sessions,
+            "sample_session_count": mc_sample_sessions,
+        },
+    )
     return {
         "scenario_rows": scenario_rows,
         "winner_rows": winner_rows,
@@ -853,6 +925,13 @@ def run_scenario_compare_from_config(config_path: Path, output_dir: Path, output
             },
         },
         output_options=output_options,
+        runtime_context={
+            "engine_backend": "python",
+            "parallelism": "process_pool" if mc_workers > 1 and mc_sessions > 0 else "single_process",
+            "worker_count": mc_workers if mc_sessions > 0 else 1,
+            "session_count": mc_sessions,
+            "sample_session_count": mc_sample_sessions,
+        },
     )
     write_run_bundle(
         output_dir,
@@ -865,16 +944,27 @@ def run_scenario_compare_from_config(config_path: Path, output_dir: Path, output
         },
         output_options=output_options,
     )
-    write_manifest(output_dir, {
-        "run_type": "scenario_compare",
-        "run_name": run_name,
-        "round": round_number,
-        "scenario_count": len(scenarios),
-        "trader_count": len(trader_specs),
-        "mc_sessions": mc_sessions,
-        "scenarios": scenario_manifest(scenarios),
-        "fill_config": str(fill_model_config_path) if fill_model_config_path else None,
-    }, output_options)
+    write_manifest(
+        output_dir,
+        {
+            "run_type": "scenario_compare",
+            "run_name": run_name,
+            "round": round_number,
+            "scenario_count": len(scenarios),
+            "trader_count": len(trader_specs),
+            "mc_sessions": mc_sessions,
+            "scenarios": scenario_manifest(scenarios),
+            "fill_config": str(fill_model_config_path) if fill_model_config_path else None,
+        },
+        output_options,
+        runtime_context={
+            "engine_backend": "python",
+            "parallelism": "process_pool" if mc_workers > 1 and mc_sessions > 0 else "single_process",
+            "worker_count": mc_workers if mc_sessions > 0 else 1,
+            "session_count": mc_sessions,
+            "sample_session_count": mc_sample_sessions,
+        },
+    )
     return {
         "scenario_rows": scenario_rows,
         "winner_rows": winner_rows,
@@ -979,16 +1069,22 @@ def calibrate_against_live_export(
         calibration_grid=rows,
         calibration_best=best_row,
         output_options=output_options,
+        runtime_context={"engine_backend": "python", "parallelism": "single_process", "worker_count": 1},
     )
     write_run_bundle(output_dir, dashboard, extra_csvs={"calibration_grid.csv": rows}, output_options=output_options)
-    write_manifest(output_dir, {
-        "run_type": "calibration",
-        "grid_size": len(rows),
-        "best": best_row,
-        "quick": quick,
-        "empirical_profile": empirical_profile,
-        "validation_note": "Best score is a local calibration choice, not proof of exact website reconstruction.",
-    }, output_options)
+    write_manifest(
+        output_dir,
+        {
+            "run_type": "calibration",
+            "grid_size": len(rows),
+            "best": best_row,
+            "quick": quick,
+            "empirical_profile": empirical_profile,
+            "validation_note": "Best score is a local calibration choice, not proof of exact website reconstruction.",
+        },
+        output_options,
+        runtime_context={"engine_backend": "python", "parallelism": "single_process", "worker_count": 1},
+    )
     assert best_row is not None
     return best_row
 
@@ -1152,7 +1248,25 @@ def run_optimize_from_config(config_path: Path, output_dir: Path, output_options
         access_scenario=access_scenario.to_dict(),
         optimization_rows=rows,
         output_options=output_options,
+        runtime_context={
+            "engine_backend": "python",
+            "parallelism": "process_pool" if mc_workers > 1 and mc_sessions > 0 else "single_process",
+            "worker_count": mc_workers if mc_sessions > 0 else 1,
+            "session_count": mc_sessions,
+            "sample_session_count": mc_sample_sessions,
+        },
     )
     write_run_bundle(output_dir, dashboard, extra_csvs={"optimization.csv": rows}, output_options=output_options)
-    write_manifest(output_dir, {"run_type": "optimization", "run_name": run_name, "row_count": len(rows), "best_variant": rows[0] if rows else None}, output_options)
+    write_manifest(
+        output_dir,
+        {"run_type": "optimization", "run_name": run_name, "row_count": len(rows), "best_variant": rows[0] if rows else None},
+        output_options,
+        runtime_context={
+            "engine_backend": "python",
+            "parallelism": "process_pool" if mc_workers > 1 and mc_sessions > 0 else "single_process",
+            "worker_count": mc_workers if mc_sessions > 0 else 1,
+            "session_count": mc_sessions,
+            "sample_session_count": mc_sample_sessions,
+        },
+    )
     return rows

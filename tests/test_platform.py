@@ -103,6 +103,10 @@ def test_replay_with_live_export_bundle(tmp_path):
     assert manifest["bundle_stats"]["total_size_bytes"] > 0
     assert "dashboard.json" in manifest["canonical_files"]
     assert any(item["key"] == "replay_summary" for item in manifest["data_contract"])
+    assert manifest["provenance"]["command"]["argv"]
+    assert manifest["provenance"]["runtime"]["engine_backend"] == "python"
+    assert manifest["provenance"]["runtime"]["parallelism"] == "single_process"
+    assert manifest["provenance"]["runtime"]["worker_count"] == 1
 
 
 def test_compare_and_monte_carlo(tmp_path):
@@ -140,6 +144,9 @@ def test_compare_and_monte_carlo(tmp_path):
     assert mc_dashboard["meta"]["outputProfile"]["profile"] == "light"
     assert mc_dashboard["monteCarlo"]["sampleRuns"]
     assert any(item["key"] == "path_bands" and item["fidelity"] == "bucketed" for item in mc_dashboard["dataContract"])
+    assert mc_dashboard["meta"]["provenance"]["runtime"]["engine_backend"] == "python"
+    assert mc_dashboard["meta"]["provenance"]["runtime"]["session_count"] == 2
+    assert mc_dashboard["meta"]["provenance"]["runtime"]["sample_session_count"] == 1
     assert not (tmp_path / "mc" / "sample_paths").exists()
     assert not (tmp_path / "mc" / "behaviour_series.csv").exists()
 

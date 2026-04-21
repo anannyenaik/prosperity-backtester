@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import urllib.parse
 from datetime import datetime
@@ -44,10 +45,42 @@ SUBCOMMANDS = {
     "clean",
 }
 
+RUN_TYPE_ALIASES = {
+    "replay": "replay",
+    "mc": "monte_carlo",
+    "montecarlo": "monte_carlo",
+    "monte-carlo": "monte_carlo",
+    "monte_carlo": "monte_carlo",
+    "compare": "comparison",
+    "comparison": "comparison",
+    "calibrate": "calibration",
+    "calibration": "calibration",
+    "optimize": "optimization",
+    "optimise": "optimization",
+    "optimization": "optimization",
+    "optimisation": "optimization",
+    "round2": "round2_scenarios",
+    "round2-scenarios": "round2_scenarios",
+    "round2_scenarios": "round2_scenarios",
+    "scenario-compare": "scenario_compare",
+    "scenario_compare": "scenario_compare",
+}
+
+
+class _CliFormatter(argparse.RawDescriptionHelpFormatter, argparse.ArgumentDefaultsHelpFormatter):
+    pass
+
 
 def _timestamped_dir(root: Path, label: str) -> Path:
     ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     return root / f"{ts}_{label}"
+
+
+def _slug(text: str, *, max_length: int = 48) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", text.strip().lower()).strip("_")
+    if not slug:
+        return "run"
+    return slug[:max_length].rstrip("_") or "run"
 
 
 def _output_options_from_args(args) -> OutputOptions:
@@ -83,11 +116,28 @@ def _has_output_policy_override(args) -> bool:
     )
 
 
+def _default_auto_label(args, label: str) -> str:
+    if args.command in {"replay", "monte-carlo", "calibrate"}:
+        trader_name = getattr(args, "name", None) or Path(str(getattr(args, "trader", "run"))).stem
+        return f"{label}_{_slug(str(trader_name))}"
+    if args.command == "compare":
+        traders = [Path(path).stem for path in getattr(args, "traders", [])]
+        names = list(getattr(args, "names", None) or [])
+        display = names[:2] if names else traders[:2]
+        joined = "_vs_".join(_slug(name) for name in display if name)
+        return f"{label}_{joined or 'comparison'}"
+    if args.command in {"sweep", "optimize", "round2-scenarios", "scenario-compare"}:
+        return f"{label}_{_slug(Path(str(getattr(args, 'config', label))).stem)}"
+    if args.command == "derive-fill-profile":
+        return f"{label}_{_slug(str(getattr(args, 'profile_name', 'empirical')))}"
+    return label
+
+
 def _auto_output_dir(args, label: str) -> tuple[Path, bool]:
     explicit = getattr(args, "output_dir", None)
     if explicit:
         return Path(explicit).resolve(), False
-    return _timestamped_dir(Path.cwd() / "backtests", label), True
+    return _timestamped_dir(Path.cwd() / "backtests", _default_auto_label(args, label)), True
 
 
 def _prune_after_auto_run(output_dir: Path, was_auto: bool, keep_runs: int) -> None:
@@ -110,9 +160,39 @@ def _positive_int(value: str) -> int:
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
+def _limit_override(value: str) -> tuple[str, int]:
+    product, separator, limit_text = str(value).partition(":")
+    if not separator or not product.strip() or not limit_text.strip():
+        raise argparse.ArgumentTypeError("limit overrides must look like PRODUCT:LIMIT")
+    try:
+        limit = int(limit_text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"invalid limit override {value!r}: {exc}") from exc
+    if limit < 1:
+        raise argparse.ArgumentTypeError("limit overrides must be at least 1")
+    return product.strip(), limit
+
+
+def _normalise_run_type(value: str | None) -> str | None:
+    if value is None:
+        return None
+    key = str(value).strip().lower()
+    if not key:
+        return None
+    normalised = RUN_TYPE_ALIASES.get(key)
+    if normalised is None:
+        choices = ", ".join(sorted(set(RUN_TYPE_ALIASES)))
+        raise argparse.ArgumentTypeError(f"unknown run type {value!r}. Choose one of: {choices}")
+    return normalised
+
+
 def _perturb_from_args(args) -> PerturbationConfig:
     noise_profile = getattr(args, "noise_profile", "none")
     noise_scale = float(getattr(args, "noise_scale", 1.0))
+    limit_overrides = {
+        product: limit
+        for product, limit in getattr(args, "limit_overrides", []) or []
+    }
     return PerturbationConfig(
         passive_fill_scale=args.passive_fill_scale,
         missed_fill_additive=args.missed_fill_additive,
@@ -128,6 +208,7 @@ def _perturb_from_args(args) -> PerturbationConfig:
         reentry_probability=args.reentry_probability,
         trade_matching_mode=str(getattr(args, "match_trades", "all")),
         inventory_limit_scale=args.inventory_limit_scale,
+        position_limits_by_product=limit_overrides,
         synthetic_tick_limit=getattr(args, "synthetic_tick_limit", None),
         scenario_name=str(getattr(args, "scenario_name", "cli")),
     )
@@ -144,6 +225,14 @@ def _open_bundle(output_dir: Path) -> None:
     dashboard_path = output_dir / "dashboard.json"
     query = urllib.parse.urlencode({"run": str(dashboard_path.relative_to(root)).replace("\\", "/")})
     serve_directory(root, open_browser=True, query=query)
+
+
+def _open_latest(directory: Path, run_type: str | None, *, host: str, port: int) -> None:
+    params = {"latest": "1"}
+    if run_type:
+        params["latestType"] = run_type
+    query = urllib.parse.urlencode(params)
+    serve_directory(directory, host=host, port=port, open_browser=True, query=query)
 
 
 def _access_from_args(args) -> AccessScenario:
@@ -171,7 +260,17 @@ def _access_from_args(args) -> AccessScenario:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Prosperity replay, Monte Carlo and Round 2 research platform")
+    parser = argparse.ArgumentParser(
+        description="Prosperity replay, Monte Carlo and Round 2 research platform",
+        formatter_class=_CliFormatter,
+        epilog=(
+            "Examples:\n"
+            "  python -m prosperity_backtester replay strategies/trader.py --data data/round1 --fill-mode empirical_baseline\n"
+            "  python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --fill-mode empirical_baseline --merge-pnl\n"
+            "  python -m prosperity_backtester monte-carlo strategies/trader.py --quick --workers 4 --noise-profile fitted\n"
+            "  python -m prosperity_backtester serve --latest-type replay\n"
+        ),
+    )
     sub = parser.add_subparsers(dest="command")
 
     def add_round_and_access(subparser):
@@ -205,7 +304,7 @@ def build_parser() -> argparse.ArgumentParser:
     def add_shared(subparser):
         subparser.add_argument("trader", help="Trader python file")
         subparser.add_argument("--name", default=None, help="Display name for the trader")
-        subparser.add_argument("--data-dir", default=None, help=f"Directory containing CSVs. Defaults: round 1 {DEFAULT_DATA_DIR}, round 2 {DEFAULT_ROUND2_DATA_DIR}")
+        subparser.add_argument("--data-dir", "--data", dest="data_dir", default=None, help=f"Directory containing CSVs. Defaults: round 1 {DEFAULT_DATA_DIR}, round 2 {DEFAULT_ROUND2_DATA_DIR}")
         subparser.add_argument("--days", nargs="*", default=["0"], help="Day list, default 0")
         subparser.add_argument("--fill-mode", default="base", help=f"Fill assumption preset. Built-ins: {', '.join(sorted(FILL_MODELS))}")
         subparser.add_argument("--fill-config", default=None, help="Optional JSON fill-profile config produced by derive-fill-profile")
@@ -225,16 +324,39 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--reentry-probability", type=float, default=1.0)
         subparser.add_argument("--match-trades", default="all", choices=["all", "worse", "none"], help="How passive trade-print matching should work. 'worse' excludes same-price prints and 'none' disables passive trade matching.")
         subparser.add_argument("--inventory-limit-scale", type=float, default=1.0)
+        subparser.add_argument("--limit", dest="limit_overrides", action="append", type=_limit_override, default=None, metavar="PRODUCT:LIMIT", help="Override the position limit for one product. Repeat as needed.")
         subparser.add_argument("--synthetic-tick-limit", type=int, default=None, help="Cap synthetic Monte Carlo ticks per day for quick smoke or benchmark runs")
         subparser.add_argument("--scenario-name", default="cli")
+        subparser.add_argument("--print-trader-output", action="store_true", help="Forward trader stdout directly instead of suppressing it")
         add_output_controls(subparser)
         add_round_and_access(subparser)
 
-    replay = sub.add_parser("replay", help="Replay one trader on historical data")
+    replay = sub.add_parser(
+        "replay",
+        help="Replay one trader on historical data",
+        formatter_class=_CliFormatter,
+        description="Replay one trader with short daily defaults and optional local debug controls.",
+        epilog=(
+            "Examples:\n"
+            "  python -m prosperity_backtester replay strategies/trader.py --fill-mode empirical_baseline\n"
+            "  python -m prosperity_backtester replay strategies/trader.py --data data/round1 --match-trades worse --open\n"
+            "  python -m prosperity_backtester replay strategies/trader.py --limit INTARIAN_PEPPER_ROOT:40 --print-trader-output\n"
+        ),
+    )
     add_shared(replay)
     replay.add_argument("--live-export", default=None, help="Optional website export .log/.json to validate against")
 
-    mc = sub.add_parser("monte-carlo", help="Run Monte Carlo robustness sessions")
+    mc = sub.add_parser(
+        "monte-carlo",
+        help="Run Monte Carlo robustness sessions",
+        formatter_class=_CliFormatter,
+        description="Run Monte Carlo robustness sessions with optional worker parallelism and saved sample paths.",
+        epilog=(
+            "Examples:\n"
+            "  python -m prosperity_backtester monte-carlo strategies/trader.py --quick --noise-profile fitted\n"
+            "  python -m prosperity_backtester monte-carlo strategies/trader.py --sessions 256 --sample-sessions 16 --workers 4\n"
+        ),
+    )
     add_shared(mc)
     mc.add_argument("--sessions", type=int, default=100)
     mc.add_argument("--sample-sessions", type=int, default=10)
@@ -243,10 +365,20 @@ def build_parser() -> argparse.ArgumentParser:
     mc.add_argument("--quick", action="store_true", help="Use quick preset: 64 sessions, 8 sampled runs")
     mc.add_argument("--heavy", action="store_true", help="Use heavy preset: 512 sessions, 32 sampled runs")
 
-    compare = sub.add_parser("compare", help="Compare multiple traders side by side on replay")
+    compare = sub.add_parser(
+        "compare",
+        help="Compare multiple traders side by side on replay",
+        formatter_class=_CliFormatter,
+        description="Compare traders on the same replay settings, with optional merged PnL output.",
+        epilog=(
+            "Examples:\n"
+            "  python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --fill-mode empirical_baseline\n"
+            "  python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --merge-pnl --open\n"
+        ),
+    )
     compare.add_argument("traders", nargs="+", help="Trader python files")
     compare.add_argument("--names", nargs="*", default=None, help="Optional display names")
-    compare.add_argument("--data-dir", default=None)
+    compare.add_argument("--data-dir", "--data", dest="data_dir", default=None)
     compare.add_argument("--days", nargs="*", default=["0"])
     compare.add_argument("--fill-mode", default="base", help=f"Fill assumption preset. Built-ins: {', '.join(sorted(FILL_MODELS))}")
     compare.add_argument("--fill-config", default=None)
@@ -266,7 +398,10 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--reentry-probability", type=float, default=1.0)
     compare.add_argument("--match-trades", default="all", choices=["all", "worse", "none"], help="How passive trade-print matching should work. 'worse' excludes same-price prints and 'none' disables passive trade matching.")
     compare.add_argument("--inventory-limit-scale", type=float, default=1.0)
+    compare.add_argument("--limit", dest="limit_overrides", action="append", type=_limit_override, default=None, metavar="PRODUCT:LIMIT", help="Override the position limit for one product. Repeat as needed.")
     compare.add_argument("--scenario-name", default="cli")
+    compare.add_argument("--merge-pnl", action="store_true", help="Print a compact merged PnL summary by trader after the compare run")
+    compare.add_argument("--print-trader-output", action="store_true", help="Forward trader stdout directly instead of suppressing it")
     add_output_controls(compare, child_bundles=True)
     add_round_and_access(compare)
 
@@ -296,10 +431,10 @@ def build_parser() -> argparse.ArgumentParser:
     derive_fill.add_argument("--output-dir", default=None)
     derive_fill.add_argument("--keep-runs", type=_positive_int, default=30)
 
-    calibrate = sub.add_parser("calibrate", help="Grid-search fill assumptions against a live export")
+    calibrate = sub.add_parser("calibrate", help="Grid-search fill assumptions against a live export", formatter_class=_CliFormatter)
     calibrate.add_argument("trader", help="Trader python file")
     calibrate.add_argument("--name", default=None)
-    calibrate.add_argument("--data-dir", default=None)
+    calibrate.add_argument("--data-dir", "--data", dest="data_dir", default=None)
     calibrate.add_argument("--days", nargs="*", default=["0"])
     calibrate.add_argument("--live-export", required=True)
     calibrate.add_argument("--output-dir", default=None)
@@ -307,18 +442,29 @@ def build_parser() -> argparse.ArgumentParser:
     add_output_controls(calibrate, child_bundles=True)
     add_round_and_access(calibrate)
 
-    inspect = sub.add_parser("inspect", help="Print a concise dataset inspection report")
-    inspect.add_argument("--data-dir", default=None)
+    inspect = sub.add_parser("inspect", help="Print a concise dataset inspection report", formatter_class=_CliFormatter)
+    inspect.add_argument("--data-dir", "--data", dest="data_dir", default=None)
     inspect.add_argument("--days", nargs="*", default=["-2", "-1", "0"])
     inspect.add_argument("--round", type=int, default=1, choices=[1, 2])
     inspect.add_argument("--json", action="store_true")
 
-    serve = sub.add_parser("serve", help="Serve the local dashboard frontend")
+    serve = sub.add_parser(
+        "serve",
+        help="Serve the local dashboard frontend",
+        formatter_class=_CliFormatter,
+        epilog=(
+            "Examples:\n"
+            "  python -m prosperity_backtester serve\n"
+            "  python -m prosperity_backtester serve --latest\n"
+            "  python -m prosperity_backtester serve --latest-type monte-carlo\n"
+        ),
+    )
     serve.add_argument("--dir", default=str(Path(__file__).resolve().parent.parent))
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=5555)
     serve.add_argument("--open-browser", action="store_true", help="Open the dashboard in a browser when the server starts")
     serve.add_argument("--latest", action="store_true", help="Open the latest discovered bundle automatically")
+    serve.add_argument("--latest-type", type=_normalise_run_type, default=None, help="Open the latest run of one type: replay, monte-carlo, compare, calibration, optimization, round2-scenarios or scenario-compare")
 
     clean = sub.add_parser("clean", help="Prune old timestamped backtest run directories")
     clean.add_argument("--dir", default=str(Path.cwd() / "backtests"))
@@ -364,6 +510,26 @@ def _print_day_breakdown(artefact) -> None:
             f"gross={row.get('gross_pnl_before_maf', 0.0):,.2f} "
             f"osmium={row.get('osmium_pnl', 0.0):,.2f} "
             f"pepper={row.get('pepper_pnl', 0.0):,.2f}"
+        )
+
+
+def _print_compare_rows(rows: Sequence[dict[str, object]], *, merge_pnl: bool = False) -> None:
+    print(f"Compared {len(rows)} traders")
+    for row in rows:
+        print(f"  {row['trader']}: pnl={row['final_pnl']:,.2f} drawdown={row['max_drawdown']:,.2f}")
+    if not merge_pnl:
+        return
+    print("Merged PnL:")
+    for row in rows:
+        gross = row.get("gross_pnl_before_maf")
+        maf_cost = row.get("maf_cost")
+        gross_text = "n/a" if gross is None else f"{float(gross):,.2f}"
+        maf_text = "n/a" if maf_cost is None else f"{float(maf_cost):,.2f}"
+        print(
+            f"  {row['trader']}: total={float(row['final_pnl']):,.2f} "
+            f"osmium={float(row.get('osmium_pnl') or 0.0):,.2f} "
+            f"pepper={float(row.get('pepper_pnl') or 0.0):,.2f} "
+            f"gross={gross_text} maf={maf_text}"
         )
 
 
@@ -413,6 +579,7 @@ def main(argv: List[str] | None = None) -> None:
             round_number=args.round,
             access_scenario=_access_from_args(args),
             output_options=output_options,
+            print_trader_output=args.print_trader_output,
         )
         _print_replay_result(artefact)
         _print_day_breakdown(artefact)
@@ -448,6 +615,7 @@ def main(argv: List[str] | None = None) -> None:
             round_number=args.round,
             access_scenario=_access_from_args(args),
             output_options=output_options,
+            print_trader_output=args.print_trader_output,
         )
         finals = [result.summary["final_pnl"] for result in results]
         print(f"Sessions: {len(finals)}")
@@ -479,10 +647,9 @@ def main(argv: List[str] | None = None) -> None:
             round_number=args.round,
             access_scenario=_access_from_args(args),
             output_options=output_options,
+            print_trader_output=args.print_trader_output,
         )
-        print(f"Compared {len(rows)} traders")
-        for row in rows:
-            print(f"  {row['trader']}: pnl={row['final_pnl']:,.2f} drawdown={row['max_drawdown']:,.2f}")
+        _print_compare_rows(rows, merge_pnl=args.merge_pnl)
         print(f"Output bundle: {output_dir}")
         _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
         if args.open:
@@ -597,8 +764,10 @@ def main(argv: List[str] | None = None) -> None:
         return
 
     if args.command == "serve":
-        query = urllib.parse.urlencode({"latest": "1"}) if args.latest else None
-        serve_directory(Path(args.dir), host=args.host, port=args.port, open_browser=args.open_browser or args.latest, query=query)
+        if args.latest or args.latest_type:
+            _open_latest(Path(args.dir), args.latest_type, host=args.host, port=args.port)
+            return
+        serve_directory(Path(args.dir), host=args.host, port=args.port, open_browser=args.open_browser)
         return
 
     if args.command == "clean":

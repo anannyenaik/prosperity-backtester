@@ -9,6 +9,39 @@ from pathlib import Path
 
 _DASHBOARD_DIST = Path(__file__).parent.parent / "dashboard" / "dist"
 _DASHBOARD_HTML = Path(__file__).parent.parent / "legacy_dashboard" / "dashboard.html"
+_IGNORED_DIRS = {"node_modules", ".git", ".pytest_cache", "__pycache__", "dist"}
+
+
+def _provenance_metadata(manifest: dict) -> dict:
+    provenance = manifest.get("provenance") if isinstance(manifest.get("provenance"), dict) else {}
+    runtime = provenance.get("runtime") if isinstance(provenance.get("runtime"), dict) else {}
+    git = provenance.get("git") if isinstance(provenance.get("git"), dict) else {}
+    return {
+        "workflowTier": provenance.get("workflow_tier"),
+        "engineBackend": runtime.get("engine_backend"),
+        "parallelism": runtime.get("parallelism"),
+        "workerCount": runtime.get("worker_count"),
+        "gitCommit": git.get("commit"),
+        "gitDirty": git.get("dirty"),
+    }
+
+
+def _registry_seed(row: dict) -> dict:
+    return {
+        "name": row.get("run_name"),
+        "runName": row.get("run_name"),
+        "type": row.get("run_type"),
+        "profile": row.get("output_profile"),
+        "finalPnl": row.get("final_pnl"),
+        "createdAt": row.get("created_at"),
+        "workflowTier": row.get("workflow_tier"),
+        "engineBackend": row.get("engine_backend"),
+        "parallelism": row.get("parallelism"),
+        "workerCount": row.get("worker_count"),
+        "gitCommit": row.get("git_commit"),
+        "gitDirty": row.get("git_dirty"),
+        "source": "registry",
+    }
 
 
 def _dashboard_metadata(path: Path) -> dict:
@@ -23,6 +56,13 @@ def _dashboard_metadata(path: Path) -> dict:
         "sizeBytes": path.stat().st_size,
         "dashboardSizeBytes": path.stat().st_size,
         "fileCount": None,
+        "workflowTier": None,
+        "engineBackend": None,
+        "parallelism": None,
+        "workerCount": None,
+        "gitCommit": None,
+        "gitDirty": None,
+        "source": "dashboard",
     }
     manifest_path = path.with_name("manifest.json")
     if manifest_path.is_file():
@@ -44,8 +84,10 @@ def _dashboard_metadata(path: Path) -> dict:
                 "createdAt": manifest.get("created_at"),
                 "sizeBytes": bundle_stats.get("total_size_bytes") or metadata["sizeBytes"],
                 "fileCount": bundle_stats.get("file_count"),
+                "source": "manifest",
             }
         )
+        metadata.update(_provenance_metadata(manifest))
         return metadata
 
     if metadata["dashboardSizeBytes"] > 5_000_000:
@@ -68,18 +110,21 @@ def _dashboard_metadata(path: Path) -> dict:
             "profile": (meta.get("outputProfile") or {}).get("profile") if isinstance(meta.get("outputProfile"), dict) else None,
             "finalPnl": summary.get("final_pnl"),
             "createdAt": meta.get("createdAt"),
+            "workflowTier": (meta.get("provenance") or {}).get("workflow_tier") if isinstance(meta.get("provenance"), dict) else None,
+            "engineBackend": ((meta.get("provenance") or {}).get("runtime") or {}).get("engine_backend") if isinstance((meta.get("provenance") or {}).get("runtime"), dict) else None,
+            "parallelism": ((meta.get("provenance") or {}).get("runtime") or {}).get("parallelism") if isinstance((meta.get("provenance") or {}).get("runtime"), dict) else None,
+            "workerCount": ((meta.get("provenance") or {}).get("runtime") or {}).get("worker_count") if isinstance((meta.get("provenance") or {}).get("runtime"), dict) else None,
+            "gitCommit": ((meta.get("provenance") or {}).get("git") or {}).get("commit") if isinstance((meta.get("provenance") or {}).get("git"), dict) else None,
+            "gitDirty": ((meta.get("provenance") or {}).get("git") or {}).get("dirty") if isinstance((meta.get("provenance") or {}).get("git"), dict) else None,
         }
     )
     return metadata
 
 
-def _find_bundles(root: Path, max_depth: int = 4) -> list[dict]:
-    """Walk up to max_depth levels looking for dashboard.json files."""
-    results = []
-    ignored_dirs = {"node_modules", ".git", ".pytest_cache", "__pycache__", "dist"}
-    candidates: list[Path] = []
+def _walk_candidates(root: Path, filename: str, max_depth: int) -> list[Path]:
+    results: list[Path] = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [name for name in dirnames if name not in ignored_dirs]
+        dirnames[:] = [name for name in dirnames if name not in _IGNORED_DIRS]
         current = Path(dirpath)
         try:
             rel_dir = current.relative_to(root)
@@ -88,17 +133,65 @@ def _find_bundles(root: Path, max_depth: int = 4) -> list[dict]:
         if len(rel_dir.parts) > max_depth:
             dirnames[:] = []
             continue
-        if "dashboard.json" in filenames:
-            candidates.append(current / "dashboard.json")
-    for p in sorted(candidates):
+        if filename in filenames:
+            results.append(current / filename)
+    return sorted(results)
+
+
+def _registry_candidates(root: Path, max_depth: int) -> dict[str, dict]:
+    candidates: dict[str, dict] = {}
+    for registry_path in _walk_candidates(root, "run_registry.jsonl", max_depth):
         try:
-            rel = p.relative_to(root)
+            lines = registry_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            dashboard_json = row.get("dashboard_json")
+            output_dir = row.get("output_dir")
+            target = None
+            if dashboard_json:
+                target = Path(str(dashboard_json))
+            elif output_dir:
+                target = Path(str(output_dir)) / "dashboard.json"
+            if target is None:
+                continue
+            try:
+                resolved = target.resolve()
+                rel = resolved.relative_to(root.resolve())
+            except (OSError, ValueError):
+                continue
+            if len(rel.parts) > max_depth + 1 or not resolved.is_file():
+                continue
+            candidates[str(rel).replace("\\", "/")] = _registry_seed(row)
+    return candidates
+
+
+def _find_bundles(root: Path, max_depth: int = 4) -> list[dict]:
+    """Walk up to max_depth levels looking for dashboard.json files."""
+    results = []
+    root = root.resolve()
+    candidate_meta = _registry_candidates(root, max_depth)
+    for path in _walk_candidates(root, "dashboard.json", max_depth):
+        try:
+            rel = path.relative_to(root)
         except ValueError:
             continue
         if len(rel.parts) > max_depth + 1:
             continue
-        metadata = _dashboard_metadata(p)
-        metadata["path"] = str(rel).replace("\\", "/")
+        candidate_meta.setdefault(str(rel).replace("\\", "/"), {})
+    for rel_path, seed in sorted(candidate_meta.items()):
+        path = (root / rel_path).resolve()
+        if not path.is_file():
+            continue
+        metadata = _dashboard_metadata(path)
+        for key, value in seed.items():
+            if metadata.get(key) in (None, "", "unknown") and value not in (None, ""):
+                metadata[key] = value
+        metadata["path"] = rel_path
         results.append(metadata)
     results.sort(key=lambda row: ((row.get("createdAt") or ""), str(row.get("path") or "")), reverse=True)
     return results

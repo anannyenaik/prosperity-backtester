@@ -48,7 +48,8 @@ def test_server_bundle_discovery_uses_manifest_metadata(tmp_path):
 
     bundles = _find_bundles(tmp_path)
 
-    assert bundles == [{
+    assert len(bundles) == 1
+    assert bundles[0] == {
         'path': 'large_run/dashboard.json',
         'name': 'large_run',
         'runName': 'large_run',
@@ -59,7 +60,14 @@ def test_server_bundle_discovery_uses_manifest_metadata(tmp_path):
         'sizeBytes': 5_100_123,
         'dashboardSizeBytes': 5_100_000,
         'fileCount': 2,
-    }]
+        'workflowTier': None,
+        'engineBackend': None,
+        'parallelism': None,
+        'workerCount': None,
+        'gitCommit': None,
+        'gitDirty': None,
+        'source': 'manifest',
+    }
 
 
 def test_server_bundle_discovery_includes_explicit_child_bundles(tmp_path):
@@ -78,6 +86,45 @@ def test_server_bundle_discovery_includes_explicit_child_bundles(tmp_path):
         'parent_bundle/variant_a/replay/dashboard.json',
         'parent_bundle/dashboard.json',
     ]
+
+
+def test_server_bundle_discovery_uses_registry_metadata_when_manifest_is_minimal(tmp_path):
+    backtests = tmp_path / 'backtests'
+    run_dir = backtests / '2026-04-21_12-00-00_replay_tiny'
+    run_dir.mkdir(parents=True)
+    (run_dir / 'dashboard.json').write_text('{}', encoding='utf-8')
+    (run_dir / 'manifest.json').write_text('{"run_type":"replay","run_name":"tiny","created_at":"2026-04-21T12:00:00+00:00"}', encoding='utf-8')
+    (backtests / 'run_registry.jsonl').write_text(
+        json.dumps({
+            'run_name': 'tiny',
+            'run_type': 'replay',
+            'created_at': '2026-04-21T12:00:00+00:00',
+            'workflow_tier': 'fast',
+            'engine_backend': 'python',
+            'parallelism': 'single_process',
+            'worker_count': 1,
+            'git_commit': 'abc123def456',
+            'git_dirty': True,
+            'output_profile': 'light',
+            'final_pnl': 12.5,
+            'dashboard_json': str((run_dir / 'dashboard.json').resolve()),
+        }) + '\n',
+        encoding='utf-8',
+    )
+
+    bundles = _find_bundles(tmp_path)
+
+    assert len(bundles) == 1
+    bundle = bundles[0]
+    assert bundle['path'] == 'backtests/2026-04-21_12-00-00_replay_tiny/dashboard.json'
+    assert bundle['workflowTier'] == 'fast'
+    assert bundle['engineBackend'] == 'python'
+    assert bundle['parallelism'] == 'single_process'
+    assert bundle['workerCount'] == 1
+    assert bundle['gitCommit'] == 'abc123def456'
+    assert bundle['gitDirty'] is True
+    assert bundle['profile'] == 'light'
+    assert bundle['finalPnl'] == 12.5
 
 
 def test_prune_old_auto_runs_keeps_named_directories(tmp_path):
