@@ -16,9 +16,12 @@ def _dashboard_metadata(path: Path) -> dict:
         "name": path.parent.name,
         "runName": path.parent.name,
         "type": "unknown",
+        "profile": None,
         "finalPnl": None,
         "createdAt": None,
         "sizeBytes": path.stat().st_size,
+        "dashboardSizeBytes": path.stat().st_size,
+        "fileCount": None,
     }
     manifest_path = path.with_name("manifest.json")
     if manifest_path.is_file():
@@ -28,18 +31,23 @@ def _dashboard_metadata(path: Path) -> dict:
             manifest = {}
         summary = manifest.get("summary") if isinstance(manifest.get("summary"), dict) else {}
         run_name = manifest.get("run_name") or metadata["name"]
+        output_profile = manifest.get("output_profile") if isinstance(manifest.get("output_profile"), dict) else {}
+        bundle_stats = manifest.get("bundle_stats") if isinstance(manifest.get("bundle_stats"), dict) else {}
         metadata.update(
             {
                 "name": run_name,
                 "runName": run_name,
                 "type": manifest.get("run_type") or manifest.get("mode") or metadata["type"],
+                "profile": output_profile.get("profile"),
                 "finalPnl": summary.get("final_pnl"),
                 "createdAt": manifest.get("created_at"),
+                "sizeBytes": bundle_stats.get("total_size_bytes") or metadata["sizeBytes"],
+                "fileCount": bundle_stats.get("file_count"),
             }
         )
         return metadata
 
-    if metadata["sizeBytes"] > 5_000_000:
+    if metadata["dashboardSizeBytes"] > 5_000_000:
         return metadata
 
     try:
@@ -56,6 +64,7 @@ def _dashboard_metadata(path: Path) -> dict:
             "name": run_name,
             "runName": run_name,
             "type": payload.get("type", metadata["type"]),
+            "profile": (meta.get("outputProfile") or {}).get("profile") if isinstance(meta.get("outputProfile"), dict) else None,
             "finalPnl": summary.get("final_pnl"),
             "createdAt": meta.get("createdAt"),
         }
@@ -81,8 +90,6 @@ def _find_bundles(root: Path, max_depth: int = 4) -> list[dict]:
         if "dashboard.json" in filenames:
             candidates.append(current / "dashboard.json")
     for p in sorted(candidates):
-        if any((ancestor / "dashboard.json").is_file() for ancestor in p.parents if ancestor != p.parent and ancestor != root.parent):
-            continue
         try:
             rel = p.relative_to(root)
         except ValueError:
@@ -92,6 +99,7 @@ def _find_bundles(root: Path, max_depth: int = 4) -> list[dict]:
         metadata = _dashboard_metadata(p)
         metadata["path"] = str(rel).replace("\\", "/")
         results.append(metadata)
+    results.sort(key=lambda row: ((row.get("createdAt") or ""), str(row.get("path") or "")), reverse=True)
     return results
 
 

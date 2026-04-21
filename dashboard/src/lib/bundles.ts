@@ -46,8 +46,8 @@ const BUNDLE_LABELS: Record<BundleType, string> = {
 }
 
 const BUNDLE_DESCRIPTIONS: Record<BundleType, string> = {
-  replay: 'deterministic replay summary and per-tick series',
-  monte_carlo: 'Monte Carlo session statistics, sample paths and fair-value bands',
+  replay: 'deterministic replay summary, fills and replay-path evidence',
+  monte_carlo: 'Monte Carlo session statistics, all-session path bands and sample runs',
   calibration: 'live-vs-simulator calibration candidates and diagnostics',
   comparison: 'precomputed trader comparison rows',
   optimization: 'parameter sweep and robustness ranking rows',

@@ -56,12 +56,18 @@ def test_replay_with_live_export_bundle(tmp_path):
     assert "orders" not in dashboard
     assert dashboard["orderIntent"]
     assert dashboard["assumptions"]["exact"]
+    assert any(item["key"] == "fills" and item["fidelity"] == "exact" for item in dashboard["dataContract"])
     assert (tmp_path / "run_registry.jsonl").is_file()
     assert not (tmp_path / "replay" / "orders.csv").exists()
     assert (tmp_path / "replay" / "fills.csv").is_file()
     assert not (tmp_path / "replay" / "fair_value_series.csv").exists()
     assert (tmp_path / "replay" / "behaviour_summary.csv").is_file()
     assert not (tmp_path / "replay" / "behaviour_series.csv").exists()
+    manifest = json.loads((tmp_path / "replay" / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["created_at"]
+    assert manifest["bundle_stats"]["total_size_bytes"] > 0
+    assert "dashboard.json" in manifest["canonical_files"]
+    assert any(item["key"] == "replay_summary" for item in manifest["data_contract"])
 
 
 def test_compare_and_monte_carlo(tmp_path):
@@ -98,6 +104,7 @@ def test_compare_and_monte_carlo(tmp_path):
     assert mc_dashboard["monteCarlo"]["pathBandMethod"]["source"] == "all_sessions"
     assert mc_dashboard["meta"]["outputProfile"]["profile"] == "light"
     assert mc_dashboard["monteCarlo"]["sampleRuns"]
+    assert any(item["key"] == "path_bands" and item["fidelity"] == "bucketed" for item in mc_dashboard["dataContract"])
     assert not (tmp_path / "mc" / "sample_paths").exists()
     assert not (tmp_path / "mc" / "behaviour_series.csv").exists()
 

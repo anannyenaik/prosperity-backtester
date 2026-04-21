@@ -10,8 +10,8 @@ import { PageHeader } from '../components/PageHeader'
 import { ProductToggle } from '../components/ProductToggle'
 import { BundleBadge } from '../components/BundleBadge'
 import { fmtNum, fmtInt, fmtPct, fmtDate, colorForValue } from '../lib/format'
-import { getComparisonRows, interpretBundle, isFiniteNumber, numberOrNull } from '../lib/bundles'
-import { POSITION_LIMIT, PRODUCT_LABELS, type DashboardPayload, type Product } from '../types'
+import { formatBool, getComparisonRows, interpretBundle, isFiniteNumber, numberOrNull } from '../lib/bundles'
+import { POSITION_LIMIT, PRODUCT_LABELS, type DashboardPayload, type DataContractEntry, type Product } from '../types'
 
 export function Overview() {
   const { getActiveRun, activeProduct } = useStore()
@@ -80,7 +80,7 @@ export function Overview() {
               { label: 'MAF cost', value: mafCost == null ? 'not available for this bundle type' : fmtNum(mafCost) },
               { label: 'Created', value: fmtDate(meta?.createdAt) },
               { label: 'Schema v', value: meta?.schemaVersion },
-              { label: 'Output', value: meta?.outputProfile?.profile ?? 'legacy' },
+              { label: 'Output profile', value: meta?.outputProfile?.profile ?? 'legacy' },
               { label: 'Dominant risk', value: payload.behaviour?.summary?.dominant_risk_product ?? 'not available for this bundle type' },
               { label: 'Dominant turnover', value: payload.behaviour?.summary?.dominant_turnover_product ?? 'not available for this bundle type' },
             ]}
@@ -99,6 +99,22 @@ export function Overview() {
         </Card>
       </div>
 
+      {meta?.outputProfile && (
+        <Card title="Output policy">
+          <KVGrid
+            cols={2}
+            pairs={[
+              { label: 'Orders', value: formatBool(meta.outputProfile.include_orders) },
+              { label: 'Series sidecars', value: formatBool(meta.outputProfile.write_series_csvs) },
+              { label: 'Sample path files', value: formatBool(meta.outputProfile.write_sample_path_files) },
+              { label: 'Session manifests', value: formatBool(meta.outputProfile.write_session_manifests) },
+              { label: 'Child bundles', value: formatBool(meta.outputProfile.write_child_bundles) },
+              { label: 'Compact JSON', value: formatBool(meta.outputProfile.compact_json) },
+            ]}
+          />
+        </Card>
+      )}
+
       <Card title="Exact vs approximate assumptions">
         {hasAssumptionNotes(payload) ? (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -109,6 +125,23 @@ export function Overview() {
           <EmptyState title="Assumption notes not available" message="This bundle does not include exact or approximate assumption notes." />
         )}
       </Card>
+
+      {payload.dataContract?.length ? (
+        <Card title="Bundle data contract" subtitle="Storage fidelity inside this bundle. Use the assumptions card above for model uncertainty and interpretation limits.">
+          <div className="grid gap-4 lg:grid-cols-2">
+            {payload.dataContract.map((entry) => (
+              <div key={entry.key} className="rounded-lg border border-border bg-white/[0.025] p-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="font-display text-sm font-semibold uppercase tracking-[0.08em] text-txt">{entry.label}</div>
+                  <span className={dataContractToneClass(entry.fidelity)}>{dataContractLabel(entry.fidelity)}</span>
+                </div>
+                <div className="mt-2 text-sm leading-6 text-txt-soft">{entry.notes}</div>
+                <div className="hud-label mt-3 text-muted">Stored in {entry.location}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
     </div>
   )
 }
@@ -281,6 +314,29 @@ function AssumptionList({ title, tone, items }: { title: string; tone: 'good' | 
 
 function hasAssumptionNotes(payload: DashboardPayload): boolean {
   return Boolean(payload.assumptions?.exact?.length || payload.assumptions?.approximate?.length)
+}
+
+function dataContractLabel(fidelity: DataContractEntry['fidelity']): string {
+  if (fidelity === 'exact') return 'Exact'
+  if (fidelity === 'compact') return 'Compact'
+  if (fidelity === 'bucketed') return 'Bucketed'
+  if (fidelity === 'qualitative') return 'Qualitative'
+  if (fidelity === 'raw') return 'Raw'
+  if (fidelity === 'derived') return 'Derived'
+  return String(fidelity)
+}
+
+function dataContractToneClass(fidelity: DataContractEntry['fidelity']): string {
+  if (fidelity === 'exact' || fidelity === 'raw') {
+    return 'hud-label rounded-lg border border-good/25 bg-good/10 px-2 py-1 text-good'
+  }
+  if (fidelity === 'compact' || fidelity === 'bucketed') {
+    return 'hud-label rounded-lg border border-accent/25 bg-accent/10 px-2 py-1 text-accent'
+  }
+  if (fidelity === 'qualitative' || fidelity === 'derived') {
+    return 'hud-label rounded-lg border border-warn/25 bg-warn/10 px-2 py-1 text-warn'
+  }
+  return 'hud-label rounded-lg border border-border bg-white/[0.025] px-2 py-1 text-muted'
 }
 
 function maxNumber(values: unknown[]): number | null {

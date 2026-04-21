@@ -76,6 +76,7 @@ Files:
 
 - `prosperity_backtester/experiments.py`
 - `prosperity_backtester/__main__.py`
+- `analysis/benchmark_outputs.py`
 
 Responsibilities:
 
@@ -83,6 +84,7 @@ Responsibilities:
 - Load JSON config files with clear validation errors.
 - Resolve trader, data and fill-config paths.
 - Keep CLI commands thin and reproducible.
+- Provide a lightweight, reproducible bundle-size benchmark workflow.
 
 ### Reporting
 
@@ -90,6 +92,7 @@ File:
 
 - `prosperity_backtester/reports.py`
 - `prosperity_backtester/storage.py`
+- `prosperity_backtester/benchmark.py`
 
 Responsibilities:
 
@@ -99,6 +102,8 @@ Responsibilities:
 - Write CSV sidecars, manifests, sample paths and session manifests according to output policy.
 - Append `run_registry.jsonl` entries.
 - Preserve exact and approximate assumption notes in output bundles.
+- Preserve exact, compact, bucketed, qualitative and raw bundle data-contract notes.
+- Record canonical, sidecar and debug file lists plus total bundle size in `manifest.json`.
 - Apply light/full storage profiles and safe retention for auto-generated runs.
 
 ### Dashboard
@@ -123,6 +128,7 @@ The dashboard should consume bundle fields rather than reconstructing results fr
 - `type`
 - `meta`
 - `assumptions`
+- `dataContract`
 - `datasetReports`
 - workflow-specific payload sections
 - exact sidecar CSV files for summary, fills and aggregate tables

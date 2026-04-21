@@ -4,6 +4,14 @@ Every workflow writes a `dashboard.json` payload and supporting files. The dashb
 
 Bundles default to the light output profile. Light mode keeps dashboard-ready evidence, exact fills, compact quote intent and all-session Monte Carlo path bands while avoiding duplicate debug artefacts. Full mode is available with `--output-profile full`.
 
+Every bundle manifest now makes the intended shape explicit:
+
+- `canonical_files`: files teammates should inspect first
+- `sidecar_files`: optional chart/export helpers
+- `debug_files`: explicit heavy extras
+- `bundle_stats`: total bytes and file count
+- `data_contract`: exact, compact, bucketed, raw or qualitative evidence notes
+
 ## Replay
 
 Purpose: inspect one trader at tick level.
@@ -39,6 +47,8 @@ Light Monte Carlo bundles keep session distribution rows, all-session `pathBands
 
 - `sample_paths/`
 - `sessions/`
+
+Saved sample runs remain qualitative examples. They are not the source population for final distribution metrics or all-session path bands.
 
 Dashboard tabs: Overview, Alpha Lab, Monte Carlo.
 
@@ -100,3 +110,7 @@ Some tabs are intentionally unavailable for some bundle types. For example:
 - Calibration bundles contain grid candidates, not orders or fills for one final replay.
 
 Unavailable tabs should show a compatibility message rather than zero-valued metrics.
+
+## Child Bundles
+
+When `--save-child-bundles` is enabled on aggregate workflows, the dashboard server now discovers those nested child bundles individually instead of hiding them behind the parent aggregate bundle.

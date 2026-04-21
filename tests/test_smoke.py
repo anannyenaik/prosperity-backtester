@@ -38,7 +38,11 @@ def test_server_bundle_discovery_uses_manifest_metadata(tmp_path):
     run_dir.mkdir()
     (run_dir / 'dashboard.json').write_text('x' * 5_100_000, encoding='utf-8')
     (run_dir / 'manifest.json').write_text(
-        '{"run_type":"replay","run_name":"large_run","created_at":"2026-04-18T00:00:00+00:00","summary":{"final_pnl":123.45}}',
+        (
+            '{"run_type":"replay","run_name":"large_run","created_at":"2026-04-18T00:00:00+00:00",'
+            '"summary":{"final_pnl":123.45},"output_profile":{"profile":"light"},'
+            '"bundle_stats":{"total_size_bytes":5100123,"file_count":2}}'
+        ),
         encoding='utf-8',
     )
 
@@ -49,10 +53,31 @@ def test_server_bundle_discovery_uses_manifest_metadata(tmp_path):
         'name': 'large_run',
         'runName': 'large_run',
         'type': 'replay',
+        'profile': 'light',
         'finalPnl': 123.45,
         'createdAt': '2026-04-18T00:00:00+00:00',
-        'sizeBytes': 5_100_000,
+        'sizeBytes': 5_100_123,
+        'dashboardSizeBytes': 5_100_000,
+        'fileCount': 2,
     }]
+
+
+def test_server_bundle_discovery_includes_explicit_child_bundles(tmp_path):
+    parent = tmp_path / 'parent_bundle'
+    child = parent / 'variant_a' / 'replay'
+    child.mkdir(parents=True)
+    parent.mkdir(exist_ok=True)
+    (parent / 'dashboard.json').write_text('{}', encoding='utf-8')
+    (parent / 'manifest.json').write_text('{"run_type":"comparison","run_name":"parent_bundle","created_at":"2026-04-18T00:00:00+00:00"}', encoding='utf-8')
+    (child / 'dashboard.json').write_text('{}', encoding='utf-8')
+    (child / 'manifest.json').write_text('{"run_type":"replay","run_name":"variant_a_replay","created_at":"2026-04-19T00:00:00+00:00"}', encoding='utf-8')
+
+    bundles = _find_bundles(tmp_path)
+
+    assert [bundle['path'] for bundle in bundles] == [
+        'parent_bundle/variant_a/replay/dashboard.json',
+        'parent_bundle/dashboard.json',
+    ]
 
 
 def test_prune_old_auto_runs_keeps_named_directories(tmp_path):

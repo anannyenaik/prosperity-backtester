@@ -28,8 +28,12 @@ export interface ServerRunMeta {
   path: string
   name: string
   type: string
+  profile?: string | null
   createdAt: string | null
   finalPnl: number | null
+  sizeBytes?: number | null
+  dashboardSizeBytes?: number | null
+  fileCount?: number | null
 }
 
 export const useStore = create<DashboardStore>((set, get) => ({

@@ -3,7 +3,7 @@ import { RefreshCw, Server } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useStore, type ServerRunMeta } from '../store'
 import type { DashboardPayload } from '../types'
-import { fmtDate, fmtNum } from '../lib/format'
+import { fmtBytes, fmtDate, fmtNum } from '../lib/format'
 
 export function ServerRunLoader() {
   const { serverRuns, setServerRuns, loadRun } = useStore()
@@ -61,10 +61,13 @@ export function ServerRunLoader() {
                   <span className="block truncate font-display text-xs font-semibold uppercase tracking-[0.08em] text-txt">
                     {run.name}
                   </span>
-                  <span className="hud-label mt-1 flex gap-2 text-muted">
+                  <span className="hud-label mt-1 flex flex-wrap gap-2 text-muted">
                     <span>{run.type}</span>
+                    {run.profile && <span>{run.profile}</span>}
+                    {run.sizeBytes != null && <span>{fmtBytes(run.sizeBytes)}</span>}
                     <span>{fmtDate(run.createdAt)}</span>
                   </span>
+                  <span className="mt-1 block truncate text-[11px] text-muted/85">{run.path}</span>
                 </span>
                 {run.finalPnl != null && (
                   <span className={clsx('font-mono text-xs', run.finalPnl >= 0 ? 'text-good' : 'text-bad')}>

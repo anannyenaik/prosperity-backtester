@@ -7,7 +7,7 @@ export interface Meta {
   mode: string
   round?: number
   fillModel: FillModelInfo
-  perturbations: Record<string, number>
+  perturbations: Record<string, unknown>
   accessScenario?: AccessScenarioInfo
   outputProfile?: OutputProfileInfo
   createdAt: string
@@ -60,6 +60,14 @@ export interface Assumptions {
     unknown?: string[]
     [key: string]: unknown
   }
+}
+
+export interface DataContractEntry {
+  key: string
+  label: string
+  fidelity: 'exact' | 'compact' | 'bucketed' | 'qualitative' | 'raw' | 'derived' | string
+  location: string
+  notes: string
 }
 
 export interface DatasetReport {
@@ -490,6 +498,7 @@ export interface DashboardPayload {
   meta: Meta
   products: string[]
   assumptions: Assumptions
+  dataContract?: DataContractEntry[]
   datasetReports: DatasetReport[]
   validation: Record<string, unknown>
   summary?: Summary

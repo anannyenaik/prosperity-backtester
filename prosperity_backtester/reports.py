@@ -35,6 +35,145 @@ _SERIES_PRIORITY_METRICS = (
 )
 
 
+def _normalise_run_type(run_type: str | None) -> str:
+    text = str(run_type or "").strip().lower().replace("-", "_")
+    if text in {"mc", "montecarlo"}:
+        return "monte_carlo"
+    if text in {"compare"}:
+        return "comparison"
+    if text in {"optimize", "optimise"}:
+        return "optimization"
+    if text in {"round2", "round_2", "round2_scenario"}:
+        return "round2_scenarios"
+    return text
+
+
+def _data_contract(run_type: str | None, options: OutputOptions) -> List[Dict[str, object]]:
+    kind = _normalise_run_type(run_type)
+    light_replay_paths = {
+        "key": "replay_paths",
+        "label": "Replay paths",
+        "fidelity": "compact",
+        "location": "dashboard.json",
+        "notes": (
+            "Event-aware retained replay rows with bucket min/max envelopes. "
+            "Retained points are faithful, while omitted intra-bucket chronology is compacted."
+        ),
+    }
+    full_replay_paths = {
+        "key": "replay_paths",
+        "label": "Replay paths",
+        "fidelity": "raw",
+        "location": "dashboard.json and *_series.csv sidecars",
+        "notes": "Full-resolution replay rows are retained for forensic debugging.",
+    }
+    light_orders = {
+        "key": "order_submission",
+        "label": "Order submission evidence",
+        "fidelity": "compact",
+        "location": "dashboard.json orderIntent",
+        "notes": "Compact submitted quote intent per timestamp and product. Raw order rows are omitted.",
+    }
+    raw_orders = {
+        "key": "order_submission",
+        "label": "Order submission evidence",
+        "fidelity": "raw",
+        "location": "dashboard.json orders and orders.csv",
+        "notes": "Raw submitted order rows are retained.",
+    }
+
+    if kind == "replay":
+        return [
+            {
+                "key": "replay_summary",
+                "label": "Replay summary",
+                "fidelity": "exact",
+                "location": "dashboard.json and run_summary.csv",
+                "notes": "Exact scalar replay metrics and per-product end-state values for this local run.",
+            },
+            {
+                "key": "fills",
+                "label": "Fills",
+                "fidelity": "exact",
+                "location": "dashboard.json and fills.csv",
+                "notes": "Exact fill rows produced by the local replay engine.",
+            },
+            raw_orders if options.include_orders else light_orders,
+            full_replay_paths if int(options.max_series_rows_per_product) <= 0 else light_replay_paths,
+        ]
+
+    if kind == "monte_carlo":
+        return [
+            {
+                "key": "final_distribution",
+                "label": "Final distribution metrics",
+                "fidelity": "exact",
+                "location": "dashboard.json monteCarlo.summary and session_summary.csv",
+                "notes": "Exact cross-session summary metrics across every Monte Carlo session in the run.",
+            },
+            {
+                "key": "path_bands",
+                "label": "Monte Carlo path bands",
+                "fidelity": "bucketed" if int(options.max_mc_path_rows_per_product) > 0 else "exact",
+                "location": "dashboard.json monteCarlo.pathBands",
+                "notes": (
+                    "Exact cross-session quantiles at retained bucket endpoints. "
+                    "If bucketed, omitted ticks contribute min/max envelopes before the cross-session bands are written."
+                    if int(options.max_mc_path_rows_per_product) > 0
+                    else "Exact cross-session quantiles across every retained Monte Carlo timestamp."
+                ),
+            },
+            {
+                "key": "sample_runs",
+                "label": "Sample session paths",
+                "fidelity": "qualitative",
+                "location": "dashboard.json monteCarlo.sampleRuns",
+                "notes": (
+                    "Sample sessions are for behaviour inspection only. "
+                    "They are not the population used for the final distribution or path bands."
+                ),
+            },
+        ]
+
+    if kind in {"comparison", "scenario_compare", "optimization", "round2_scenarios"}:
+        return [
+            {
+                "key": "aggregate_rows",
+                "label": "Aggregate rows",
+                "fidelity": "exact",
+                "location": "dashboard.json and CSV sidecars",
+                "notes": "Exact aggregate rows for this configured local run.",
+            },
+            {
+                "key": "derived_rankings",
+                "label": "Rankings and scores",
+                "fidelity": "derived",
+                "location": "dashboard.json diagnostics and ranking CSVs",
+                "notes": "Derived local rankings and diagnostics built from the recorded aggregate rows.",
+            },
+        ]
+
+    if kind == "calibration":
+        return [
+            {
+                "key": "calibration_grid",
+                "label": "Calibration grid",
+                "fidelity": "exact",
+                "location": "dashboard.json calibration.grid and calibration_grid.csv",
+                "notes": "Exact local replay-vs-live comparison rows for the tested calibration grid.",
+            },
+            {
+                "key": "best_candidate",
+                "label": "Best calibration candidate",
+                "fidelity": "derived",
+                "location": "dashboard.json calibration.best",
+                "notes": "Best candidate under the local score function, not proof of exact website reconstruction.",
+            },
+        ]
+
+    return []
+
+
 def _json_text(payload: object, options: OutputOptions) -> str:
     if options.json_indent is None:
         return json.dumps(payload, separators=(",", ":"))
@@ -590,6 +729,7 @@ def _write_registry_entry(output_dir: Path, dashboard_payload: Dict[str, object]
         "trader_name": meta.get("traderName"),
         "mode": meta.get("mode"),
         "round": meta.get("round"),
+        "output_profile": (meta.get("outputProfile") or {}).get("profile") if isinstance(meta.get("outputProfile"), dict) else None,
         "access_scenario": (meta.get("accessScenario") or {}).get("name") if isinstance(meta.get("accessScenario"), dict) else None,
         "output_dir": str(output_dir),
         "dashboard_json": str(output_dir / "dashboard.json"),
@@ -674,6 +814,7 @@ def build_dashboard_payload(
         },
         "products": list(PRODUCTS),
         "assumptions": assumptions,
+        "dataContract": _data_contract(run_type, output_options),
         "datasetReports": dataset_reports or [],
         "validation": validation or {},
     }
@@ -776,15 +917,71 @@ def write_run_bundle(
         _write_registry_entry(output_dir, dashboard_payload)
 
 
+def _bundle_file_category(relative_path: str) -> str:
+    if relative_path in {"dashboard.json", "manifest.json"}:
+        return "metadata"
+    if relative_path == "orders.csv" or relative_path.startswith("sample_paths/") or relative_path.startswith("sessions/"):
+        return "debug"
+    if relative_path.endswith("_series.csv") or relative_path == "order_intent.csv":
+        return "sidecar"
+    return "canonical"
+
+
+def _bundle_file_rows(output_dir: Path) -> List[Dict[str, object]]:
+    rows: List[Dict[str, object]] = []
+    for path in sorted(p for p in output_dir.rglob("*") if p.is_file()):
+        relative_path = str(path.relative_to(output_dir)).replace("\\", "/")
+        rows.append({
+            "path": relative_path,
+            "size_bytes": path.stat().st_size,
+            "category": _bundle_file_category(relative_path),
+        })
+    return rows
+
+
+def _bundle_stats(rows: Sequence[Dict[str, object]]) -> Dict[str, object]:
+    total_size = sum(int(row.get("size_bytes", 0) or 0) for row in rows)
+    return {
+        "file_count": len(rows),
+        "total_size_bytes": total_size,
+        "debug_file_count": sum(1 for row in rows if row.get("category") == "debug"),
+        "sidecar_file_count": sum(1 for row in rows if row.get("category") == "sidecar"),
+    }
+
+
 def write_manifest(output_dir: Path, manifest: Dict[str, object], output_options: OutputOptions | None = None) -> None:
     output_options = output_options or DEFAULT_OUTPUT_OPTIONS
     output_dir.mkdir(parents=True, exist_ok=True)
-    payload = {**manifest, "output_profile": output_options.to_manifest()}
-    (output_dir / "manifest.json").write_text(_json_text(payload, output_options), encoding="utf-8")
+    run_type = manifest.get("run_type") or manifest.get("mode")
+    payload = {
+        "run_name": manifest.get("run_name") or output_dir.name,
+        "schema_version": manifest.get("schema_version", DASHBOARD_SCHEMA_VERSION),
+        "created_at": manifest.get("created_at") or datetime.now(timezone.utc).isoformat(),
+        **manifest,
+        "output_profile": output_options.to_manifest(),
+    }
+    if run_type and "data_contract" not in payload:
+        payload["data_contract"] = _data_contract(str(run_type), output_options)
+
+    manifest_path = output_dir / "manifest.json"
+    previous_text: str | None = None
+    for _ in range(5):
+        text = _json_text(payload, output_options)
+        if text == previous_text:
+            break
+        manifest_path.write_text(text, encoding="utf-8")
+        previous_text = text
+        rows = _bundle_file_rows(output_dir)
+        payload["bundle_stats"] = _bundle_stats(rows)
+        payload["canonical_files"] = [row["path"] for row in rows if row.get("category") in {"metadata", "canonical"}]
+        payload["sidecar_files"] = [row["path"] for row in rows if row.get("category") == "sidecar"]
+        payload["debug_files"] = [row["path"] for row in rows if row.get("category") == "debug"]
+        payload["bundle_files"] = rows
 
 
 def _manifest_base(artefact: SessionArtefacts) -> Dict[str, object]:
     return {
+        "run_type": artefact.mode,
         "run_name": artefact.run_name,
         "trader_name": artefact.trader_name,
         "mode": artefact.mode,

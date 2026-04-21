@@ -49,7 +49,13 @@ export function MonteCarlo() {
 
   const allBands = pathBands ?? { analysisFair: fairValueBands?.analysisFair, mid: fairValueBands?.mid }
   const bandData = buildBands(allBands?.[pathMetric]?.[product] ?? [])
-  const bandSource = mc.pathBandMethod?.source === 'all_sessions' ? 'all sessions' : 'saved samples'
+  const usingAllSessions = mc.pathBandMethod?.source === 'all_sessions'
+  const bandSubtitle = usingAllSessions
+    ? 'Exact session quantiles at retained bucket endpoints. Omitted intra-bucket chronology is compacted.'
+    : 'Fallback bands from saved sample runs only.'
+  const sampleSubtitle = usingAllSessions
+    ? 'Qualitative example only. The path bands above are computed from all sessions, not from this sample.'
+    : 'Saved sample session path.'
 
   // Sample run selector
   const selectedSample =
@@ -103,7 +109,7 @@ export function MonteCarlo() {
         </Card>
         <Card
           title={`${PATH_METRICS.find(([key]) => key === pathMetric)?.[1] ?? 'Path'} bands / ${activeProduct === 'ASH_COATED_OSMIUM' ? 'Osmium' : 'Pepper'}`}
-          subtitle={`P10/P50/P90 from ${bandSource}`}
+          subtitle={bandSubtitle}
           action={
             <select
               value={pathMetric}
@@ -121,7 +127,7 @@ export function MonteCarlo() {
           {bandData.length > 0 ? (
             <PathBandsChart data={bandData} height={280} />
           ) : (
-            <EmptyState title="Fair-value bands not present" message="This Monte Carlo bundle does not include fair-value bands for the selected product." />
+            <EmptyState title="Path bands not present" message="This Monte Carlo bundle does not include the selected path-band metric for this product." />
           )}
         </Card>
       </div>
@@ -129,6 +135,7 @@ export function MonteCarlo() {
       {/* Sample path + selector */}
       <Card
         title="Sample session path"
+        subtitle={sampleSubtitle}
         action={
           <select
             value={sampleRunName ?? ''}

@@ -56,6 +56,12 @@ def _output_options_from_args(args) -> OutputOptions:
         config["save_child_bundles"] = bool(save_child_bundles)
     if getattr(args, "series_sidecars", None) is not None:
         config["write_series_csvs"] = bool(args.series_sidecars)
+    if getattr(args, "orders", None) is not None:
+        config["include_orders"] = bool(args.orders)
+    if getattr(args, "sample_path_files", None) is not None:
+        config["write_sample_path_files"] = bool(args.sample_path_files)
+    if getattr(args, "session_manifests", None) is not None:
+        config["write_session_manifests"] = bool(args.session_manifests)
     if getattr(args, "pretty_json", None) is not None:
         config["pretty_json"] = bool(args.pretty_json)
     return OutputOptions.from_config(config)
@@ -64,7 +70,15 @@ def _output_options_from_args(args) -> OutputOptions:
 def _has_output_policy_override(args) -> bool:
     return any(
         getattr(args, name, None) is not None
-        for name in ("output_profile", "save_child_bundles", "series_sidecars", "pretty_json")
+        for name in (
+            "output_profile",
+            "save_child_bundles",
+            "series_sidecars",
+            "orders",
+            "sample_path_files",
+            "session_manifests",
+            "pretty_json",
+        )
     )
 
 
@@ -112,6 +126,7 @@ def _perturb_from_args(args) -> PerturbationConfig:
         slippage_multiplier=args.slippage_multiplier,
         reentry_probability=args.reentry_probability,
         inventory_limit_scale=args.inventory_limit_scale,
+        synthetic_tick_limit=getattr(args, "synthetic_tick_limit", None),
         scenario_name=str(getattr(args, "scenario_name", "cli")),
     )
 
@@ -168,9 +183,12 @@ def build_parser() -> argparse.ArgumentParser:
     def add_output_controls(subparser, *, child_bundles: bool = False):
         subparser.add_argument("--output-profile", choices=["light", "full"], default=None, help="Bundle detail level. Default is light unless a config sets output_profile.")
         if child_bundles:
-            subparser.add_argument("--save-child-bundles", action="store_true", default=None, help="Write per-variant/per-scenario child replay and Monte Carlo bundles")
-        subparser.add_argument("--series-sidecars", action="store_true", default=None, help="Write chart-series CSV sidecars. Full profile enables this by default.")
-        subparser.add_argument("--pretty-json", action="store_true", default=None, help="Write indented dashboard and manifest JSON for debugging")
+            subparser.add_argument("--save-child-bundles", action=argparse.BooleanOptionalAction, default=None, help="Write per-variant/per-scenario child replay and Monte Carlo bundles")
+        subparser.add_argument("--series-sidecars", action=argparse.BooleanOptionalAction, default=None, help="Write chart-series CSV sidecars. Full profile enables this by default.")
+        subparser.add_argument("--orders", action=argparse.BooleanOptionalAction, default=None, help="Write raw submitted order rows. Full profile enables this by default.")
+        subparser.add_argument("--sample-path-files", action=argparse.BooleanOptionalAction, default=None, help="Write duplicate Monte Carlo sample_paths/ files. Full profile enables this by default.")
+        subparser.add_argument("--session-manifests", action=argparse.BooleanOptionalAction, default=None, help="Write one Monte Carlo session manifest per sampled session. Full profile enables this by default.")
+        subparser.add_argument("--pretty-json", action=argparse.BooleanOptionalAction, default=None, help="Write indented dashboard and manifest JSON for debugging")
         subparser.add_argument("--keep-runs", type=_positive_int, default=30, help="When using the default backtests/ output root, keep this many timestamped runs")
 
     def add_shared(subparser):
@@ -195,6 +213,7 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--slippage-multiplier", type=float, default=1.0, help="Set to 0 for a no-slippage comparison")
         subparser.add_argument("--reentry-probability", type=float, default=1.0)
         subparser.add_argument("--inventory-limit-scale", type=float, default=1.0)
+        subparser.add_argument("--synthetic-tick-limit", type=int, default=None, help="Cap synthetic Monte Carlo ticks per day for quick smoke or benchmark runs")
         subparser.add_argument("--scenario-name", default="cli")
         add_output_controls(subparser)
         add_round_and_access(subparser)

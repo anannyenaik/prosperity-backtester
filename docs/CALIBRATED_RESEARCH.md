@@ -98,6 +98,8 @@ python -m prosperity_backtester monte-carlo strategies/trader.py --fill-mode emp
 
 This still uses the light output profile unless `--output-profile full` is added. Light mode keeps exact final distribution stats, all-session path bands and sampled dashboard paths without writing duplicate sample files.
 
+If you need a calibration or robustness debug run with full path fidelity but not every heavy extra, prefer targeted overrides such as `--output-profile full --no-sample-path-files --no-session-manifests`.
+
 Use:
 
 - mean for average robustness

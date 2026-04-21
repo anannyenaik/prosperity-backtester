@@ -12,13 +12,13 @@ Use it for relative strategy selection, execution-risk diagnosis and handoff-rea
 ## Repository Layout
 
 ```text
-analysis/                 Thin validation and calibration entry scripts
+analysis/                 Thin validation, calibration and benchmark entry scripts
 configs/                  Sweep, optimisation, scenario and Round 2 configs
 data/round1/              Round 1 public CSV inputs
 data/round2/              Round 2 public CSV inputs
 dashboard/                React/Vite dashboard source and tracked build output
 docs/                     Architecture, workflow and assumption notes
-examples/                 Example trader script fixtures
+examples/                 Example trader script fixtures, including a lightweight benchmark trader
 legacy_dashboard/         Static dashboard fallback used when no React build exists
 live_exports/             Tracked live-export fixture data for calibration tests
 prosperity_backtester/    Core replay, simulation, calibration and reporting package
@@ -29,7 +29,7 @@ tests/                    Backend and dashboard adapter checks
 
 Generated research bundles are written to `backtests/` unless `--output-dir` is supplied. `backtests/`, local logs, virtual environments, caches and `dashboard/node_modules/` are ignored.
 
-Runs default to the lightweight output profile. Light bundles keep exact summaries and fills, event-aware compact chart paths, compact submitted quote intent and all-session Monte Carlo path bands while avoiding raw order dumps, duplicated series sidecars, sampled path files and child bundles. Use `--output-profile full` only for deep debugging. See [docs/OUTPUTS.md](docs/OUTPUTS.md).
+Runs default to the lightweight output profile. Light bundles keep exact summaries and fills, event-aware compact chart paths, compact submitted quote intent and all-session Monte Carlo path bands while avoiding raw order dumps, duplicated series sidecars, sampled path files and child bundles. Use `--output-profile full` only for deep debugging. Full mode can now be trimmed deliberately with `--no-series-sidecars`, `--no-orders`, `--no-sample-path-files` and `--no-session-manifests`. See [docs/OUTPUTS.md](docs/OUTPUTS.md).
 
 ## Setup
 
@@ -189,6 +189,21 @@ npm run dev --prefix dashboard
 
 The Vite dev server proxies `/api` to `http://127.0.0.1:5555`.
 
+## Storage Benchmark
+
+Measure the default light/full bundle footprint with the tracked quick fixture:
+
+```bash
+python analysis/benchmark_outputs.py --output-dir backtests/repo_output_benchmark
+```
+
+The helper uses `examples/benchmark_trader.py`, copies the first 250 timestamps from the selected tracked day into a temporary replay fixture, limits synthetic Monte Carlo sessions to the same 250 ticks, runs replay light/full and Monte Carlo light/full, then writes:
+
+- `benchmark_report.json`
+- `benchmark_report.md`
+
+The default benchmark case uses 4 Monte Carlo sessions and 2 saved samples so it stays quick. Use `--trader`, `--sessions`, `--sample-sessions` or `--fixture-timestamps` when you need strategy-specific numbers. See [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+
 ## Bundle Types
 
 Replay bundles:
@@ -236,6 +251,13 @@ Calibrated scenario bundles add:
 
 Every generated parent output directory receives `run_registry.jsonl`. Auto-generated timestamped runs under `backtests/` keep the newest 30 runs by default, sorted by the timestamp in the folder name with `manifest.json` `created_at` as a fallback. Custom `--output-dir` paths are never pruned automatically.
 
+Every `manifest.json` also records:
+
+- resolved output profile
+- bundle data contract
+- canonical, sidecar and debug file lists
+- total bundle size and file count
+
 ## Interpreting Outputs
 
 - `final_pnl`: net result after any MAF deduction.
@@ -270,10 +292,14 @@ Common fields:
 - `fill_model`: built-in fill model name.
 - `fill_config`: optional empirical fill-profile JSON.
 - `perturbation`: replay or Monte Carlo perturbation fields.
+- `synthetic_tick_limit`: optional Monte Carlo tick cap for smoke or benchmark runs.
 - `mc_sessions`, `mc_sample_sessions`, `mc_seed`, `mc_workers`: Monte Carlo controls.
 - `output_profile`: `light` or `full`.
 - `save_child_bundles`: keep per-variant or per-scenario child bundles for aggregate workflows.
 - `write_series_csvs` or `series_sidecars`: write chart-series CSV sidecars.
+- `include_orders`: write raw submitted order rows.
+- `write_sample_path_files`: write duplicate Monte Carlo `sample_paths/` files.
+- `write_session_manifests`: write one Monte Carlo manifest per saved session.
 - `max_series_rows_per_product`: light-mode compact path budget. `0` keeps every row.
 - `max_mc_path_rows_per_product`: Monte Carlo path-band bucket budget. `0` keeps every timestamp.
 - `pretty_json`: write indented JSON for debugging.
@@ -337,6 +363,7 @@ python -m compileall -q prosperity_backtester r1bt analysis strategies tests
 python -m pytest -q
 npm test --prefix dashboard
 npm run build --prefix dashboard
+python analysis/benchmark_outputs.py --output-dir backtests/repo_output_benchmark
 ```
 
 With `uv`:

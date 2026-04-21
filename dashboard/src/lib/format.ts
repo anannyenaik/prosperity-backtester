@@ -34,6 +34,15 @@ export function fmtPrice(v: number | null | undefined): string {
   return v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 })
 }
 
+export function fmtBytes(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return '-'
+  const abs = Math.abs(v)
+  if (abs >= 1_000_000_000) return (v / 1_000_000_000).toFixed(2) + ' GB'
+  if (abs >= 1_000_000) return (v / 1_000_000).toFixed(2) + ' MB'
+  if (abs >= 1_000) return (v / 1_000).toFixed(1) + ' KB'
+  return Math.round(v) + ' B'
+}
+
 export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '-'
   try {

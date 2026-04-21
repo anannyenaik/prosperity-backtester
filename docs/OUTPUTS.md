@@ -2,6 +2,11 @@
 
 Generated bundles are designed to be useful in the dashboard without quietly growing into very large local archives.
 
+Every bundle now carries the same contract in two places:
+
+- `dashboard.json` contains `dataContract` for the dashboard and review workflow.
+- `manifest.json` contains `data_contract`, output policy, canonical/debug file lists and total bundle size for fast discovery and storage audits.
+
 ## Default Light Profile
 
 All CLI workflows default to `--output-profile light`.
@@ -64,6 +69,13 @@ python -m prosperity_backtester monte-carlo strategies/trader.py --sessions 512 
 
 Full mode keeps raw submitted order rows, full chart-series CSV sidecars, `orders.csv`, `order_intent.csv`, Monte Carlo `sample_paths/` and per-session manifests for sampled runs.
 
+If you need full path fidelity without every heavy extra, override the defaults explicitly:
+
+```bash
+python -m prosperity_backtester replay strategies/trader.py --days 0 --output-profile full --no-orders
+python -m prosperity_backtester monte-carlo strategies/trader.py --sessions 128 --sample-sessions 8 --output-profile full --no-sample-path-files --no-session-manifests
+```
+
 Full mode does not enable child bundles by itself. Use `--save-child-bundles` on aggregate commands when you explicitly want per-variant or per-scenario child replay and Monte Carlo bundles:
 
 ```bash
@@ -100,6 +112,7 @@ Config files may set:
 - `output_profile`: `light` or `full`
 - `max_series_rows_per_product`: default `1000` in light mode, `0` means no compaction
 - `max_mc_path_rows_per_product`: default `800` in light mode, `0` means every Monte Carlo timestamp
+- `synthetic_tick_limit`: cap synthetic Monte Carlo ticks per day for smoke or benchmark runs
 - `include_orders`: write submitted order rows
 - `write_series_csvs` or `series_sidecars`: write chart-series CSV sidecars
 - `write_sample_path_files`: write Monte Carlo `sample_paths/`
@@ -109,6 +122,33 @@ Config files may set:
 - `compact_json`: force compact JSON
 
 CLI `--output-profile`, `--series-sidecars`, `--pretty-json` and `--save-child-bundles` override config output policy for the run.
+
+CLI `--orders`, `--sample-path-files`, `--session-manifests`, `--no-series-sidecars`, `--no-orders`, `--no-sample-path-files`, `--no-session-manifests` and `--no-save-child-bundles` make full-mode debug extras explicit instead of all-or-nothing.
+
+## Manifest Metadata
+
+`manifest.json` is the canonical low-cost summary for bundle discovery. It records:
+
+- `run_name`, `run_type`, `created_at` and schema version
+- resolved `output_profile`
+- `data_contract`
+- `bundle_stats` with total size and file count
+- `canonical_files`
+- `sidecar_files`
+- `debug_files`
+- `bundle_files` with per-file byte counts
+
+The dashboard server reads the manifest first, so large bundles stay discoverable without loading `dashboard.json`.
+
+## Benchmarking
+
+Use the tracked quick benchmark when you want an honest storage comparison between light and full:
+
+```bash
+python analysis/benchmark_outputs.py --output-dir backtests/repo_output_benchmark
+```
+
+See [docs/BENCHMARKS.md](BENCHMARKS.md) for the current measured sizes and created files.
 
 ## Retention
 

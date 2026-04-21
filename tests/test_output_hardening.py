@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from prosperity_backtester.__main__ import _output_options_from_args, build_parser
 from prosperity_backtester.experiments import TraderSpec, run_compare, run_replay, run_sweep_from_config
 from prosperity_backtester.metadata import PRODUCTS
 from prosperity_backtester.platform import PerturbationConfig, SessionArtefacts
@@ -261,6 +262,28 @@ def test_config_output_policy_overrides_are_applied(tmp_path):
     assert dashboard["meta"]["outputProfile"]["write_series_csvs"] is False
     assert not (tmp_path / "sweep_out" / "a").exists()
     assert "\n  " in (tmp_path / "sweep_out" / "dashboard.json").read_text(encoding="utf-8")
+
+
+def test_cli_output_policy_flags_can_disable_full_debug_extras():
+    parser = build_parser()
+    args = parser.parse_args([
+        "monte-carlo",
+        "strategies/trader.py",
+        "--output-profile",
+        "full",
+        "--no-series-sidecars",
+        "--no-orders",
+        "--no-sample-path-files",
+        "--no-session-manifests",
+    ])
+
+    options = _output_options_from_args(args)
+
+    assert options.profile == "full"
+    assert options.write_series_csvs is False
+    assert options.include_orders is False
+    assert options.write_sample_path_files is False
+    assert options.write_session_manifests is False
 
 
 def test_prune_uses_folder_timestamp_not_mtime_and_validates_keep(tmp_path):

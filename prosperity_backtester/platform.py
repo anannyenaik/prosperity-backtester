@@ -35,6 +35,7 @@ class PerturbationConfig:
     slippage_multiplier: float = 1.0
     reentry_probability: float = 1.0
     inventory_limit_scale: float = 1.0
+    synthetic_tick_limit: Optional[int] = None
     shock_tick: Optional[int] = None
     shock_by_product: Dict[str, float] = field(default_factory=dict)
     scenario_name: str = "custom"
@@ -959,12 +960,18 @@ def generate_synthetic_market_days(
     samplers = build_samplers(calib)
     market_days: List[DayDataset] = []
     last_latent: Dict[str, Optional[float]] = {product: None for product in PRODUCTS}
+    tick_limit = None if perturb.synthetic_tick_limit in (None, 0) else max(1, int(perturb.synthetic_tick_limit))
 
     for session_day_index, day in enumerate(days):
         latent_paths = {
             product: simulate_latent_fair(product, calib, session_day_index, rng, continue_from=last_latent[product])
             for product in PRODUCTS
         }
+        if tick_limit is not None:
+            latent_paths = {
+                product: path[:tick_limit]
+                for product, path in latent_paths.items()
+            }
         if perturb.shock_tick is not None:
             shock_tick = max(0, int(perturb.shock_tick))
             for product, path in latent_paths.items():
@@ -974,6 +981,11 @@ def generate_synthetic_market_days(
                 for tick in range(shock_tick, len(path)):
                     path[tick] += shock
         trade_counts = {product: sample_trade_counts(product, calib, rng) for product in PRODUCTS}
+        if tick_limit is not None:
+            trade_counts = {
+                product: counts[:tick_limit]
+                for product, counts in trade_counts.items()
+            }
         timestamps = [tick * 100 for tick in range(len(next(iter(latent_paths.values()))))]
         books_by_timestamp: Dict[int, Dict[str, BookSnapshot]] = {}
         trades_by_timestamp: Dict[int, Dict[str, List[TradePrint]]] = {}

@@ -124,4 +124,16 @@ python -m prosperity_backtester compare strategies/trader.py strategies/starter.
 
 Use `--series-sidecars` when a script needs chart-series CSVs but raw orders and debug sample files are not needed.
 
+Use `--no-orders`, `--no-sample-path-files` or `--no-session-manifests` when you need full fidelity in one area without paying for every full-mode debug artefact.
+
 Default timestamped runs under `backtests/` keep the newest 30 runs. Use `--keep-runs` or `python -m prosperity_backtester clean --keep 30` to manage retention. Invalid keep counts fail instead of being treated as a no-op.
+
+## Benchmark Storage
+
+Use the tracked quick benchmark helper when you want a storage sanity check before sharing a workflow:
+
+```bash
+python analysis/benchmark_outputs.py --output-dir backtests/repo_output_benchmark
+```
+
+The helper measures replay light/full and Monte Carlo light/full, writes `benchmark_report.json` and `benchmark_report.md`, and uses a small copied slice of tracked public data plus a matching short synthetic Monte Carlo horizon so it finishes quickly. See [docs/BENCHMARKS.md](BENCHMARKS.md).
