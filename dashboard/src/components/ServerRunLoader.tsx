@@ -10,20 +10,23 @@ export function ServerRunLoader() {
   const [loading, setLoading] = useState(false)
   const [open, setOpen] = useState(false)
 
-  async function fetchRuns() {
+  async function fetchRuns(): Promise<ServerRunMeta[]> {
     setLoading(true)
     try {
       const res = await fetch('/api/runs')
       if (res.ok) {
         const data = await res.json()
-        setServerRuns(data as ServerRunMeta[])
+        const runs = data as ServerRunMeta[]
+        setServerRuns(runs)
         setOpen(true)
+        return runs
       }
     } catch {
       setOpen(true)
     } finally {
       setLoading(false)
     }
+    return []
   }
 
   async function loadFromServer(run: ServerRunMeta) {
@@ -34,16 +37,33 @@ export function ServerRunLoader() {
     }
   }
 
+  async function loadLatestFromServer() {
+    const runs = await fetchRuns()
+    if (runs.length > 0) {
+      await loadFromServer(runs[0])
+    }
+  }
+
   return (
     <div className="mt-4">
-      <button
-        onClick={fetchRuns}
-        disabled={loading}
-        className="subtle-button inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
-      >
-        {loading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
-        Load from local server
-      </button>
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={loadLatestFromServer}
+          disabled={loading}
+          className="subtle-button inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+        >
+          {loading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
+          Open latest run
+        </button>
+        <button
+          onClick={() => void fetchRuns()}
+          disabled={loading}
+          className="subtle-button inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+        >
+          {loading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
+          Browse local server
+        </button>
+      </div>
 
       {open && serverRuns.length > 0 && (
         <div className="mt-3 overflow-hidden rounded-lg border border-border bg-bg/45">

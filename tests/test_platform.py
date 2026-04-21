@@ -17,6 +17,41 @@ TRADER_V9 = ROOT / "examples" / "trader_round1_v9.py"
 STARTER = ROOT / "strategies" / "starter.py"
 MAIN_TRADER = ROOT / "strategies" / "trader.py"
 
+
+def _write_trade_matching_dataset(data_dir: Path) -> None:
+    data_dir.mkdir(parents=True)
+    prices_header = (
+        "day;timestamp;product;"
+        "bid_price_1;bid_volume_1;bid_price_2;bid_volume_2;bid_price_3;bid_volume_3;"
+        "ask_price_1;ask_volume_1;ask_price_2;ask_volume_2;ask_price_3;ask_volume_3;"
+        "mid_price;profit_and_loss\n"
+    )
+    price_rows = [
+        "0;0;ASH_COATED_OSMIUM;9998;10;;;;;10002;10;;;;;10000;0\n",
+        "0;0;INTARIAN_PEPPER_ROOT;11998;10;;;;;12002;10;;;;;12000;0\n",
+    ]
+    (data_dir / "prices_round_1_day_0.csv").write_text(prices_header + "".join(price_rows), encoding="utf-8")
+    trade_rows = [
+        "timestamp;buyer;seller;symbol;currency;price;quantity\n",
+        "0;;BOT_SELLER;ASH_COATED_OSMIUM;SEASHELLS;9999;1\n",
+    ]
+    (data_dir / "trades_round_1_day_0.csv").write_text("".join(trade_rows), encoding="utf-8")
+
+
+def _write_passive_buy_trader(path: Path) -> Path:
+    path.write_text(
+        """
+from datamodel import Order
+
+
+class Trader:
+    def run(self, state):
+        return {"ASH_COATED_OSMIUM": [Order("ASH_COATED_OSMIUM", 9999, 1)]}, 0, state.traderData
+""".strip(),
+        encoding="utf-8",
+    )
+    return path
+
 def test_dataset_validation():
     dataset = load_round1_dataset(DATA_DIR, days=(0,))
     assert 0 in dataset
@@ -126,6 +161,45 @@ def test_full_output_profile_writes_debug_artifacts(tmp_path):
     assert dashboard["meta"]["outputProfile"]["profile"] == "full"
     assert dashboard["orders"]
     assert (tmp_path / "full_replay" / "orders.csv").is_file()
+
+
+def test_trade_matching_mode_controls_passive_trade_matching(tmp_path):
+    data_dir = tmp_path / "matching_data"
+    trader = _write_passive_buy_trader(tmp_path / "passive_buy_trader.py")
+    _write_trade_matching_dataset(data_dir)
+
+    common = {
+        "trader_spec": TraderSpec(name="passive_buy", path=trader),
+        "days": (0,),
+        "data_dir": data_dir,
+        "fill_model_name": "base",
+        "run_name": "trade_matching_mode",
+    }
+    aggressive_fill_settings = {
+        "passive_fill_scale": 10.0,
+        "missed_fill_additive": -1.0,
+    }
+
+    all_mode = run_replay(
+        **common,
+        perturbation=PerturbationConfig(trade_matching_mode="all", **aggressive_fill_settings),
+        output_dir=tmp_path / "matching_all",
+    )
+    worse_mode = run_replay(
+        **common,
+        perturbation=PerturbationConfig(trade_matching_mode="worse", **aggressive_fill_settings),
+        output_dir=tmp_path / "matching_worse",
+    )
+    none_mode = run_replay(
+        **common,
+        perturbation=PerturbationConfig(trade_matching_mode="none", **aggressive_fill_settings),
+        output_dir=tmp_path / "matching_none",
+    )
+
+    assert all_mode.summary["fill_count"] == 1
+    assert all_mode.fills[0]["kind"] == "passive_approx"
+    assert worse_mode.summary["fill_count"] == 0
+    assert none_mode.summary["fill_count"] == 0
 
 
 def test_optimize_config(tmp_path):

@@ -307,45 +307,60 @@ def _bucket_ranges(length: int, bucket_count: int) -> List[tuple[int, int]]:
     return ranges
 
 
-def _bucket_extrema_indices(rows: Sequence[Dict[str, object]], metrics: Sequence[str], bucket_count: int) -> tuple[set[int], Dict[int, tuple[int, int]]]:
-    selected: set[int] = set()
-    ranges_by_index: Dict[int, tuple[int, int]] = {}
-    for start, end in _bucket_ranges(len(rows), bucket_count):
-        bucket_rows = rows[start:end]
-        selected.add(end - 1)
-        for metric in metrics:
-            values = [(idx, _number(row.get(metric))) for idx, row in enumerate(bucket_rows, start=start)]
-            clean = [(idx, value) for idx, value in values if value is not None]
-            if not clean:
-                continue
-            selected.add(min(clean, key=lambda item: item[1])[0])
-            selected.add(max(clean, key=lambda item: item[1])[0])
-        for idx in range(start, end):
-            ranges_by_index[idx] = (start, end)
-    return selected, ranges_by_index
-
-
-def _with_bucket_envelope(row: Dict[str, object], bucket_rows: Sequence[Dict[str, object]], metrics: Sequence[str]) -> Dict[str, object]:
-    output = dict(row)
+def _bucket_selection_and_envelope(
+    rows: Sequence[Dict[str, object]],
+    start: int,
+    end: int,
+    metrics: Sequence[str],
+) -> tuple[set[int], Dict[str, object]]:
+    selected = {end - 1}
+    bucket_rows = rows[start:end]
     if len(bucket_rows) <= 1:
-        return output
+        return selected, {}
+
     first = bucket_rows[0]
     last = bucket_rows[-1]
-    output["bucket_start_day"] = first.get("day")
-    output["bucket_start_timestamp"] = first.get("timestamp")
-    output["bucket_end_day"] = last.get("day")
-    output["bucket_end_timestamp"] = last.get("timestamp")
-    output["bucket_count"] = len(bucket_rows)
-    for metric in metrics:
-        values = [_number(item.get(metric)) for item in bucket_rows]
-        clean = [value for value in values if value is not None]
-        if not clean:
+    envelope: Dict[str, object] = {
+        "bucket_start_day": first.get("day"),
+        "bucket_start_timestamp": first.get("timestamp"),
+        "bucket_end_day": last.get("day"),
+        "bucket_end_timestamp": last.get("timestamp"),
+        "bucket_count": len(bucket_rows),
+    }
+    metric_state = {
+        metric: {
+            "min_index": None,
+            "min_value": None,
+            "max_index": None,
+            "max_value": None,
+            "last_value": None,
+        }
+        for metric in metrics
+    }
+    for idx in range(start, end):
+        row = rows[idx]
+        for metric, state in metric_state.items():
+            value = _number(row.get(metric))
+            if value is None:
+                continue
+            state["last_value"] = value
+            if state["min_value"] is None or value < state["min_value"]:
+                state["min_value"] = value
+                state["min_index"] = idx
+            if state["max_value"] is None or value > state["max_value"]:
+                state["max_value"] = value
+                state["max_index"] = idx
+    for metric, state in metric_state.items():
+        min_value = state["min_value"]
+        max_value = state["max_value"]
+        if min_value is None or max_value is None:
             continue
-        last_value = next((value for value in reversed(values) if value is not None), None)
-        output[f"{metric}_bucket_min"] = min(clean)
-        output[f"{metric}_bucket_max"] = max(clean)
-        output[f"{metric}_bucket_last"] = last_value
-    return output
+        selected.add(int(state["min_index"]))
+        selected.add(int(state["max_index"]))
+        envelope[f"{metric}_bucket_min"] = min_value
+        envelope[f"{metric}_bucket_max"] = max_value
+        envelope[f"{metric}_bucket_last"] = state["last_value"]
+    return selected, envelope
 
 
 def _compact_event_aware(
@@ -367,14 +382,25 @@ def _compact_event_aware(
     budget = max(1, limit - len(required))
     slots_per_bucket = max(1, 1 + 2 * max(1, len(metrics)))
     bucket_count = max(1, budget // slots_per_bucket)
-    bucket_indices, bucket_ranges = _bucket_extrema_indices(ordered, metrics, bucket_count)
+    bucket_indices: set[int] = set()
+    bucket_infos: List[tuple[int, int, Dict[str, object]]] = []
+    for start, end in _bucket_ranges(len(ordered), bucket_count):
+        selected_in_bucket, envelope = _bucket_selection_and_envelope(ordered, start, end, metrics)
+        bucket_indices.update(selected_in_bucket)
+        bucket_infos.append((start, end, envelope))
     selected = required | bucket_indices
     output: List[Dict[str, object]] = []
+    bucket_cursor = 0
     for idx in sorted(selected):
         if idx < 0 or idx >= len(ordered):
             continue
-        start, end = bucket_ranges.get(idx, (idx, idx + 1))
-        output.append(_with_bucket_envelope(ordered[idx], ordered[start:end], metrics))
+        while bucket_cursor + 1 < len(bucket_infos) and idx >= bucket_infos[bucket_cursor][1]:
+            bucket_cursor += 1
+        row = dict(ordered[idx])
+        start, end, envelope = bucket_infos[bucket_cursor]
+        if start <= idx < end and envelope:
+            row.update(envelope)
+        output.append(row)
     return output
 
 
@@ -382,11 +408,12 @@ def _compact_series(
     rows: Sequence[Dict[str, object]],
     options: OutputOptions,
     fills: Sequence[Dict[str, object]] | None = None,
+    fill_context: Dict[tuple[object, object], set[tuple[int, int]]] | None = None,
 ) -> List[Dict[str, object]]:
     limit = int(options.max_series_rows_per_product)
     if limit <= 0:
         return [dict(row) for row in rows]
-    fill_context = _fill_context(fills or [])
+    fill_context = fill_context if fill_context is not None else _fill_context(fills or [])
     grouped: Dict[tuple[object, object], List[Dict[str, object]]] = {}
     for row in rows:
         grouped.setdefault((row.get("run_name"), row.get("product", "all")), []).append(row)
@@ -455,15 +482,28 @@ def _compact_order_intent(orders: Sequence[Dict[str, object]]) -> List[Dict[str,
     return rows
 
 
-def _compact_replay_rows(artefact: SessionArtefacts, options: OutputOptions) -> Dict[str, List[Dict[str, object]]]:
+def compact_replay_rows(artefact: SessionArtefacts, options: OutputOptions) -> Dict[str, List[Dict[str, object]]]:
+    fill_context = _fill_context(artefact.fills)
     return {
         "orders": [dict(row) for row in artefact.orders] if options.include_orders else [],
         "fills": [dict(row) for row in artefact.fills],
         "orderIntent": _compact_order_intent(artefact.orders),
-        "inventorySeries": _compact_series(artefact.inventory_series, options, artefact.fills),
-        "pnlSeries": _compact_series(artefact.pnl_series, options, artefact.fills),
-        "fairValueSeries": _compact_series(artefact.fair_value_series, options, artefact.fills),
-        "behaviourSeries": _compact_series(artefact.behaviour_series, options, artefact.fills),
+        "inventorySeries": _compact_series(artefact.inventory_series, options, artefact.fills, fill_context),
+        "pnlSeries": _compact_series(artefact.pnl_series, options, artefact.fills, fill_context),
+        "fairValueSeries": _compact_series(artefact.fair_value_series, options, artefact.fills, fill_context),
+        "behaviourSeries": _compact_series(artefact.behaviour_series, options, artefact.fills, fill_context),
+    }
+
+
+def _empty_compact_replay_rows() -> Dict[str, List[Dict[str, object]]]:
+    return {
+        "orders": [],
+        "fills": [],
+        "orderIntent": [],
+        "inventorySeries": [],
+        "pnlSeries": [],
+        "fairValueSeries": [],
+        "behaviourSeries": [],
     }
 
 
@@ -471,8 +511,12 @@ def _compact_behaviour(behaviour: Dict[str, object]) -> Dict[str, object]:
     return {key: value for key, value in behaviour.items() if key != "series"}
 
 
-def _sample_run_payload(result: SessionArtefacts, options: OutputOptions) -> Dict[str, object]:
-    rows = _compact_replay_rows(result, options)
+def _sample_run_payload(
+    result: SessionArtefacts,
+    options: OutputOptions,
+    replay_rows: Dict[str, List[Dict[str, object]]] | None = None,
+) -> Dict[str, object]:
+    rows = replay_rows or compact_replay_rows(result, options)
     return {
         "runName": result.run_name,
         "summary": result.summary,
@@ -768,6 +812,8 @@ def build_dashboard_payload(
     optimization_rows: List[Dict[str, object]] | None = None,
     round2: Dict[str, object] | None = None,
     scenario_analysis: Dict[str, object] | None = None,
+    replay_rows: Dict[str, List[Dict[str, object]]] | None = None,
+    monte_carlo_rows: Dict[str, Dict[str, List[Dict[str, object]]]] | None = None,
     output_options: OutputOptions | None = None,
 ) -> Dict[str, object]:
     output_options = output_options or DEFAULT_OUTPUT_OPTIONS
@@ -819,7 +865,7 @@ def build_dashboard_payload(
         "validation": validation or {},
     }
     if replay_result is not None:
-        rows = _compact_replay_rows(replay_result, output_options)
+        rows = replay_rows or compact_replay_rows(replay_result, output_options)
         payload["summary"] = replay_result.summary
         payload["sessionRows"] = replay_result.session_rows
         if output_options.include_orders:
@@ -833,8 +879,9 @@ def build_dashboard_payload(
         payload["behaviour"] = _compact_behaviour(replay_result.behaviour)
         payload["behaviourSeries"] = rows["behaviourSeries"]
     if monte_carlo_results is not None:
+        monte_carlo_rows = monte_carlo_rows or {}
         sample_runs = [
-            _sample_run_payload(result, output_options)
+            _sample_run_payload(result, output_options, monte_carlo_rows.get(result.run_name))
             for result in monte_carlo_results
             if result.inventory_series
         ]
@@ -1012,10 +1059,11 @@ def write_replay_bundle(
     artefact: SessionArtefacts,
     dashboard_payload: Dict[str, object],
     register: bool = True,
+    replay_rows: Dict[str, List[Dict[str, object]]] | None = None,
     output_options: OutputOptions | None = None,
 ) -> None:
     output_options = output_options or DEFAULT_OUTPUT_OPTIONS
-    rows = _compact_replay_rows(artefact, output_options)
+    rows = replay_rows or compact_replay_rows(artefact, output_options)
     extra_csvs = {
         "run_summary.csv": [{
             "run_name": artefact.run_name,
@@ -1062,9 +1110,11 @@ def write_mc_bundle(
     results: Sequence[SessionArtefacts],
     dashboard_payload: Dict[str, object],
     register: bool = True,
+    replay_rows_by_run: Dict[str, Dict[str, List[Dict[str, object]]]] | None = None,
     output_options: OutputOptions | None = None,
 ) -> None:
     output_options = output_options or DEFAULT_OUTPUT_OPTIONS
+    replay_rows_by_run = replay_rows_by_run or {}
     output_dir.mkdir(parents=True, exist_ok=True)
     run_rows = [
         {
@@ -1098,7 +1148,9 @@ def write_mc_bundle(
     if output_options.write_session_manifests:
         sessions_dir.mkdir(exist_ok=True)
     for result in results:
-        rows = _compact_replay_rows(result, output_options)
+        rows = replay_rows_by_run.get(result.run_name)
+        if rows is None:
+            rows = compact_replay_rows(result, output_options) if result.inventory_series or result.fills or result.orders or result.behaviour_series else _empty_compact_replay_rows()
         if output_options.write_session_manifests:
             (sessions_dir / f"{result.run_name}.json").write_text(_json_text(_manifest_base(result), output_options), encoding="utf-8")
         if result.inventory_series:

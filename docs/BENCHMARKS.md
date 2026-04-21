@@ -2,6 +2,12 @@
 
 Use the benchmark helper when you want a quick, reproducible view of what light mode saves and what full mode costs.
 
+For runtime diagnosis rather than storage footprint, use:
+
+```bash
+python analysis/profile_replay.py strategies/trader.py --compare-trader strategies/starter.py --data-dir data/round1 --fill-mode empirical_baseline
+```
+
 ## Reproducible Command
 
 ```bash
@@ -29,6 +35,29 @@ Measured on 2026-04-21 with the default command above:
 | `replay_full` | 1.99 MB | 12 | Full replay adds raw orders and chart-series sidecars for debugging. |
 | `mc_light` | 3.89 MB | 6 | Light Monte Carlo keeps exact final distribution stats and all-session path bands without duplicate sample files. |
 | `mc_full` | 7.48 MB | 18 | Full Monte Carlo roughly doubles bundle size because sample-path files, session manifests and sidecars are written explicitly. |
+
+## Runtime Diagnosis
+
+Measured on 2026-04-21.
+
+Baseline public `main` was a clean clone at commit `3808b3e`.
+
+| Case | Public `main` | Current repo | What changed |
+| --- | ---: | ---: | --- |
+| day `0` light replay, `strategies/trader.py` | `14.1s` | `2.5s` | Replay rows are compacted once and then reused for the dashboard plus bundle write. |
+| day `0` light compare, `strategies/trader.py` vs `strategies/starter.py` | `3.1s` | `2.7s` | Day-0 compare stays cheap enough for routine branch testing. |
+| day `0` Monte Carlo, `examples/benchmark_trader.py`, `8` sessions, `2` samples, `1` worker | timed out after `124s` | `18.9s` | Sample-session compaction is cached and reused instead of being rebuilt twice. |
+| same Monte Carlo case, `4` workers | timed out after `124s` | `10.4s` | Worker parallelism becomes useful once reporting overhead is removed. |
+| fast pack, `strategies/trader.py` | not available on public `main` | `6.1s` | Replay, compare and smoke Monte Carlo now have an explicit routine preset. |
+| validation pack, `strategies/trader.py` | not available on public `main` | `24.5s` | Three-day validation is deliberate but still local-iteration friendly. |
+
+`analysis/profile_replay.py` on the current repo reports the slowest public day as day `0`, with about:
+
+- `1.74s` in the market session
+- `0.74s` in replay-row compaction
+- `0.35s` in dashboard build plus bundle write
+
+The practical bottleneck was duplicate reporting work, not the core simulator. That is why the current repo focuses on faster Python reporting and clearer workflow separation rather than introducing a Rust backend prematurely.
 
 ## Files By Mode
 

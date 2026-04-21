@@ -14,7 +14,14 @@ from .dataset import DayDataset, load_round_dataset
 from .fill_models import derive_empirical_fill_profile, resolve_fill_model
 from .live_export import compare_live_export_summary, load_live_export
 from .platform import PerturbationConfig, SessionArtefacts, generate_synthetic_market_days, run_market_session
-from .reports import build_dashboard_payload, write_manifest, write_mc_bundle, write_replay_bundle, write_run_bundle
+from .reports import (
+    build_dashboard_payload,
+    compact_replay_rows,
+    write_manifest,
+    write_mc_bundle,
+    write_replay_bundle,
+    write_run_bundle,
+)
 from .round2 import AccessScenario, NO_ACCESS_SCENARIO, access_scenario_from_dict, expand_scenarios
 from .scenarios import ResearchScenario, scenario_manifest, scenarios_from_config
 from .storage import OutputOptions
@@ -150,6 +157,7 @@ def run_replay(
         validation = compare_live_export_summary(live_export, artefact)
         artefact.validation = validation
     if write_bundle:
+        replay_rows = compact_replay_rows(artefact, output_options)
         dashboard = build_dashboard_payload(
             run_type="replay",
             run_name=run_name,
@@ -162,9 +170,17 @@ def run_replay(
             replay_result=artefact,
             dataset_reports=_dataset_reports(datasets),
             validation=validation,
+            replay_rows=replay_rows,
             output_options=output_options,
         )
-        write_replay_bundle(output_dir, artefact, dashboard, register=register, output_options=output_options)
+        write_replay_bundle(
+            output_dir,
+            artefact,
+            dashboard,
+            register=register,
+            replay_rows=replay_rows,
+            output_options=output_options,
+        )
     return artefact
 
 
@@ -254,6 +270,11 @@ def run_monte_carlo(
         with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as executor:
             results = list(executor.map(_run_monte_carlo_session, tasks))
     if write_bundle:
+        monte_carlo_rows = {
+            result.run_name: compact_replay_rows(result, output_options)
+            for result in results
+            if result.inventory_series
+        }
         dashboard = build_dashboard_payload(
             run_type="monte_carlo",
             run_name=run_name,
@@ -264,10 +285,18 @@ def run_monte_carlo(
             round_number=round_number,
             access_scenario=access_scenario.to_dict(),
             monte_carlo_results=results,
+            monte_carlo_rows=monte_carlo_rows,
             dataset_reports=[],
             output_options=output_options,
         )
-        write_mc_bundle(output_dir, results, dashboard, register=register, output_options=output_options)
+        write_mc_bundle(
+            output_dir,
+            results,
+            dashboard,
+            register=register,
+            replay_rows_by_run=monte_carlo_rows,
+            output_options=output_options,
+        )
     return results
 
 

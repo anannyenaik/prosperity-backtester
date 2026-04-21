@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 from typing import List, Sequence
@@ -125,6 +126,7 @@ def _perturb_from_args(args) -> PerturbationConfig:
         adverse_selection_ticks=args.adverse_selection_ticks,
         slippage_multiplier=args.slippage_multiplier,
         reentry_probability=args.reentry_probability,
+        trade_matching_mode=str(getattr(args, "match_trades", "all")),
         inventory_limit_scale=args.inventory_limit_scale,
         synthetic_tick_limit=getattr(args, "synthetic_tick_limit", None),
         scenario_name=str(getattr(args, "scenario_name", "cli")),
@@ -134,6 +136,14 @@ def _perturb_from_args(args) -> PerturbationConfig:
 def _data_dir_from_args(args) -> Path:
     explicit = getattr(args, "data_dir", None)
     return Path(explicit) if explicit else default_data_dir_for_round(int(getattr(args, "round", 1)))
+
+
+def _open_bundle(output_dir: Path) -> None:
+    output_dir = output_dir.resolve()
+    root = output_dir.parent
+    dashboard_path = output_dir / "dashboard.json"
+    query = urllib.parse.urlencode({"run": str(dashboard_path.relative_to(root)).replace("\\", "/")})
+    serve_directory(root, open_browser=True, query=query)
 
 
 def _access_from_args(args) -> AccessScenario:
@@ -190,12 +200,13 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--session-manifests", action=argparse.BooleanOptionalAction, default=None, help="Write one Monte Carlo session manifest per sampled session. Full profile enables this by default.")
         subparser.add_argument("--pretty-json", action=argparse.BooleanOptionalAction, default=None, help="Write indented dashboard and manifest JSON for debugging")
         subparser.add_argument("--keep-runs", type=_positive_int, default=30, help="When using the default backtests/ output root, keep this many timestamped runs")
+        subparser.add_argument("--open", action="store_true", help="Serve the written bundle locally and open it in the dashboard")
 
     def add_shared(subparser):
         subparser.add_argument("trader", help="Trader python file")
         subparser.add_argument("--name", default=None, help="Display name for the trader")
         subparser.add_argument("--data-dir", default=None, help=f"Directory containing CSVs. Defaults: round 1 {DEFAULT_DATA_DIR}, round 2 {DEFAULT_ROUND2_DATA_DIR}")
-        subparser.add_argument("--days", nargs="*", default=["-2", "-1", "0"], help="Day list, default -2 -1 0")
+        subparser.add_argument("--days", nargs="*", default=["0"], help="Day list, default 0")
         subparser.add_argument("--fill-mode", default="base", help=f"Fill assumption preset. Built-ins: {', '.join(sorted(FILL_MODELS))}")
         subparser.add_argument("--fill-config", default=None, help="Optional JSON fill-profile config produced by derive-fill-profile")
         subparser.add_argument("--output-dir", default=None, help="Output directory. Default is backtests/<timestamp>_<label>")
@@ -212,6 +223,7 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--adverse-selection-ticks", type=int, default=0)
         subparser.add_argument("--slippage-multiplier", type=float, default=1.0, help="Set to 0 for a no-slippage comparison")
         subparser.add_argument("--reentry-probability", type=float, default=1.0)
+        subparser.add_argument("--match-trades", default="all", choices=["all", "worse", "none"], help="How passive trade-print matching should work. 'worse' excludes same-price prints and 'none' disables passive trade matching.")
         subparser.add_argument("--inventory-limit-scale", type=float, default=1.0)
         subparser.add_argument("--synthetic-tick-limit", type=int, default=None, help="Cap synthetic Monte Carlo ticks per day for quick smoke or benchmark runs")
         subparser.add_argument("--scenario-name", default="cli")
@@ -235,7 +247,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("traders", nargs="+", help="Trader python files")
     compare.add_argument("--names", nargs="*", default=None, help="Optional display names")
     compare.add_argument("--data-dir", default=None)
-    compare.add_argument("--days", nargs="*", default=["-2", "-1", "0"])
+    compare.add_argument("--days", nargs="*", default=["0"])
     compare.add_argument("--fill-mode", default="base", help=f"Fill assumption preset. Built-ins: {', '.join(sorted(FILL_MODELS))}")
     compare.add_argument("--fill-config", default=None)
     compare.add_argument("--output-dir", default=None)
@@ -252,6 +264,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--adverse-selection-ticks", type=int, default=0)
     compare.add_argument("--slippage-multiplier", type=float, default=1.0)
     compare.add_argument("--reentry-probability", type=float, default=1.0)
+    compare.add_argument("--match-trades", default="all", choices=["all", "worse", "none"], help="How passive trade-print matching should work. 'worse' excludes same-price prints and 'none' disables passive trade matching.")
     compare.add_argument("--inventory-limit-scale", type=float, default=1.0)
     compare.add_argument("--scenario-name", default="cli")
     add_output_controls(compare, child_bundles=True)
@@ -304,6 +317,8 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--dir", default=str(Path(__file__).resolve().parent.parent))
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=5555)
+    serve.add_argument("--open-browser", action="store_true", help="Open the dashboard in a browser when the server starts")
+    serve.add_argument("--latest", action="store_true", help="Open the latest discovered bundle automatically")
 
     clean = sub.add_parser("clean", help="Prune old timestamped backtest run directories")
     clean.add_argument("--dir", default=str(Path.cwd() / "backtests"))
@@ -337,6 +352,19 @@ def _print_replay_result(artefact) -> None:
     print(f"Order count: {artefact.summary.get('order_count', 0)}")
     print(f"Fill count: {artefact.summary['fill_count']}")
     print(f"Limit breaches: {artefact.summary['limit_breaches']}")
+
+
+def _print_day_breakdown(artefact) -> None:
+    if len(getattr(artefact, "session_rows", [])) <= 1:
+        return
+    print("Per-day PnL:")
+    for row in artefact.session_rows:
+        print(
+            f"  day {row['day']}: pnl={row['final_pnl']:,.2f} "
+            f"gross={row.get('gross_pnl_before_maf', 0.0):,.2f} "
+            f"osmium={row.get('osmium_pnl', 0.0):,.2f} "
+            f"pepper={row.get('pepper_pnl', 0.0):,.2f}"
+        )
 
 
 def _handle_legacy(trader_path: str) -> None:
@@ -387,10 +415,13 @@ def main(argv: List[str] | None = None) -> None:
             output_options=output_options,
         )
         _print_replay_result(artefact)
+        _print_day_breakdown(artefact)
         print(f"Output bundle: {output_dir}")
         _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
         if artefact.validation:
             print(f"Validation: {json.dumps(artefact.validation, indent=2)}")
+        if args.open:
+            _open_bundle(output_dir)
         return
 
     if args.command == "monte-carlo":
@@ -424,6 +455,8 @@ def main(argv: List[str] | None = None) -> None:
         print(f"Min / Max: {min(finals):,.2f} / {max(finals):,.2f}")
         print(f"Output bundle: {output_dir}")
         _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
+        if args.open:
+            _open_bundle(output_dir)
         return
 
     if args.command == "compare":
@@ -452,6 +485,8 @@ def main(argv: List[str] | None = None) -> None:
             print(f"  {row['trader']}: pnl={row['final_pnl']:,.2f} drawdown={row['max_drawdown']:,.2f}")
         print(f"Output bundle: {output_dir}")
         _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
+        if args.open:
+            _open_bundle(output_dir)
         return
 
     if args.command == "sweep":
@@ -463,6 +498,8 @@ def main(argv: List[str] | None = None) -> None:
             print(f"  {row['trader']}: {row['final_pnl']:,.2f}")
         print(f"Output bundle: {output_dir}")
         _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
+        if args.open:
+            _open_bundle(output_dir)
         return
 
     if args.command == "optimize":
@@ -474,6 +511,8 @@ def main(argv: List[str] | None = None) -> None:
             print(f"  {row['variant']}: score={row['score']:,.2f} replay={row['replay_final_pnl']:,.2f} mc_p05={row['mc_p05']:,.2f}")
         print(f"Output bundle: {output_dir}")
         _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
+        if args.open:
+            _open_bundle(output_dir)
         return
 
     if args.command == "round2-scenarios":
@@ -489,6 +528,8 @@ def main(argv: List[str] | None = None) -> None:
             print(f"  {row['scenario']}: winner={row['winner']} pnl={row['winner_final_pnl']:,.2f} gap={gap_text}")
         print(f"Output bundle: {output_dir}")
         _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
+        if args.open:
+            _open_bundle(output_dir)
         return
 
     if args.command == "scenario-compare":
@@ -506,6 +547,8 @@ def main(argv: List[str] | None = None) -> None:
             )
         print(f"Output bundle: {output_dir}")
         _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
+        if args.open:
+            _open_bundle(output_dir)
         return
 
     if args.command == "derive-fill-profile":
@@ -538,6 +581,8 @@ def main(argv: List[str] | None = None) -> None:
         print(f"Best calibration: {json.dumps(best, indent=2)}")
         print(f"Output bundle: {output_dir}")
         _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
+        if args.open:
+            _open_bundle(output_dir)
         return
 
     if args.command == "inspect":
@@ -552,7 +597,8 @@ def main(argv: List[str] | None = None) -> None:
         return
 
     if args.command == "serve":
-        serve_directory(Path(args.dir), host=args.host, port=args.port)
+        query = urllib.parse.urlencode({"latest": "1"}) if args.latest else None
+        serve_directory(Path(args.dir), host=args.host, port=args.port, open_browser=args.open_browser or args.latest, query=query)
         return
 
     if args.command == "clean":

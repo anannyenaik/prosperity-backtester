@@ -34,6 +34,7 @@ class PerturbationConfig:
     adverse_selection_ticks: int = 0
     slippage_multiplier: float = 1.0
     reentry_probability: float = 1.0
+    trade_matching_mode: str = "all"
     inventory_limit_scale: float = 1.0
     synthetic_tick_limit: Optional[int] = None
     shock_tick: Optional[int] = None
@@ -52,6 +53,12 @@ class PerturbationConfig:
 
     def shock_for(self, product: str) -> float:
         return float(self.shock_by_product.get(product, 0.0))
+
+    def passive_trade_matching_mode(self) -> str:
+        mode = str(self.trade_matching_mode or "all").strip().lower()
+        if mode not in {"all", "worse", "none"}:
+            raise ValueError("trade_matching_mode must be one of: all, worse, none")
+        return mode
 
 
 @dataclass
@@ -231,6 +238,9 @@ def _consume_passive_trades(
 ) -> int:
     if remaining_qty <= 0:
         return 0
+    trade_matching_mode = perturb.passive_trade_matching_mode()
+    if trade_matching_mode == "none":
+        return 0
     product_config, fill_regime = fill_model.config_for(product, snapshot.bids, snapshot.asks)
     effective_fill_rate = max(
         0.0,
@@ -256,14 +266,26 @@ def _consume_passive_trades(
     if side == "buy":
         better_depth = sum(v for p, v in snapshot.bids if p > order.price)
         same_depth = sum(v for p, v in snapshot.bids if p == order.price)
-        eligible = [trade for trade in available_trades if _market_sell_trade(trade) and trade.price <= order.price and trade.quantity > 0]
+        eligible = [
+            trade
+            for trade in available_trades
+            if _market_sell_trade(trade)
+            and trade.quantity > 0
+            and (trade.price <= order.price if trade_matching_mode == "all" else trade.price < order.price)
+        ]
         same_side_depth = better_depth + product_config.same_price_queue_share * same_depth
         adverse_ticks = product_config.passive_adverse_selection_ticks + perturb.adverse_selection_ticks
         execution_price = int(round(order.price + adverse_ticks))
     else:
         better_depth = sum(v for p, v in snapshot.asks if p < order.price)
         same_depth = sum(v for p, v in snapshot.asks if p == order.price)
-        eligible = [trade for trade in available_trades if _market_buy_trade(trade) and trade.price >= order.price and trade.quantity > 0]
+        eligible = [
+            trade
+            for trade in available_trades
+            if _market_buy_trade(trade)
+            and trade.quantity > 0
+            and (trade.price >= order.price if trade_matching_mode == "all" else trade.price > order.price)
+        ]
         same_side_depth = better_depth + product_config.same_price_queue_share * same_depth
         adverse_ticks = product_config.passive_adverse_selection_ticks + perturb.adverse_selection_ticks
         execution_price = int(round(order.price - adverse_ticks))

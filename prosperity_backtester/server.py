@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import urllib.parse
+import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -200,19 +201,28 @@ def _content_type(path: Path) -> str:
     }.get(ext, "application/octet-stream")
 
 
-def serve_directory(directory: Path, host: str = "127.0.0.1", port: int = 5555) -> None:
+def serve_directory(
+    directory: Path,
+    host: str = "127.0.0.1",
+    port: int = 5555,
+    *,
+    open_browser: bool = False,
+    query: str | None = None,
+) -> None:
     directory = directory.resolve()
 
     class Handler(_Handler):
         root = directory
 
     with HTTPServer((host, port), Handler) as httpd:
-        if _DASHBOARD_DIST.is_dir():
-            url = f"http://{host}:{port}/"
-        else:
-            url = f"http://{host}:{port}/dashboard.html"
+        base_path = "/" if _DASHBOARD_DIST.is_dir() else "/dashboard.html"
+        url = f"http://{host}:{port}{base_path}"
+        if query:
+            url = f"{url}?{query}"
         print(f"Serving {directory} at {url}")
         print(f"  API: http://{host}:{port}/api/runs")
+        if open_browser:
+            webbrowser.open(url)
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

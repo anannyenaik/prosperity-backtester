@@ -11,6 +11,8 @@ Every bundle now carries the same contract in two places:
 
 All CLI workflows default to `--output-profile light`.
 
+Replay and compare also default to day `0`, so routine runs stay in the fast path unless you explicitly request more days or use the validation or forensic pack.
+
 Light keeps exactly:
 
 - replay summary metrics, per-product PnL, drawdown, fill count, order count and limit breaches
@@ -34,6 +36,21 @@ Light omits by default:
 - child replay and Monte Carlo bundles inside aggregate workflows
 
 `dashboard.json` is the canonical source for compact chart paths in light mode. Keep using `fills.csv`, summary CSVs and aggregate result tables for scripts that need exact tabular outputs.
+
+The standard pack runner:
+
+```bash
+python analysis/research_pack.py fast --trader strategies/trader.py --baseline strategies/starter.py
+```
+
+writes only:
+
+- `replay/`
+- `compare/`
+- `monte_carlo/`
+- `pack_summary.json`
+
+Fast and validation packs stay in light mode. The forensic pack switches replay and Monte Carlo to full mode deliberately.
 
 ## Light Path Fidelity
 
@@ -153,6 +170,8 @@ See [docs/BENCHMARKS.md](BENCHMARKS.md) for the current measured sizes and creat
 ## Retention
 
 When a command uses the default `backtests/<timestamp>_<label>` output directory, the CLI keeps the newest 30 timestamped runs and prunes older timestamped run directories. Sorting uses the timestamp in the folder name. If that cannot be parsed, `manifest.json` `created_at` is used as a fallback.
+
+The same retention rule applies cleanly to timestamped pack roots created by `analysis/research_pack.py` and replay-profile roots created by `analysis/profile_replay.py` when they write under `backtests/`.
 
 Adjust the default:
 

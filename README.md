@@ -21,7 +21,7 @@ See [LICENSE](LICENSE).
 ## Repository Layout
 
 ```text
-analysis/                 Thin validation, calibration and benchmark entry scripts
+analysis/                 Thin validation, calibration, profiling and research-pack entry scripts
 configs/                  Sweep, optimisation, scenario and Round 2 configs
 data/round1/              Round 1 public CSV inputs
 data/round2/              Round 2 public CSV inputs
@@ -38,7 +38,7 @@ tests/                    Backend and dashboard adapter checks
 
 Generated research bundles are written to `backtests/` unless `--output-dir` is supplied. `backtests/`, local logs, virtual environments, caches and `dashboard/node_modules/` are ignored.
 
-Runs default to the lightweight output profile. Light bundles keep exact summaries and fills, event-aware compact chart paths, compact submitted quote intent and all-session Monte Carlo path bands while avoiding raw order dumps, duplicated series sidecars, sampled path files and child bundles. Use `--output-profile full` only for deep debugging. Full mode can now be trimmed deliberately with `--no-series-sidecars`, `--no-orders`, `--no-sample-path-files` and `--no-session-manifests`. See [docs/OUTPUTS.md](docs/OUTPUTS.md).
+Runs default to the lightweight output profile. Replay and compare also default to day `0` so the routine branch loop stays fast. Light bundles keep exact summaries and fills, event-aware compact chart paths, compact submitted quote intent and all-session Monte Carlo path bands while avoiding raw order dumps, duplicated series sidecars, sampled path files and child bundles. Use `--output-profile full` only for deep debugging. Full mode can now be trimmed deliberately with `--no-series-sidecars`, `--no-orders`, `--no-sample-path-files` and `--no-session-manifests`. See [docs/OUTPUTS.md](docs/OUTPUTS.md).
 
 ## Setup
 
@@ -69,10 +69,10 @@ python -m prosperity_backtester inspect --data-dir data/round1 --days -2 -1 0 --
 python -m prosperity_backtester inspect --round 2 --data-dir data/round2 --days 0 --json
 ```
 
-Replay one trader:
+Replay one trader. This now defaults to day `0` for routine work:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --name current --data-dir data/round1 --days -2 -1 0 --fill-mode empirical_baseline
+python -m prosperity_backtester replay strategies/trader.py --name current --data-dir data/round1 --fill-mode empirical_baseline
 ```
 
 Replay against a tracked live export:
@@ -81,10 +81,17 @@ Replay against a tracked live export:
 python -m prosperity_backtester replay examples/trader_round1_v9.py --name live_v9 --data-dir data/round1 --days 0 --fill-mode base --live-export live_exports/259168/259168.json
 ```
 
-Compare trader scripts:
+Replay with stricter or disabled passive trade-print matching when you want a trust check against optimistic fill assumptions:
 
 ```bash
-python -m prosperity_backtester compare strategies/trader.py examples/trader_round1_v9.py --names current candidate --data-dir data/round1 --days 0 --fill-mode empirical_baseline
+python -m prosperity_backtester replay strategies/trader.py --name current --data-dir data/round1 --fill-mode empirical_baseline --match-trades worse
+python -m prosperity_backtester replay strategies/trader.py --name current --data-dir data/round1 --fill-mode empirical_baseline --match-trades none
+```
+
+Compare trader scripts. This also defaults to day `0`:
+
+```bash
+python -m prosperity_backtester compare strategies/trader.py examples/trader_round1_v9.py --names current candidate --data-dir data/round1 --fill-mode empirical_baseline
 ```
 
 Run Monte Carlo:
@@ -92,6 +99,64 @@ Run Monte Carlo:
 ```bash
 python -m prosperity_backtester monte-carlo strategies/trader.py --name current --days 0 --fill-mode empirical_baseline --noise-profile fitted --quick
 ```
+
+## Research Loop
+
+Use the repo in three deliberate tiers.
+
+Fast loop for normal branch testing:
+
+```bash
+python analysis/research_pack.py fast --trader strategies/trader.py --baseline strategies/starter.py
+```
+
+This writes only:
+
+- `replay/`
+- `compare/`
+- `monte_carlo/`
+- `pack_summary.json`
+
+Validation loop for promising branches:
+
+```bash
+python analysis/research_pack.py validation --trader strategies/trader.py --baseline strategies/starter.py
+```
+
+Heavy forensic loop for finalists or suspicious behaviour only:
+
+```bash
+python analysis/research_pack.py forensic --trader strategies/trader.py --baseline strategies/starter.py
+```
+
+Profile replay slowdown by day:
+
+```bash
+python analysis/profile_replay.py strategies/trader.py --compare-trader strategies/starter.py --data-dir data/round1 --fill-mode empirical_baseline
+```
+
+Measured on 2026-04-21 with the current `strategies/trader.py`:
+
+- default day-0 replay: about `2.5s`
+- default day-0 compare: about `2.7s`
+- fast pack: about `6.1s`
+- validation pack: about `24.5s`
+- full-day Monte Carlo with `8` sessions and `2` saved samples: about `18.9s` on `1` worker, about `10.4s` on `4` workers
+
+Measured from a clean clone of public `main` at commit `3808b3e` on the same date:
+
+- the same day-0 replay took about `14.1s`
+- the same full-day Monte Carlo case ran past `124s` before timing out
+
+Most of the gain came from removing duplicate replay-row compaction in the reporting path. The practical blocker was not the core session engine, so a Rust rewrite is not justified yet.
+
+Forensic work is still deliberate full-profile work and should be treated as a minute-scale task rather than part of the normal branch loop.
+
+## Platform Positioning
+
+Compared with simpler replay backtesters, this repo now keeps a short daily loop through day-0 defaults, `--match-trades`, per-day PnL output, `--open`, and `serve --latest`, while still carrying compare, optimisation, calibration, scenarios and Round 2 research.
+
+Compared with Monte Carlo-first repos, the current performance story is practical rather than architectural. Use light mode, explicit fast and validation packs, and `--workers` once session counts are high enough. Reach for a lower-level backend only if future profiling shows the session engine, rather than reporting and bundle construction, becoming the true bottleneck.
 
 Run a parameter sweep or optimisation:
 
@@ -118,7 +183,7 @@ python -m prosperity_backtester scenario-compare configs/research_scenarios.json
 Use `compare` when you want one fixed replay assumption across multiple scripts.
 
 ```bash
-python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --names current starter --data-dir data/round1 --days -2 -1 0 --fill-mode empirical_baseline
+python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --names current starter --data-dir data/round1 --fill-mode empirical_baseline
 ```
 
 Good review sequence:
@@ -179,6 +244,7 @@ Serve the repo root:
 
 ```bash
 python -m prosperity_backtester serve --port 5555
+python -m prosperity_backtester serve --latest
 ```
 
 Open:
@@ -187,7 +253,14 @@ Open:
 http://127.0.0.1:5555/
 ```
 
-You can drag one or more `dashboard.json` bundles into the app, or use **Load from local server** to discover bundles under the served directory. The server reads `manifest.json` first when available, so discovery stays fast for large bundles.
+You can drag one or more `dashboard.json` bundles into the app, use **Open latest run**, or use **Browse local server** to discover bundles under the served directory. The server reads `manifest.json` first when available, so discovery stays fast for large bundles.
+
+To finish a workflow and jump straight into the written bundle:
+
+```bash
+python -m prosperity_backtester replay strategies/trader.py --data-dir data/round1 --fill-mode empirical_baseline --open
+python -m prosperity_backtester monte-carlo strategies/trader.py --days 0 --fill-mode empirical_baseline --noise-profile fitted --quick --open
+```
 
 During dashboard development:
 
@@ -372,6 +445,7 @@ python -m compileall -q prosperity_backtester r1bt analysis strategies tests
 python -m pytest -q
 npm test --prefix dashboard
 npm run build --prefix dashboard
+python analysis/profile_replay.py strategies/trader.py --compare-trader strategies/starter.py --data-dir data/round1 --fill-mode empirical_baseline
 python analysis/benchmark_outputs.py --output-dir backtests/repo_output_benchmark
 ```
 

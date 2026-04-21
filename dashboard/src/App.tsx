@@ -1,6 +1,6 @@
-import type React from 'react'
+import React, { startTransition, useEffect } from 'react'
 import { Database, FolderOpen, Radar, Server } from 'lucide-react'
-import { useStore } from './store'
+import { useStore, type ServerRunMeta } from './store'
 import { NavBar } from './components/NavBar'
 import { FileDrop } from './components/FileDrop'
 import { ServerRunLoader } from './components/ServerRunLoader'
@@ -15,7 +15,7 @@ import { Optimization } from './views/Optimization'
 import { OsmiumDive } from './views/OsmiumDive'
 import { PepperDive } from './views/PepperDive'
 import { Inspect } from './views/Inspect'
-import type { TabId } from './types'
+import type { DashboardPayload, TabId } from './types'
 
 const VIEWS: Record<TabId, React.ComponentType> = {
   overview: Overview,
@@ -32,8 +32,44 @@ const VIEWS: Record<TabId, React.ComponentType> = {
 }
 
 export function App() {
-  const { runs, activeTab } = useStore()
+  const { runs, activeTab, loadRun, setServerRuns } = useStore()
   const View = VIEWS[activeTab] ?? Overview
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const requestedRun = params.get('run')
+    const loadLatest = params.get('latest') === '1'
+    if (runs.length > 0 || (!requestedRun && !loadLatest)) return
+
+    let cancelled = false
+    startTransition(() => {
+      void (async () => {
+        try {
+          const runsRes = await fetch('/api/runs')
+          if (!runsRes.ok) return
+          const serverRuns = (await runsRes.json()) as ServerRunMeta[]
+          if (cancelled) return
+          setServerRuns(serverRuns)
+          const targetRun = requestedRun
+            ? serverRuns.find((run) => run.path === requestedRun)
+            : serverRuns[0]
+          if (!targetRun) return
+          const runRes = await fetch(`/api/run/${encodeURIComponent(targetRun.path)}`)
+          if (!runRes.ok) return
+          const payload = (await runRes.json()) as DashboardPayload
+          if (!cancelled) {
+            loadRun(payload, targetRun.name)
+          }
+        } catch {
+          // Ignore server bootstrap failures and leave the manual loader available.
+        }
+      })()
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [loadRun, runs.length, setServerRuns])
 
   return (
     <div className="min-h-screen text-txt">
