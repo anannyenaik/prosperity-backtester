@@ -11,6 +11,7 @@ from typing import Dict, Sequence
 from .dataset import load_round_dataset
 from .experiments import TraderSpec, _dataset_reports, default_data_dir_for_round, run_compare, run_monte_carlo, run_replay
 from .fill_models import resolve_fill_model
+from .mc_backends import normalise_monte_carlo_backend
 from .platform import PerturbationConfig, run_market_session, summarise_monte_carlo_sessions
 from .reports import build_dashboard_payload, compact_replay_rows, write_replay_bundle
 from .round2 import AccessScenario, NO_ACCESS_SCENARIO
@@ -289,6 +290,7 @@ def run_research_pack(
     perturbation: PerturbationConfig | None = None,
     access_scenario: AccessScenario | None = None,
     mc_workers: int = 1,
+    mc_backend: str = "auto",
 ) -> Dict[str, object]:
     preset = get_research_pack_preset(preset_name)
     data_dir = data_dir or default_data_dir_for_round(round_number)
@@ -297,6 +299,7 @@ def run_research_pack(
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
     output_root = output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
+    resolved_mc_backend = normalise_monte_carlo_backend(mc_backend)
 
     replay_dir = output_root / "replay"
     compare_dir = output_root / "compare"
@@ -337,6 +340,7 @@ def run_research_pack(
         base_seed=20260418,
         run_name=f"{output_root.name}_mc",
         workers=mc_workers,
+        monte_carlo_backend=resolved_mc_backend,
         round_number=round_number,
         access_scenario=access_scenario,
         output_options=OutputOptions.from_profile(preset.mc_output_profile),
@@ -372,6 +376,7 @@ def run_research_pack(
             "sessions": len(mc_results),
             "sample_sessions": preset.mc_sample_sessions,
             "synthetic_tick_limit": preset.mc_synthetic_tick_limit,
+            "backend": resolved_mc_backend,
             "summary": mc_summary,
             "mean_final_pnl": None if not finals else statistics.fmean(finals),
         },

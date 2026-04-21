@@ -299,7 +299,7 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--session-manifests", action=argparse.BooleanOptionalAction, default=None, help="Write one Monte Carlo session manifest per sampled session. Full profile enables this by default.")
         subparser.add_argument("--pretty-json", action=argparse.BooleanOptionalAction, default=None, help="Write indented dashboard and manifest JSON for debugging")
         subparser.add_argument("--keep-runs", type=_positive_int, default=30, help="When using the default backtests/ output root, keep this many timestamped runs")
-        subparser.add_argument("--open", action="store_true", help="Serve the written bundle locally and open it in the dashboard")
+        subparser.add_argument("--open", "--vis", dest="open", action="store_true", help="Serve the written bundle locally and open it in the dashboard")
 
     def add_shared(subparser):
         subparser.add_argument("trader", help="Trader python file")
@@ -327,7 +327,7 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--limit", dest="limit_overrides", action="append", type=_limit_override, default=None, metavar="PRODUCT:LIMIT", help="Override the position limit for one product. Repeat as needed.")
         subparser.add_argument("--synthetic-tick-limit", type=int, default=None, help="Cap synthetic Monte Carlo ticks per day for quick smoke or benchmark runs")
         subparser.add_argument("--scenario-name", default="cli")
-        subparser.add_argument("--print-trader-output", action="store_true", help="Forward trader stdout directly instead of suppressing it")
+        subparser.add_argument("--print-trader-output", "--print", dest="print_trader_output", action="store_true", help="Forward trader stdout directly instead of suppressing it")
         add_output_controls(subparser)
         add_round_and_access(subparser)
 
@@ -339,8 +339,8 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "Examples:\n"
             "  python -m prosperity_backtester replay strategies/trader.py --fill-mode empirical_baseline\n"
-            "  python -m prosperity_backtester replay strategies/trader.py --data data/round1 --match-trades worse --open\n"
-            "  python -m prosperity_backtester replay strategies/trader.py --limit INTARIAN_PEPPER_ROOT:40 --print-trader-output\n"
+            "  python -m prosperity_backtester replay strategies/trader.py --data data/round1 --match-trades worse --vis\n"
+            "  python -m prosperity_backtester replay strategies/trader.py --limit INTARIAN_PEPPER_ROOT:40 --print\n"
         ),
     )
     add_shared(replay)
@@ -355,6 +355,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Examples:\n"
             "  python -m prosperity_backtester monte-carlo strategies/trader.py --quick --noise-profile fitted\n"
             "  python -m prosperity_backtester monte-carlo strategies/trader.py --sessions 256 --sample-sessions 16 --workers 4\n"
+            "  python -m prosperity_backtester monte-carlo strategies/trader.py --sessions 256 --workers 4 --mc-backend classic\n"
         ),
     )
     add_shared(mc)
@@ -362,6 +363,7 @@ def build_parser() -> argparse.ArgumentParser:
     mc.add_argument("--sample-sessions", type=int, default=10)
     mc.add_argument("--seed", type=int, default=20260418)
     mc.add_argument("--workers", type=int, default=1, help="Parallel worker processes for Monte Carlo sessions")
+    mc.add_argument("--mc-backend", default="auto", choices=["auto", "classic", "streaming"], help="Monte Carlo execution backend. 'classic' always materialises synthetic market days, while 'streaming' keeps sampled sessions full and streams unsampled sessions.")
     mc.add_argument("--quick", action="store_true", help="Use quick preset: 64 sessions, 8 sampled runs")
     mc.add_argument("--heavy", action="store_true", help="Use heavy preset: 512 sessions, 32 sampled runs")
 
@@ -373,7 +375,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "Examples:\n"
             "  python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --fill-mode empirical_baseline\n"
-            "  python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --merge-pnl --open\n"
+            "  python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --merge-pnl --vis\n"
         ),
     )
     compare.add_argument("traders", nargs="+", help="Trader python files")
@@ -401,7 +403,7 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("--limit", dest="limit_overrides", action="append", type=_limit_override, default=None, metavar="PRODUCT:LIMIT", help="Override the position limit for one product. Repeat as needed.")
     compare.add_argument("--scenario-name", default="cli")
     compare.add_argument("--merge-pnl", action="store_true", help="Print a compact merged PnL summary by trader after the compare run")
-    compare.add_argument("--print-trader-output", action="store_true", help="Forward trader stdout directly instead of suppressing it")
+    compare.add_argument("--print-trader-output", "--print", dest="print_trader_output", action="store_true", help="Forward trader stdout directly instead of suppressing it")
     add_output_controls(compare, child_bundles=True)
     add_round_and_access(compare)
 
@@ -616,6 +618,7 @@ def main(argv: List[str] | None = None) -> None:
             access_scenario=_access_from_args(args),
             output_options=output_options,
             print_trader_output=args.print_trader_output,
+            monte_carlo_backend=args.mc_backend,
         )
         finals = [result.summary["final_pnl"] for result in results]
         print(f"Sessions: {len(finals)}")

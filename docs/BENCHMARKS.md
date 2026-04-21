@@ -30,7 +30,7 @@ Measured on 2026-04-21 with the default command above:
 | `replay_light` | 1.36 MB | 6 | Exact replay summary and fills fit in a small daily-use bundle. |
 | `replay_full` | 1.99 MB | 12 | Full replay adds raw orders and chart-series sidecars for debugging. |
 | `mc_light` | 3.89 MB | 6 | Light Monte Carlo keeps exact final distribution stats and all-session path bands without duplicate sample files. |
-| `mc_full` | 7.48 MB | 18 | Full Monte Carlo roughly doubles bundle size because sample-path files, session manifests and sidecars are written explicitly. |
+| `mc_full` | 7.47 MB | 18 | Full Monte Carlo roughly doubles bundle size because sample-path files, session manifests and sidecars are written explicitly. |
 
 ## Runtime Benchmark
 
@@ -56,35 +56,56 @@ Default runtime benchmark fixture:
 
 Measured on 2026-04-21 against:
 
-- clean `HEAD` worktree at commit `fd9db66`
-- current working tree with the changes in this pass
+- clean baseline worktree at commit `1f05eb4`
+- current working tree with the streaming Monte Carlo backend enabled by default
 
-| Case | Clean `HEAD` | Current repo | What changed |
-| --- | ---: | ---: | --- |
-| day `0` light replay, `strategies/trader.py` | `2.440s` | `2.326s` | Replay stays fast while provenance and newer UX metadata are preserved. |
-| day `0` light compare, `strategies/trader.py` vs `strategies/starter.py` | `2.369s` | `2.503s` | Compare is still short-loop friendly while now exposing merged PnL, limit overrides and richer manifests. |
-| fast pack | `7.747s` | `5.561s` | The daily pack benefits from cheaper Monte Carlo reporting and better reuse. |
-| validation pack | `22.188s` | `20.653s` | Three-day validation stays deliberate but improves slightly. |
-| Monte Carlo quick light, `64/8`, `1` worker | `2.994s` | `2.690s` | Unsampled sessions no longer build full replay artefacts. |
-| Monte Carlo default light, `100/10`, `1` worker | `5.020s` | `4.166s` | One-worker practical throughput improves by about `17%`. |
-| Monte Carlo heavy light, `192/16`, `1` worker | `10.578s` | `7.221s` | One-worker heavy throughput improves by about `31.7%`. |
-| Monte Carlo default full, `100/10`, `1` worker | `5.940s` | `4.450s` | Even full-profile Monte Carlo benefits from skipping unnecessary non-sample work. |
-| Monte Carlo default full without sample-path files and session manifests, `1` worker | `5.397s` | `3.961s` | The cost of debug artefacts is now easier to isolate and control. |
+| Case | Clean baseline | Current repo | Delta |
+| --- | ---: | ---: | ---: |
+| day `0` light replay, `strategies/trader.py` | `2.862s` | `2.413s` | `-15.7%` |
+| day `0` light compare, `strategies/trader.py` vs `strategies/starter.py` | `2.543s` | `2.572s` | `+1.1%` |
+| fast pack | `5.494s` | `5.929s` | `+7.9%` |
+| validation pack | `18.272s` | `20.358s` | `+11.4%` |
+| Monte Carlo quick light, `64/8`, `1` worker | `2.295s` | `2.405s` | `+4.8%` |
+| Monte Carlo default light, `100/10`, `1` worker | `3.355s` | `3.318s` | `-1.1%` |
+| Monte Carlo default light, `100/10`, `2` workers | `2.591s` | `2.576s` | `-0.6%` |
+| Monte Carlo default light, `100/10`, `4` workers | `2.014s` | `2.191s` | `+8.8%` |
+| Monte Carlo heavy light, `192/16`, `1` worker | `6.994s` | `7.196s` | `+2.9%` |
+| Monte Carlo heavy light, `192/16`, `4` workers | `3.277s` | `3.497s` | `+6.7%` |
+| Monte Carlo default full, `100/10`, `1` worker | `4.103s` | `4.142s` | `+1.0%` |
 
-`analysis/profile_replay.py` on the current repo reports the slowest replay day as day `-1`, with about:
+Those baseline deltas are mixed because the pass also strengthens provenance and runtime metadata. The cleaner engine comparison is current `streaming` versus current `classic` on the same codebase:
 
-- `1.641s` in the market session
-- `0.775s` in replay-row compaction
-- `0.603s` in bundle write
+| Case | Classic | Streaming | Delta |
+| --- | ---: | ---: | ---: |
+| Monte Carlo default light, `100/10`, `1` worker | `3.517s` | `3.318s` | `-5.7%` |
+| Monte Carlo default light, `100/10`, `2` workers | `2.753s` | `2.576s` | `-6.4%` |
+| Monte Carlo heavy light, `192/16`, `1` worker | `8.084s` | `7.196s` | `-10.9%` |
+| Monte Carlo heavy light, `192/16`, `4` workers | `3.587s` | `3.497s` | `-2.5%` |
+| Monte Carlo light, `512/32`, `1` worker | `21.951s` | `20.643s` | `-6.0%` |
+| Monte Carlo light, `512/32`, `4` workers | `11.247s` | `10.993s` | `-2.3%` |
+
+`analysis/profile_replay.py` on the current repo reports the slowest replay day as day `0`, with about:
+
+- `1.559s` in the market session
+- `0.644s` in replay-row compaction
+- `0.286s` in dashboard plus bundle write
 
 Focused Monte Carlo profiling on the tracked `250`-tick fixture now shows the main remaining cost centres as:
 
-- `run_market_session`
-- `generate_synthetic_market_days`
-- all-session path-band aggregation
-- bundle writing and initial git provenance capture
+- synthetic market generation
+- Python session stepping and execution
+- all-session path-band aggregation and dashboard construction
+- bundle writing
 
-The main improvement in this pass is that unsampled Monte Carlo sessions stop paying for full fair-value, behaviour and replay-series construction. That is why the one-worker default and heavy cases improve materially without needing a compiled backend.
+For example, `mc_default_light_w1` on streaming records about:
+
+- `1.047s` in market generation
+- `0.053s` in trader execution
+- `0.661s` in order execution
+- `0.154s` in path metrics
+- `0.861s` in compaction, dashboard build and bundle write
+
+The main improvement in this pass is that unsampled Monte Carlo sessions no longer build full replay artefacts. That improves the one-worker practical path meaningfully, but the high-worker ceiling is still limited by Python process overhead rather than raw trader execution alone.
 
 ## Files By Mode
 

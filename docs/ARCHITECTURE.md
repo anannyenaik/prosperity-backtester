@@ -41,6 +41,7 @@ Responsibilities:
 Files:
 
 - `prosperity_backtester/platform.py`
+- `prosperity_backtester/mc_backends.py`
 - `prosperity_backtester/fill_models.py`
 - `prosperity_backtester/simulate.py`
 - `prosperity_backtester/engine.py`
@@ -53,6 +54,7 @@ Responsibilities:
 - Apply perturbations, slippage, latency-like effects and adverse-selection assumptions.
 - Track cash, inventory, realised, unrealised and mark-to-market PnL.
 - Generate synthetic Monte Carlo market days.
+- Provide a default streaming Monte Carlo backend plus a classic fallback.
 - Emit compact per-session path metrics for Monte Carlo all-session bands without returning full non-sample paths.
 
 ### Diagnostics
@@ -84,7 +86,7 @@ Responsibilities:
 - Run replay, Monte Carlo, comparison, sweep, optimisation, calibration and scenario workflows.
 - Load JSON config files with clear validation errors.
 - Resolve trader, data and fill-config paths.
-- Expose short replay and compare defaults plus convenience flags such as `--data`, `--merge-pnl`, `--limit`, `--print-trader-output` and `serve --latest-type`.
+- Expose short replay and compare defaults plus convenience flags such as `--data`, `--merge-pnl`, `--limit`, `--print`, `--vis`, `--mc-backend` and `serve --latest-type`.
 - Keep CLI commands thin and reproducible.
 - Provide lightweight, reproducible bundle-size and runtime benchmark workflows.
 
@@ -104,7 +106,7 @@ Responsibilities:
 - Aggregate Monte Carlo path bands from every session.
 - Write CSV sidecars, manifests, sample paths and session manifests according to output policy.
 - Append `run_registry.jsonl` entries.
-- Record command, workflow-tier, runtime-backend and git provenance in both `dashboard.json` and `manifest.json`.
+- Record command, workflow-tier, runtime-backend, data-scope, phase-timing and git provenance in both `dashboard.json` and `manifest.json`.
 - Preserve exact and approximate assumption notes in output bundles.
 - Preserve exact, compact, bucketed, qualitative and raw bundle data-contract notes.
 - Record canonical, sidecar and debug file lists plus total bundle size in `manifest.json`.
@@ -143,7 +145,7 @@ When adding a workflow, prefer extending this bundle contract over adding a one-
 
 ## Design Choices
 
-- Python remains the backend because trader compatibility, debugging and config iteration matter more than raw throughput at current scale.
+- Python remains the backend because trader compatibility, debugging and config iteration matter more than raw throughput at current scale, but Monte Carlo now has a streaming hot path plus a classic fallback.
 - Light mode is the day-to-day research profile. It keeps exact summaries and fills, compact paths, compact quote intent and all-session Monte Carlo path bands in `dashboard.json`.
 - Monte Carlo work is chunked across workers, and unsampled sessions stream only the path metrics needed for final distributions and all-session path bands.
 - Monte Carlo sampled runs are intentionally qualitative examples. Population path bands come from every session through bucketed path metrics.

@@ -36,6 +36,7 @@ export interface ServerRunMeta {
   fileCount?: number | null
   workflowTier?: string | null
   engineBackend?: string | null
+  monteCarloBackend?: string | null
   parallelism?: string | null
   workerCount?: number | null
   gitCommit?: string | null

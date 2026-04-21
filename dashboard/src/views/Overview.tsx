@@ -34,6 +34,13 @@ export function Overview() {
   const provenance = meta?.provenance
   const runtime = provenance?.runtime
   const git = provenance?.git
+  const phaseTimings = runtime?.phase_timings_seconds
+  const dataScope = runtime?.data_scope
+  const reportingSeconds = sumNumberValues([
+    phaseTimings?.sample_row_compaction_seconds,
+    phaseTimings?.dashboard_build_seconds,
+    phaseTimings?.bundle_write_seconds,
+  ])
 
   const datasetRows = (payload.datasetReports ?? []).map((r) => ({
     day: r.day,
@@ -125,10 +132,15 @@ export function Overview() {
             pairs={[
               { label: 'Workflow tier', value: provenance.workflow_tier ?? 'manual' },
               { label: 'Engine backend', value: runtime?.engine_backend ?? 'not recorded' },
+              { label: 'MC backend', value: runtime?.monte_carlo_backend ?? 'not recorded' },
               { label: 'Parallelism', value: runtime?.parallelism ?? 'not recorded' },
               { label: 'Worker count', value: runtime?.worker_count ?? 'not recorded' },
               { label: 'Session count', value: runtime?.session_count ?? 'not recorded' },
               { label: 'Sample sessions', value: runtime?.sample_session_count ?? 'not recorded' },
+              { label: 'Data source', value: dataScope?.source ?? 'not recorded' },
+              { label: 'Days', value: formatDayList(dataScope?.days) },
+              { label: 'MC session wall', value: formatSecondsValue(phaseTimings?.session_execution_wall_seconds) },
+              { label: 'Reporting time', value: formatSecondsValue(reportingSeconds) },
               { label: 'Git branch', value: git?.branch ?? 'not recorded' },
               { label: 'Git commit', value: git?.commit ? String(git.commit).slice(0, 12) : 'not recorded' },
               { label: 'Git dirty', value: formatBool(git?.dirty) },
@@ -380,4 +392,21 @@ function maxByNumber<T>(rows: T[], getValue: (row: T) => unknown): T | null {
     }
   }
   return best
+}
+
+function sumNumberValues(values: unknown[]): number | null {
+  const clean = values.map(numberOrNull).filter((value): value is number => value != null)
+  if (!clean.length) return null
+  return clean.reduce((total, value) => total + value, 0)
+}
+
+function formatSecondsValue(value: unknown): string {
+  const number = numberOrNull(value)
+  if (number == null) return 'not recorded'
+  return `${number.toFixed(3)}s`
+}
+
+function formatDayList(value: unknown): string {
+  if (!Array.isArray(value) || value.length === 0) return 'not recorded'
+  return value.join(', ')
 }

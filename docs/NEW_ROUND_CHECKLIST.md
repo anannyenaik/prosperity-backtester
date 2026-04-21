@@ -27,7 +27,7 @@ Use this list when a new Prosperity round drops.
 - make sure the bundle `type` and payload shape remain explicit
 - add any new aggregate rows or summaries to `reports.py`
 - check `dashboard/src/lib/bundles.ts` and the relevant view tabs
-- run `npm test --prefix dashboard -- --runInBand`
+- run `npm test --prefix dashboard`
 - run `npm run build --prefix dashboard`
 
 ## 5. Trust Checks
@@ -42,6 +42,7 @@ Use this list when a new Prosperity round drops.
 - rerun `analysis/profile_replay.py` on the default daily replay loop
 - rerun `analysis/benchmark_outputs.py`
 - rerun `analysis/benchmark_runtime.py`
+- if you changed Monte Carlo hot-path code, rerun one benchmark with the default backend and one with `--mc-backend classic`
 - refresh any workflow numbers in `README.md`, `docs/WORKFLOWS.md` and `docs/BENCHMARKS.md`
 
 ## 7. Docs And Handoff

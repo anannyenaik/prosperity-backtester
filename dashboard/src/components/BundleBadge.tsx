@@ -12,6 +12,7 @@ export function BundleBadge({ payload, className }: Props) {
   const profile = payload.meta?.outputProfile?.profile
   const workflowTier = payload.meta?.provenance?.workflow_tier
   const backend = payload.meta?.provenance?.runtime?.engine_backend
+  const mcBackend = payload.meta?.provenance?.runtime?.monte_carlo_backend
 
   return (
     <div className={clsx('inline-flex flex-wrap items-center gap-2', className)}>
@@ -38,6 +39,11 @@ export function BundleBadge({ payload, className }: Props) {
       {backend && (
         <span className="hud-label rounded-lg border border-border bg-white/[0.025] px-3 py-2 text-muted">
           {backend}
+        </span>
+      )}
+      {mcBackend && (
+        <span className="hud-label rounded-lg border border-border bg-white/[0.025] px-3 py-2 text-muted">
+          mc: {mcBackend}
         </span>
       )}
       {bundle.rawType !== bundle.type && (

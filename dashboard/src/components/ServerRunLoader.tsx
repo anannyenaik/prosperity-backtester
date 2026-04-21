@@ -9,6 +9,9 @@ const TYPE_BUTTONS = [
   ['replay', 'Latest replay'],
   ['monte_carlo', 'Latest MC'],
   ['comparison', 'Latest compare'],
+  ['calibration', 'Latest calibration'],
+  ['optimization', 'Latest optimise'],
+  ['round2_scenarios', 'Latest Round 2'],
 ] as const
 
 type RunFilter = 'all' | 'replay' | 'monte_carlo' | 'comparison' | 'calibration' | 'optimization' | 'round2_scenarios'
@@ -158,6 +161,7 @@ export function ServerRunLoader() {
                     {run.profile && <span>{run.profile}</span>}
                     {run.workflowTier && <span>{run.workflowTier}</span>}
                     {run.engineBackend && <span>{run.engineBackend}</span>}
+                    {run.monteCarloBackend && <span>mc:{run.monteCarloBackend}</span>}
                     {run.workerCount != null && run.workerCount > 1 && <span>{run.workerCount} workers</span>}
                     {run.gitDirty === true && <span>dirty git</span>}
                     {run.sizeBytes != null && <span>{fmtBytes(run.sizeBytes)}</span>}

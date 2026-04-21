@@ -7,6 +7,7 @@ import json
 import math
 import random
 import statistics
+import time
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -882,8 +883,17 @@ def run_market_session(
     path_bucket_count: int = 800,
     access_scenario: AccessScenario | None = None,
     print_trader_output: bool = False,
+    timing_profile: Dict[str, object] | None = None,
 ) -> SessionArtefacts:
+    session_started = time.perf_counter()
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
+    phase_totals = {
+        "state_build_seconds": 0.0,
+        "trader_seconds": 0.0,
+        "execution_seconds": 0.0,
+        "path_metrics_seconds": 0.0,
+        "postprocess_seconds": 0.0,
+    }
     ledgers = {product: ProductLedger() for product in PRODUCTS}
     trader_data = ""
     prev_own_trades = {product: [] for product in PRODUCTS}
@@ -910,6 +920,7 @@ def run_market_session(
 
     for day_dataset in market_days:
         for ts in day_dataset.timestamps:
+            state_build_started = time.perf_counter()
             tick_snapshots: Dict[str, BookSnapshot] = {}
             tick_access_fractions: Dict[str, float] = {}
             for product in PRODUCTS:
@@ -935,11 +946,14 @@ def run_market_session(
                 position={product: ledgers[product].position for product in PRODUCTS},
                 observations=Observation({}, {}),
             )
+            phase_totals["state_build_seconds"] += time.perf_counter() - state_build_started
+            trader_started = time.perf_counter()
             if print_trader_output:
                 result = trader.run(state)
             else:
                 with contextlib.redirect_stdout(stdout_sink):
                     result = trader.run(state)
+            phase_totals["trader_seconds"] += time.perf_counter() - trader_started
             if not isinstance(result, tuple) or len(result) != 3:
                 raise RuntimeError(f"Trader returned unexpected result at {ts}: {result!r}")
             submitted_orders_raw, conversions, trader_data = result
@@ -948,6 +962,7 @@ def run_market_session(
             schedule.add(due_step, submitted_orders)
             due_orders = schedule.pop(global_step)
 
+            execution_started = time.perf_counter()
             own_trades_tick = {product: [] for product in PRODUCTS}
             market_trades_tick = {product: [] for product in PRODUCTS}
             total_mtm_for_tick = 0.0
@@ -1039,6 +1054,7 @@ def run_market_session(
                     product_mtm = ledgers[product].mtm(mark)
                     total_mtm_for_tick += float(product_mtm)
                     if path_metric_collector is not None:
+                        path_metric_started = time.perf_counter()
                         path_metric_collector.add(
                             day=day_dataset.day,
                             product=product,
@@ -1048,7 +1064,9 @@ def run_market_session(
                             inventory=ledgers[product].position,
                             pnl=product_mtm,
                         )
+                        phase_totals["path_metrics_seconds"] += time.perf_counter() - path_metric_started
 
+            phase_totals["execution_seconds"] += time.perf_counter() - execution_started
             prev_own_trades = own_trades_tick
             prev_market_trades = market_trades_tick
             global_step += 1
@@ -1090,6 +1108,7 @@ def run_market_session(
         for product in PRODUCTS
     }
     if capture_full_output:
+        postprocess_started = time.perf_counter()
         fair_rows = infer_market_fair_rows(market_days)
         _apply_fill_markouts(fills_log, fair_rows)
         fair_lookup = {(int(row["day"]), str(row["product"]), int(row["timestamp"])): row for row in fair_rows}
@@ -1135,11 +1154,14 @@ def run_market_session(
             if capture_path_metrics
             else []
         )
+        phase_totals["postprocess_seconds"] += time.perf_counter() - postprocess_started
     else:
         fair_rows = []
         fair_summary = {}
         behaviour = {"summary": {}, "per_product": {}, "series": []}
+        path_metric_started = time.perf_counter()
         path_metrics = [] if path_metric_collector is None else path_metric_collector.rows()
+        phase_totals["path_metrics_seconds"] += time.perf_counter() - path_metric_started
     gross_final_pnl = sum(item["final_mtm"] for item in per_product_summary.values())
     maf_cost = access_scenario.maf_cost
     summary = {
@@ -1157,7 +1179,7 @@ def run_market_session(
         "fair_value": fair_summary,
         "behaviour": behaviour.get("summary", {}),
     }
-    return SessionArtefacts(
+    artefacts = SessionArtefacts(
         run_name=run_name,
         trader_name=trader_name,
         mode=mode,
@@ -1177,7 +1199,17 @@ def run_market_session(
         access_scenario=access_scenario.to_dict(),
         path_metrics=path_metrics,
     )
-
+    if timing_profile is not None:
+        timing_profile.clear()
+        for key, value in phase_totals.items():
+            timing_profile[key] = round(value, 6)
+        total_seconds = time.perf_counter() - session_started
+        timing_profile["session_total_seconds"] = round(total_seconds, 6)
+        known_seconds = sum(float(phase_totals[key]) for key in phase_totals)
+        timing_profile["python_overhead_seconds"] = round(max(0.0, total_seconds - known_seconds), 6)
+        timing_profile["session_count"] = 1
+    return artefacts
+    
 
 def generate_synthetic_market_days(
     days: Sequence[int],

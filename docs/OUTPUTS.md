@@ -130,6 +130,7 @@ Config files may set:
 - `max_series_rows_per_product`: default `1000` in light mode, `0` means no compaction
 - `max_mc_path_rows_per_product`: default `800` in light mode, `0` means every Monte Carlo timestamp
 - `synthetic_tick_limit`: cap synthetic Monte Carlo ticks per day for smoke or benchmark runs
+- `mc_backend`: `auto`, `streaming` or `classic`
 - `include_orders`: write submitted order rows
 - `write_series_csvs` or `series_sidecars`: write chart-series CSV sidecars
 - `write_sample_path_files`: write Monte Carlo `sample_paths/`
@@ -156,7 +157,7 @@ CLI `--orders`, `--sample-path-files`, `--session-manifests`, `--no-series-sidec
 - `bundle_files` with per-file byte counts
 - `provenance.command` with argv, display form and working directory
 - `provenance.workflow_tier`
-- `provenance.runtime` with backend, parallelism, worker count and session counts when relevant
+- `provenance.runtime` with backend, Monte Carlo backend, parallelism, worker count, session counts, data scope and runtime phase timings when relevant
 - `provenance.git` with root, commit, branch and dirty-worktree state when available
 
 The dashboard server reads the manifest and `run_registry.jsonl` first, so large bundles stay discoverable without loading `dashboard.json`.

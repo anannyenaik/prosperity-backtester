@@ -145,8 +145,10 @@ def test_compare_and_monte_carlo(tmp_path):
     assert mc_dashboard["monteCarlo"]["sampleRuns"]
     assert any(item["key"] == "path_bands" and item["fidelity"] == "bucketed" for item in mc_dashboard["dataContract"])
     assert mc_dashboard["meta"]["provenance"]["runtime"]["engine_backend"] == "python"
+    assert mc_dashboard["meta"]["provenance"]["runtime"]["monte_carlo_backend"] == "streaming"
     assert mc_dashboard["meta"]["provenance"]["runtime"]["session_count"] == 2
     assert mc_dashboard["meta"]["provenance"]["runtime"]["sample_session_count"] == 1
+    assert mc_dashboard["meta"]["provenance"]["runtime"]["phase_timings_seconds"]["bundle_write_seconds"] >= 0.0
     assert not (tmp_path / "mc" / "sample_paths").exists()
     assert not (tmp_path / "mc" / "behaviour_series.csv").exists()
 

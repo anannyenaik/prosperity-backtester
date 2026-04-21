@@ -5,6 +5,7 @@ import json
 import os
 import random
 import statistics
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,7 +14,16 @@ from typing import Dict, List, Sequence
 from .dataset import DayDataset, load_round_dataset
 from .fill_models import FillModel, derive_empirical_fill_profile, resolve_fill_model
 from .live_export import compare_live_export_summary, load_live_export
+from .mc_backends import (
+    finalise_profile as finalise_mc_profile,
+    merge_profile as merge_mc_profile,
+    new_profile as new_mc_profile,
+    normalise_monte_carlo_backend,
+    prepare_streaming_simulation_context,
+    run_streaming_synthetic_session,
+)
 from .platform import PerturbationConfig, SessionArtefacts, generate_synthetic_market_days, run_market_session
+from .provenance import capture_provenance
 from .reports import (
     build_dashboard_payload,
     compact_replay_rows,
@@ -114,6 +124,45 @@ def _dataset_reports(datasets: Sequence[DayDataset]) -> List[Dict[str, object]]:
     return reports
 
 
+def _data_scope_context(
+    *,
+    round_number: int,
+    days: Sequence[int],
+    source: str,
+    data_dir: Path | None = None,
+) -> Dict[str, object]:
+    payload: Dict[str, object] = {
+        "round": int(round_number),
+        "days": [int(day) for day in days],
+        "source": str(source),
+    }
+    if data_dir is not None:
+        payload["data_dir"] = str(data_dir)
+    return payload
+
+
+def _mc_runtime_context(
+    *,
+    workers: int,
+    sessions: int,
+    sample_sessions: int,
+    monte_carlo_backend: str | None = None,
+    data_scope: Dict[str, object] | None = None,
+) -> Dict[str, object]:
+    runtime_context: Dict[str, object] = {
+        "engine_backend": "python",
+        "parallelism": "process_pool" if int(workers) > 1 and int(sessions) > 0 else "single_process",
+        "worker_count": int(workers) if int(sessions) > 0 else 1,
+        "session_count": int(sessions),
+        "sample_session_count": int(sample_sessions),
+    }
+    if monte_carlo_backend is not None and int(sessions) > 0:
+        runtime_context["monte_carlo_backend"] = normalise_monte_carlo_backend(monte_carlo_backend)
+    if data_scope is not None:
+        runtime_context["data_scope"] = data_scope
+    return runtime_context
+
+
 def run_replay(
     *,
     trader_spec: TraderSpec,
@@ -159,7 +208,19 @@ def run_replay(
         validation = compare_live_export_summary(live_export, artefact)
         artefact.validation = validation
     if write_bundle:
-        runtime_context = {"engine_backend": "python", "parallelism": "single_process", "worker_count": 1}
+        runtime_context = {
+            "engine_backend": "python",
+            "parallelism": "single_process",
+            "worker_count": 1,
+            "data_scope": _data_scope_context(
+                round_number=round_number,
+                days=days,
+                data_dir=data_dir,
+                source="live_export" if live_export is not None else "historical",
+            ),
+        }
+        if live_export_path is not None:
+            runtime_context["live_export_path"] = str(live_export_path)
         replay_rows = compact_replay_rows(artefact, output_options)
         dashboard = build_dashboard_payload(
             run_type="replay",
@@ -199,11 +260,12 @@ def _instantiate_worker_trader(module, trader_path: Path):
     return trader
 
 
-def _run_monte_carlo_chunk(task: Dict[str, object]) -> List[SessionArtefacts]:
+def _run_monte_carlo_chunk(task: Dict[str, object]) -> Dict[str, object]:
     session_indices = [int(session_idx) for session_idx in task["session_indices"]]
     sample_sessions = int(task["sample_sessions"])
     base_seed = int(task["base_seed"])
     run_name = str(task["run_name"])
+    backend = normalise_monte_carlo_backend(str(task.get("monte_carlo_backend", "auto")))
     trader_spec = task["trader_spec"]
     assert isinstance(trader_spec, TraderSpec)
     perturbation = task["perturbation"]
@@ -214,28 +276,55 @@ def _run_monte_carlo_chunk(task: Dict[str, object]) -> List[SessionArtefacts]:
     assert isinstance(fill_model, FillModel)
     days = tuple(int(day) for day in task["days"])
     module = load_trader_module(trader_spec.path, trader_spec.overrides)
+    streaming_context = prepare_streaming_simulation_context(perturbation) if backend == "streaming" else None
     results: List[SessionArtefacts] = []
+    profile = new_mc_profile(backend)
     for session_idx in session_indices:
-        market_days = generate_synthetic_market_days(days=days, seed=base_seed + session_idx * 17, perturb=perturbation)
         trader = _instantiate_worker_trader(module, trader_spec.path)
-        results.append(
-            run_market_session(
+        capture_full_output = session_idx < sample_sessions
+        if backend == "streaming" and not capture_full_output:
+            result, session_profile = run_streaming_synthetic_session(
                 trader=trader,
                 trader_name=trader_spec.name,
-                market_days=market_days,
                 fill_model=fill_model,
                 perturb=perturbation,
-                rng=random.Random(base_seed + session_idx * 31),
+                days=days,
+                market_seed=base_seed + session_idx * 17,
+                execution_seed=base_seed + session_idx * 31,
                 run_name=f"{run_name}_session_{session_idx:04d}",
-                mode="monte_carlo",
-                capture_full_output=session_idx < sample_sessions,
-                capture_path_metrics=bool(task.get("capture_path_metrics", False)),
                 path_bucket_count=int(task.get("path_bucket_count", 800)),
                 access_scenario=access_scenario,
                 print_trader_output=bool(task.get("print_trader_output", False)),
+                simulation_context=streaming_context,
             )
+            results.append(result)
+            merge_mc_profile(profile, session_profile, sampled=False, execution_backend="streaming")
+            continue
+
+        generation_started = time.perf_counter()
+        market_days = generate_synthetic_market_days(days=days, seed=base_seed + session_idx * 17, perturb=perturbation)
+        generation_seconds = time.perf_counter() - generation_started
+        session_profile: Dict[str, object] = {}
+        result = run_market_session(
+            trader=trader,
+            trader_name=trader_spec.name,
+            market_days=market_days,
+            fill_model=fill_model,
+            perturb=perturbation,
+            rng=random.Random(base_seed + session_idx * 31),
+            run_name=f"{run_name}_session_{session_idx:04d}",
+            mode="monte_carlo",
+            capture_full_output=capture_full_output,
+            capture_path_metrics=bool(task.get("capture_path_metrics", False)),
+            path_bucket_count=int(task.get("path_bucket_count", 800)),
+            access_scenario=access_scenario,
+            print_trader_output=bool(task.get("print_trader_output", False)),
+            timing_profile=session_profile,
         )
-    return results
+        session_profile["market_generation_seconds"] = round(generation_seconds, 6)
+        results.append(result)
+        merge_mc_profile(profile, session_profile, sampled=capture_full_output, execution_backend="classic")
+    return {"results": results, "profile": finalise_mc_profile(profile)}
 
 
 def _session_chunks(sessions: int, worker_count: int) -> List[List[int]]:
@@ -248,6 +337,169 @@ def _session_chunks(sessions: int, worker_count: int) -> List[List[int]]:
     for session_idx in range(sessions):
         groups[session_idx % chunk_count].append(session_idx)
     return [group for group in groups if group]
+
+
+def _run_monte_carlo_profiled(
+    *,
+    trader_spec: TraderSpec,
+    sessions: int,
+    sample_sessions: int,
+    days: Sequence[int],
+    fill_model_name: str,
+    perturbation: PerturbationConfig,
+    output_dir: Path,
+    base_seed: int,
+    run_name: str,
+    workers: int = 1,
+    round_number: int = 1,
+    access_scenario: AccessScenario | None = None,
+    fill_model_config_path: Path | None = None,
+    register: bool = True,
+    write_bundle: bool = True,
+    output_options: OutputOptions | None = None,
+    print_trader_output: bool = False,
+    monte_carlo_backend: str = "auto",
+) -> tuple[List[SessionArtefacts], Dict[str, object]]:
+    output_options = output_options or OutputOptions()
+    if sessions < 1:
+        raise ValueError("Monte Carlo sessions must be at least 1")
+    sample_sessions = max(0, min(int(sample_sessions), int(sessions)))
+    access_scenario = access_scenario or NO_ACCESS_SCENARIO
+    fill_model = resolve_fill_model(fill_model_name, fill_model_config_path)
+    resolved_backend = normalise_monte_carlo_backend(monte_carlo_backend)
+    worker_count = max(1, int(workers))
+    if worker_count > 1:
+        worker_count = min(worker_count, sessions, os.cpu_count() or worker_count)
+    base_task = {
+        "sample_sessions": sample_sessions,
+        "base_seed": base_seed,
+        "run_name": run_name,
+        "trader_spec": trader_spec,
+        "perturbation": perturbation,
+        "access_scenario": access_scenario,
+        "days": tuple(days),
+        "fill_model": fill_model,
+        "capture_path_metrics": True,
+        "path_bucket_count": output_options.max_mc_path_rows_per_product,
+        "print_trader_output": print_trader_output,
+        "monte_carlo_backend": resolved_backend,
+    }
+    chunk_tasks = [
+        base_task | {"session_indices": chunk}
+        for chunk in _session_chunks(sessions, worker_count)
+    ]
+    execution_started = time.perf_counter()
+    if worker_count == 1:
+        chunk_outputs = [_run_monte_carlo_chunk(task) for task in chunk_tasks]
+    else:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as executor:
+            chunk_outputs = list(executor.map(_run_monte_carlo_chunk, chunk_tasks))
+    execution_seconds = time.perf_counter() - execution_started
+    profile = new_mc_profile(resolved_backend)
+    results = [
+        result
+        for chunk_output in chunk_outputs
+        for result in chunk_output["results"]
+    ]
+    for chunk_output in chunk_outputs:
+        chunk_profile = chunk_output["profile"]
+        for key in (
+            "session_count",
+            "sampled_session_count",
+            "classic_session_count",
+            "streaming_session_count",
+        ):
+            profile[key] = int(profile.get(key, 0) or 0) + int(chunk_profile.get(key, 0) or 0)
+        for key in (
+            "market_generation_seconds",
+            "state_build_seconds",
+            "trader_seconds",
+            "execution_seconds",
+            "path_metrics_seconds",
+            "postprocess_seconds",
+            "session_total_seconds",
+        ):
+            profile[key] = float(profile.get(key, 0.0) or 0.0) + float(chunk_profile.get(key, 0.0) or 0.0)
+    results.sort(key=lambda artefact: artefact.run_name)
+    sort_seconds = time.perf_counter() - execution_started - execution_seconds
+    compact_seconds = 0.0
+    dashboard_seconds = 0.0
+    write_seconds = 0.0
+    data_scope = _data_scope_context(
+        round_number=round_number,
+        days=days,
+        source="synthetic",
+    )
+    runtime_context = _mc_runtime_context(
+        workers=worker_count,
+        sessions=sessions,
+        sample_sessions=sample_sessions,
+        monte_carlo_backend=resolved_backend,
+        data_scope=data_scope,
+    )
+    if write_bundle:
+        compact_started = time.perf_counter()
+        monte_carlo_rows = {
+            result.run_name: compact_replay_rows(result, output_options)
+            for result in results
+            if result.inventory_series
+        }
+        compact_seconds = time.perf_counter() - compact_started
+        phase_timings = finalise_mc_profile(profile)
+        phase_timings["result_sort_seconds"] = round(sort_seconds, 6)
+        phase_timings["sample_row_compaction_seconds"] = round(compact_seconds, 6)
+        phase_timings["dashboard_build_seconds"] = 0.0
+        phase_timings["bundle_write_seconds"] = 0.0
+        phase_timings["session_execution_wall_seconds"] = round(execution_seconds, 6)
+        runtime_context["phase_timings_seconds"] = phase_timings
+        dashboard_started = time.perf_counter()
+        dashboard = build_dashboard_payload(
+            run_type="monte_carlo",
+            run_name=run_name,
+            trader_name=trader_spec.name,
+            mode="monte_carlo",
+            fill_model=fill_model.to_dict(),
+            perturbations=perturbation.to_dict(),
+            round_number=round_number,
+            access_scenario=access_scenario.to_dict(),
+            monte_carlo_results=results,
+            monte_carlo_rows=monte_carlo_rows,
+            dataset_reports=[],
+            output_options=output_options,
+            runtime_context=runtime_context,
+        )
+        dashboard_seconds = time.perf_counter() - dashboard_started
+        runtime_context["phase_timings_seconds"]["dashboard_build_seconds"] = round(dashboard_seconds, 6)
+        dashboard["meta"]["provenance"] = capture_provenance(runtime_context=runtime_context)
+        write_started = time.perf_counter()
+        write_mc_bundle(
+            output_dir,
+            results,
+            dashboard,
+            register=register,
+            replay_rows_by_run=monte_carlo_rows,
+            output_options=output_options,
+            runtime_context=runtime_context,
+        )
+        write_seconds = time.perf_counter() - write_started
+        runtime_context["phase_timings_seconds"]["bundle_write_seconds"] = round(write_seconds, 6)
+        manifest_path = output_dir / "manifest.json"
+        if manifest_path.is_file():
+            manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if isinstance(manifest_payload, dict):
+                write_manifest(
+                    output_dir,
+                    manifest_payload,
+                    output_options,
+                    runtime_context=runtime_context,
+                )
+    final_profile = dict(runtime_context.get("phase_timings_seconds") or finalise_mc_profile(profile))
+    final_profile["result_sort_seconds"] = round(sort_seconds, 6)
+    final_profile["sample_row_compaction_seconds"] = round(compact_seconds, 6)
+    final_profile["dashboard_build_seconds"] = round(dashboard_seconds, 6)
+    final_profile["bundle_write_seconds"] = round(write_seconds, 6)
+    final_profile["session_execution_wall_seconds"] = round(execution_seconds, 6)
+    return results, final_profile
 
 
 def run_monte_carlo(
@@ -269,80 +521,28 @@ def run_monte_carlo(
     write_bundle: bool = True,
     output_options: OutputOptions | None = None,
     print_trader_output: bool = False,
+    monte_carlo_backend: str = "auto",
 ) -> List[SessionArtefacts]:
-    output_options = output_options or OutputOptions()
-    if sessions < 1:
-        raise ValueError("Monte Carlo sessions must be at least 1")
-    sample_sessions = max(0, min(int(sample_sessions), int(sessions)))
-    access_scenario = access_scenario or NO_ACCESS_SCENARIO
-    fill_model = resolve_fill_model(fill_model_name, fill_model_config_path)
-    worker_count = max(1, int(workers))
-    if worker_count > 1:
-        worker_count = min(worker_count, sessions, os.cpu_count() or worker_count)
-    base_task = {
-        "sample_sessions": sample_sessions,
-        "base_seed": base_seed,
-        "run_name": run_name,
-        "trader_spec": trader_spec,
-        "perturbation": perturbation,
-        "access_scenario": access_scenario,
-        "days": tuple(days),
-        "fill_model": fill_model,
-        "capture_path_metrics": True,
-        "path_bucket_count": output_options.max_mc_path_rows_per_product,
-        "print_trader_output": print_trader_output,
-    }
-    chunk_tasks = [
-        base_task | {"session_indices": chunk}
-        for chunk in _session_chunks(sessions, worker_count)
-    ]
-    if worker_count == 1:
-        results = [result for task in chunk_tasks for result in _run_monte_carlo_chunk(task)]
-    else:
-        with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as executor:
-            results = [
-                result
-                for chunk_results in executor.map(_run_monte_carlo_chunk, chunk_tasks)
-                for result in chunk_results
-            ]
-    results.sort(key=lambda artefact: artefact.run_name)
-    if write_bundle:
-        runtime_context = {
-            "engine_backend": "python",
-            "parallelism": "process_pool" if worker_count > 1 else "single_process",
-            "worker_count": worker_count,
-            "session_count": sessions,
-            "sample_session_count": sample_sessions,
-        }
-        monte_carlo_rows = {
-            result.run_name: compact_replay_rows(result, output_options)
-            for result in results
-            if result.inventory_series
-        }
-        dashboard = build_dashboard_payload(
-            run_type="monte_carlo",
-            run_name=run_name,
-            trader_name=trader_spec.name,
-            mode="monte_carlo",
-            fill_model=fill_model.to_dict(),
-            perturbations=perturbation.to_dict(),
-            round_number=round_number,
-            access_scenario=access_scenario.to_dict(),
-            monte_carlo_results=results,
-            monte_carlo_rows=monte_carlo_rows,
-            dataset_reports=[],
-            output_options=output_options,
-            runtime_context=runtime_context,
-        )
-        write_mc_bundle(
-            output_dir,
-            results,
-            dashboard,
-            register=register,
-            replay_rows_by_run=monte_carlo_rows,
-            output_options=output_options,
-            runtime_context=runtime_context,
-        )
+    results, _profile = _run_monte_carlo_profiled(
+        trader_spec=trader_spec,
+        sessions=sessions,
+        sample_sessions=sample_sessions,
+        days=days,
+        fill_model_name=fill_model_name,
+        perturbation=perturbation,
+        output_dir=output_dir,
+        base_seed=base_seed,
+        run_name=run_name,
+        workers=workers,
+        round_number=round_number,
+        access_scenario=access_scenario,
+        fill_model_config_path=fill_model_config_path,
+        register=register,
+        write_bundle=write_bundle,
+        output_options=output_options,
+        print_trader_output=print_trader_output,
+        monte_carlo_backend=monte_carlo_backend,
+    )
     return results
 
 
@@ -363,6 +563,17 @@ def run_compare(
 ) -> List[Dict[str, object]]:
     output_options = output_options or OutputOptions()
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
+    runtime_context = {
+        "engine_backend": "python",
+        "parallelism": "single_process",
+        "worker_count": 1,
+        "data_scope": _data_scope_context(
+            round_number=round_number,
+            days=days,
+            data_dir=data_dir,
+            source="historical",
+        ),
+    }
     comparison_rows: List[Dict[str, object]] = []
     for trader_spec in trader_specs:
         run_dir = output_dir / trader_spec.name
@@ -423,14 +634,14 @@ def run_compare(
         access_scenario=access_scenario.to_dict(),
         comparison_rows=comparison_rows,
         output_options=output_options,
-        runtime_context={"engine_backend": "python", "parallelism": "single_process", "worker_count": 1},
+        runtime_context=runtime_context,
     )
     write_run_bundle(output_dir, dashboard, extra_csvs={"comparison.csv": comparison_rows}, output_options=output_options)
     write_manifest(
         output_dir,
         {"run_type": "comparison", "run_name": run_name, "row_count": len(comparison_rows), "round": round_number, "access_scenario": access_scenario.to_dict()},
         output_options,
-        runtime_context={"engine_backend": "python", "parallelism": "single_process", "worker_count": 1},
+        runtime_context=runtime_context,
     )
     return comparison_rows
 
@@ -592,7 +803,20 @@ def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path,
     mc_sample_sessions = int(config.get("mc_sample_sessions", min(4, mc_sessions)))
     mc_seed = int(config.get("mc_seed", 20260418))
     mc_workers = int(config.get("mc_workers", 1))
+    mc_backend = str(config.get("mc_backend", "auto"))
     output_options = output_options or OutputOptions.from_config(config)
+    aggregate_runtime_context = _mc_runtime_context(
+        workers=mc_workers,
+        sessions=mc_sessions,
+        sample_sessions=mc_sample_sessions,
+        monte_carlo_backend=mc_backend if mc_sessions > 0 else None,
+        data_scope=_data_scope_context(
+            round_number=round_number,
+            days=days,
+            data_dir=data_dir,
+            source="historical",
+        ),
+    )
 
     scenario_rows: List[Dict[str, object]] = []
     mc_results: Dict[tuple[str, str], List[SessionArtefacts]] = {}
@@ -660,6 +884,7 @@ def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path,
                     base_seed=mc_seed + scenario_idx * 10_000,
                     run_name=f"{run_name}_{scenario.name}_{trader_spec.name}_mc",
                     workers=mc_workers,
+                    monte_carlo_backend=mc_backend,
                     round_number=round_number,
                     access_scenario=scenario,
                     register=False,
@@ -700,13 +925,7 @@ def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path,
         },
         comparison_rows=scenario_rows,
         output_options=output_options,
-        runtime_context={
-            "engine_backend": "python",
-            "parallelism": "process_pool" if mc_workers > 1 and mc_sessions > 0 else "single_process",
-            "worker_count": mc_workers if mc_sessions > 0 else 1,
-            "session_count": mc_sessions,
-            "sample_session_count": mc_sample_sessions,
-        },
+        runtime_context=aggregate_runtime_context,
     )
     write_run_bundle(
         output_dir,
@@ -730,13 +949,7 @@ def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path,
             "mc_sessions": mc_sessions,
         },
         output_options,
-        runtime_context={
-            "engine_backend": "python",
-            "parallelism": "process_pool" if mc_workers > 1 and mc_sessions > 0 else "single_process",
-            "worker_count": mc_workers if mc_sessions > 0 else 1,
-            "session_count": mc_sessions,
-            "sample_session_count": mc_sample_sessions,
-        },
+        runtime_context=aggregate_runtime_context,
     )
     return {
         "scenario_rows": scenario_rows,
@@ -826,7 +1039,20 @@ def run_scenario_compare_from_config(config_path: Path, output_dir: Path, output
     mc_sample_sessions = int(config.get("mc_sample_sessions", min(4, mc_sessions)))
     mc_seed = int(config.get("mc_seed", 20260418))
     mc_workers = int(config.get("mc_workers", 1))
+    mc_backend = str(config.get("mc_backend", "auto"))
     output_options = output_options or OutputOptions.from_config(config)
+    aggregate_runtime_context = _mc_runtime_context(
+        workers=mc_workers,
+        sessions=mc_sessions,
+        sample_sessions=mc_sample_sessions,
+        monte_carlo_backend=mc_backend if mc_sessions > 0 else None,
+        data_scope=_data_scope_context(
+            round_number=round_number,
+            days=days,
+            data_dir=data_dir,
+            source="historical",
+        ),
+    )
 
     scenario_rows: List[Dict[str, object]] = []
     mc_results: Dict[tuple[str, str], List[SessionArtefacts]] = {}
@@ -891,6 +1117,7 @@ def run_scenario_compare_from_config(config_path: Path, output_dir: Path, output
                     base_seed=mc_seed + scenario_idx * 10_000,
                     run_name=f"{run_name}_{scenario.name}_{trader_spec.name}_mc",
                     workers=mc_workers,
+                    monte_carlo_backend=mc_backend,
                     round_number=round_number,
                     register=False,
                     write_bundle=output_options.write_child_bundles,
@@ -925,13 +1152,7 @@ def run_scenario_compare_from_config(config_path: Path, output_dir: Path, output
             },
         },
         output_options=output_options,
-        runtime_context={
-            "engine_backend": "python",
-            "parallelism": "process_pool" if mc_workers > 1 and mc_sessions > 0 else "single_process",
-            "worker_count": mc_workers if mc_sessions > 0 else 1,
-            "session_count": mc_sessions,
-            "sample_session_count": mc_sample_sessions,
-        },
+        runtime_context=aggregate_runtime_context,
     )
     write_run_bundle(
         output_dir,
@@ -957,13 +1178,7 @@ def run_scenario_compare_from_config(config_path: Path, output_dir: Path, output
             "fill_config": str(fill_model_config_path) if fill_model_config_path else None,
         },
         output_options,
-        runtime_context={
-            "engine_backend": "python",
-            "parallelism": "process_pool" if mc_workers > 1 and mc_sessions > 0 else "single_process",
-            "worker_count": mc_workers if mc_sessions > 0 else 1,
-            "session_count": mc_sessions,
-            "sample_session_count": mc_sample_sessions,
-        },
+        runtime_context=aggregate_runtime_context,
     )
     return {
         "scenario_rows": scenario_rows,
@@ -987,6 +1202,17 @@ def calibrate_against_live_export(
 ) -> Dict[str, object]:
     output_options = output_options or OutputOptions()
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
+    runtime_context = {
+        "engine_backend": "python",
+        "parallelism": "single_process",
+        "worker_count": 1,
+        "data_scope": _data_scope_context(
+            round_number=round_number,
+            days=days,
+            data_dir=data_dir,
+            source="historical",
+        ),
+    }
     empirical_profile = derive_empirical_fill_profile([live_export_path], output_dir / "empirical_profile", profile_name="live_empirical")
     if quick:
         candidate_fill_models = ["empirical_baseline", "empirical_conservative", "base"]
@@ -1069,7 +1295,7 @@ def calibrate_against_live_export(
         calibration_grid=rows,
         calibration_best=best_row,
         output_options=output_options,
-        runtime_context={"engine_backend": "python", "parallelism": "single_process", "worker_count": 1},
+        runtime_context=runtime_context,
     )
     write_run_bundle(output_dir, dashboard, extra_csvs={"calibration_grid.csv": rows}, output_options=output_options)
     write_manifest(
@@ -1083,7 +1309,7 @@ def calibrate_against_live_export(
             "validation_note": "Best score is a local calibration choice, not proof of exact website reconstruction.",
         },
         output_options,
-        runtime_context={"engine_backend": "python", "parallelism": "single_process", "worker_count": 1},
+        runtime_context=runtime_context,
     )
     assert best_row is not None
     return best_row
@@ -1152,7 +1378,20 @@ def run_optimize_from_config(config_path: Path, output_dir: Path, output_options
     mc_sample_sessions = int(config.get("mc_sample_sessions", min(6, mc_sessions)))
     mc_seed = int(config.get("mc_seed", 20260418))
     mc_workers = int(config.get("mc_workers", 1))
+    mc_backend = str(config.get("mc_backend", "auto"))
     output_options = output_options or OutputOptions.from_config(config)
+    aggregate_runtime_context = _mc_runtime_context(
+        workers=mc_workers,
+        sessions=mc_sessions,
+        sample_sessions=mc_sample_sessions,
+        monte_carlo_backend=mc_backend if mc_sessions > 0 else None,
+        data_scope=_data_scope_context(
+            round_number=round_number,
+            days=days,
+            data_dir=data_dir,
+            source="historical",
+        ),
+    )
     weights = {
         "replay": 1.0,
         "mc_mean": 0.35,
@@ -1196,6 +1435,7 @@ def run_optimize_from_config(config_path: Path, output_dir: Path, output_options
             base_seed=mc_seed + idx * 1000,
             run_name=f"{run_name}_{variant_name}_mc",
             workers=mc_workers,
+            monte_carlo_backend=mc_backend,
             round_number=round_number,
             access_scenario=access_scenario,
             register=False,
@@ -1248,25 +1488,13 @@ def run_optimize_from_config(config_path: Path, output_dir: Path, output_options
         access_scenario=access_scenario.to_dict(),
         optimization_rows=rows,
         output_options=output_options,
-        runtime_context={
-            "engine_backend": "python",
-            "parallelism": "process_pool" if mc_workers > 1 and mc_sessions > 0 else "single_process",
-            "worker_count": mc_workers if mc_sessions > 0 else 1,
-            "session_count": mc_sessions,
-            "sample_session_count": mc_sample_sessions,
-        },
+        runtime_context=aggregate_runtime_context,
     )
     write_run_bundle(output_dir, dashboard, extra_csvs={"optimization.csv": rows}, output_options=output_options)
     write_manifest(
         output_dir,
         {"run_type": "optimization", "run_name": run_name, "row_count": len(rows), "best_variant": rows[0] if rows else None},
         output_options,
-        runtime_context={
-            "engine_backend": "python",
-            "parallelism": "process_pool" if mc_workers > 1 and mc_sessions > 0 else "single_process",
-            "worker_count": mc_workers if mc_sessions > 0 else 1,
-            "session_count": mc_sessions,
-            "sample_session_count": mc_sample_sessions,
-        },
+        runtime_context=aggregate_runtime_context,
     )
     return rows

@@ -62,6 +62,7 @@ def test_server_bundle_discovery_uses_manifest_metadata(tmp_path):
         'fileCount': 2,
         'workflowTier': None,
         'engineBackend': None,
+        'monteCarloBackend': None,
         'parallelism': None,
         'workerCount': None,
         'gitCommit': None,
@@ -119,6 +120,7 @@ def test_server_bundle_discovery_uses_registry_metadata_when_manifest_is_minimal
     assert bundle['path'] == 'backtests/2026-04-21_12-00-00_replay_tiny/dashboard.json'
     assert bundle['workflowTier'] == 'fast'
     assert bundle['engineBackend'] == 'python'
+    assert bundle['monteCarloBackend'] is None
     assert bundle['parallelism'] == 'single_process'
     assert bundle['workerCount'] == 1
     assert bundle['gitCommit'] == 'abc123def456'

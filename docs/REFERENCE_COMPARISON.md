@@ -21,22 +21,22 @@ Chris still has the strongest public raw engine ceiling:
 
 - Rust-backed simulator
 - session parallelism through Rayon
-- a clear heavy Monte Carlo story around large session counts
+- a clearer story for very large Monte Carlo batches where compiled stepping dominates reporting costs
 
-This repo now wins on the broader practical workflow:
+This repo wins on broader research workflow:
 
 - deterministic replay is first-class rather than secondary
 - compare, scenario, calibration and Round 2 decision flows are built in
 - Monte Carlo path bands are computed from all sessions, not only from saved sample paths
-- bundle storage, provenance and local discovery are materially stronger
+- bundle storage, provenance, retention and local discovery are materially stronger
 - the dashboard is wider and more useful for day-to-day strategy review
 
-Practical Monte Carlo changes in this pass:
+Measured Monte Carlo changes in this pass:
 
-- unsampled sessions no longer build full replay artefacts
-- worker scheduling is chunked rather than one-session-per-task
-- exact all-session path bands are retained
-- runtime benchmarking is now reproducible and comparable against a clean baseline worktree
+- the default `streaming` backend beats the current `classic` fallback by about `5.7%` at `100/10` sessions on `1` worker
+- the same backend beats classic by about `10.9%` at `192/16` on `1` worker
+- a heavier `512/32` light run measures about `20.64s` on streaming vs `21.95s` on classic for `1` worker, and about `10.99s` vs `11.25s` on `4` workers
+- the main remaining cost centres are still synthetic market generation, Python session stepping, and reporting work rather than trader execution alone
 
 Current honest caveat:
 
@@ -59,10 +59,12 @@ This repo now closes or surpasses those replay UX points while keeping much more
 
 - `--data` alias is available alongside `--data-dir`
 - `--merge-pnl` is available on compare
-- `--print-trader-output` exposes live trader stdout when needed
+- `--print` and `--print-trader-output` both expose live trader stdout when needed
+- `--vis` aliases `--open`
 - `--limit PRODUCT:LIMIT` overrides per-product position limits
+- `--match-trades` remains explicit and trust-oriented
 - `--open` plus `serve --latest-type ...` gives a short local-open flow
-- the dashboard landing screen exposes latest replay, latest MC and latest compare buttons
+- the dashboard landing screen now exposes latest replay, latest MC, latest compare, latest calibration, latest optimise and latest Round 2 buttons
 - run naming is cleaner for auto-generated outputs
 - CLI help includes concrete examples instead of only flag lists
 

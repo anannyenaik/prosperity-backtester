@@ -31,10 +31,19 @@ export interface ProvenanceInfo {
     python_version?: string | null
     executable?: string | null
     engine_backend?: string | null
+    monte_carlo_backend?: string | null
     parallelism?: string | null
     worker_count?: number | null
     session_count?: number | null
     sample_session_count?: number | null
+    data_scope?: {
+      round?: number | null
+      days?: number[] | null
+      source?: string | null
+      data_dir?: string | null
+      [key: string]: unknown
+    }
+    phase_timings_seconds?: Record<string, unknown> | null
     [key: string]: unknown
   }
 }

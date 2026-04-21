@@ -86,7 +86,7 @@ Replay with stricter or disabled passive trade-print matching when you want a tr
 ```bash
 python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --match-trades worse
 python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --match-trades none
-python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --limit INTARIAN_PEPPER_ROOT:40 --print-trader-output
+python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --limit INTARIAN_PEPPER_ROOT:40 --print
 ```
 
 Compare trader scripts. This also defaults to day `0`:
@@ -100,6 +100,7 @@ Run Monte Carlo:
 
 ```bash
 python -m prosperity_backtester monte-carlo strategies/trader.py --name current --days 0 --fill-mode empirical_baseline --noise-profile fitted --quick
+python -m prosperity_backtester monte-carlo strategies/trader.py --name current --days 0 --fill-mode empirical_baseline --noise-profile fitted --sessions 256 --sample-sessions 16 --workers 4 --mc-backend classic
 ```
 
 ## Research Loop
@@ -139,19 +140,20 @@ python analysis/profile_replay.py strategies/trader.py --compare-trader strategi
 
 Measured on 2026-04-21 with the current `strategies/trader.py`:
 
-- default day-0 replay: about `2.33s`
-- default day-0 compare: about `2.50s`
-- fast pack: about `6.79s`
-- validation pack: about `24.42s`
+- default day-0 replay: about `2.41s`
+- default day-0 compare: about `2.57s`
+- fast pack: about `5.93s`
+- validation pack: about `20.36s`
 
 Measured with `analysis/benchmark_runtime.py` on the tracked `250`-tick Monte Carlo fixture:
 
-- default light Monte Carlo: about `4.17s` on `1` worker, `2.30s` on `4` workers
-- heavy light Monte Carlo: about `7.22s` on `1` worker, `3.72s` on `4` workers
-- versus clean `HEAD`, one-worker default Monte Carlo improved by about `17%`
-- versus clean `HEAD`, one-worker heavy Monte Carlo improved by about `31.7%`
+- default light Monte Carlo: about `3.32s` on `1` worker, `2.19s` on `4` workers
+- heavy light Monte Carlo: about `7.20s` on `1` worker, `3.50s` on `4` workers
+- versus the current classic backend fallback, default light Monte Carlo is about `5.7%` faster at `100/10` sessions on `1` worker and about `6.4%` faster on `2` workers
+- versus classic, heavy light Monte Carlo is about `10.9%` faster at `192/16` sessions on `1` worker
+- a heavier `512/32` light run measures about `20.64s` on streaming vs `21.95s` on classic for `1` worker, and about `10.99s` vs `11.25s` on `4` workers
 
-The main gain comes from no longer building full replay artefacts for unsampled Monte Carlo sessions. Exact all-session path bands are still preserved.
+The main gain comes from the default streaming Monte Carlo backend, which avoids building full replay artefacts for unsampled sessions while still preserving exact all-session final distribution metrics and all-session path bands.
 
 Forensic work is still deliberate full-profile work and should be treated as a minute-scale task rather than part of the normal branch loop.
 
@@ -159,7 +161,7 @@ Forensic work is still deliberate full-profile work and should be treated as a m
 
 Compared with simpler replay backtesters, this repo now keeps a short daily loop through day-0 defaults, `--match-trades`, per-day PnL output, `--open`, and `serve --latest`, while still carrying compare, optimisation, calibration, scenarios and Round 2 research.
 
-Compared with Monte Carlo-first repos, the current performance story is practical rather than architectural. Use light mode, explicit fast and validation packs, and `--workers` once session counts are high enough. Reach for a lower-level backend only if future profiling shows the session engine, rather than reporting and bundle construction, becoming the true bottleneck.
+Compared with Monte Carlo-first repos, the current performance story is now hybrid. Use light mode, explicit fast and validation packs, the default `streaming` backend, and `--workers` once session counts are high enough. Use `--mc-backend classic` for parity checks. Chris Roberts' compiled Rust plus Rayon design still has the stronger public absolute ceiling.
 
 See [docs/REFERENCE_COMPARISON.md](docs/REFERENCE_COMPARISON.md) for the detailed comparison against the Chris Roberts and Nabayan Saha public repos.
 
@@ -260,7 +262,7 @@ Open:
 http://127.0.0.1:5555/
 ```
 
-You can drag one or more `dashboard.json` bundles into the app, use **Open latest run**, **Latest replay**, **Latest MC**, or **Latest compare**, or use **Browse local server** to discover bundles under the served directory. The server reads `manifest.json` and `run_registry.jsonl` first when available, so discovery stays fast for large bundles and keeps workflow metadata visible.
+You can drag one or more `dashboard.json` bundles into the app, use **Open latest run**, **Latest replay**, **Latest MC**, **Latest compare**, **Latest calibration**, **Latest optimise**, or **Latest Round 2**, or use **Browse local server** to discover bundles under the served directory. The server reads `manifest.json` and `run_registry.jsonl` first when available, so discovery stays fast for large bundles and keeps workflow metadata visible.
 
 To finish a workflow and jump straight into the written bundle:
 
@@ -363,7 +365,8 @@ Every `manifest.json` also records:
 - total bundle size and file count
 - command provenance
 - workflow tier
-- backend, parallelism and worker metadata
+- backend, Monte Carlo backend, parallelism and worker metadata
+- data scope and runtime phase timings where relevant
 - git commit, branch and dirty-worktree state when available
 
 ## Interpreting Outputs
@@ -406,6 +409,7 @@ Common fields:
 - `perturbation`: replay or Monte Carlo perturbation fields.
 - `synthetic_tick_limit`: optional Monte Carlo tick cap for smoke or benchmark runs.
 - `mc_sessions`, `mc_sample_sessions`, `mc_seed`, `mc_workers`: Monte Carlo controls.
+- `mc_backend`: `auto`, `streaming` or `classic`.
 - `output_profile`: `light` or `full`.
 - `save_child_bundles`: keep per-variant or per-scenario child bundles for aggregate workflows.
 - `write_series_csvs` or `series_sidecars`: write chart-series CSV sidecars.

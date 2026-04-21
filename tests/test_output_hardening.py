@@ -307,6 +307,27 @@ def test_cli_limit_overrides_and_print_flag_are_parsed():
     assert args.print_trader_output is True
 
 
+def test_cli_aliases_and_mc_backend_are_parsed():
+    parser = build_parser()
+
+    replay_args = parser.parse_args([
+        'replay',
+        'strategies/trader.py',
+        '--vis',
+        '--print',
+    ])
+    mc_args = parser.parse_args([
+        'monte-carlo',
+        'strategies/trader.py',
+        '--mc-backend',
+        'classic',
+    ])
+
+    assert replay_args.open is True
+    assert replay_args.print_trader_output is True
+    assert mc_args.mc_backend == 'classic'
+
+
 def test_prune_uses_folder_timestamp_not_mtime_and_validates_keep(tmp_path):
     older = tmp_path / "2026-04-18_00-00-00_replay"
     newer = tmp_path / "2026-04-19_00-00-00_replay"

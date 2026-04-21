@@ -157,3 +157,33 @@ def test_monte_carlo_reuses_sample_session_compaction(tmp_path, monkeypatch):
     )
 
     assert call_count == 1
+
+
+def test_streaming_backend_matches_classic_backend_for_unsampled_sessions(tmp_path):
+    trader = _write_aggressive_trader(tmp_path / "aggressive_trader.py")
+    common = {
+        "trader_spec": TraderSpec(name="main", path=trader),
+        "sessions": 3,
+        "sample_sessions": 0,
+        "days": (0,),
+        "fill_model_name": "base",
+        "perturbation": PerturbationConfig(synthetic_tick_limit=20),
+        "base_seed": 20260418,
+        "run_name": "mc_backend_parity",
+        "write_bundle": False,
+    }
+
+    classic = run_monte_carlo(
+        **common,
+        output_dir=tmp_path / "classic",
+        monte_carlo_backend="classic",
+    )
+    streaming = run_monte_carlo(
+        **common,
+        output_dir=tmp_path / "streaming",
+        monte_carlo_backend="streaming",
+    )
+
+    assert [session.summary for session in classic] == [session.summary for session in streaming]
+    assert [session.session_rows for session in classic] == [session.session_rows for session in streaming]
+    assert [session.path_metrics for session in classic] == [session.path_metrics for session in streaming]

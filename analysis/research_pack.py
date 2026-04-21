@@ -23,6 +23,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-dir", default=None, help="Directory containing CSVs")
     parser.add_argument("--fill-mode", default=None, help="Fill model override")
     parser.add_argument("--mc-workers", type=int, default=1, help="Parallel worker processes for Monte Carlo sessions")
+    parser.add_argument("--mc-backend", default="auto", choices=["auto", "classic", "streaming"], help="Monte Carlo backend for the pack's robustness step")
     parser.add_argument("--output-dir", default=None, help="Output directory. Default is backtests/<timestamp>_<preset>_pack_<trader>")
     parser.add_argument("--keep-runs", type=int, default=30, help="When using the default backtests/ output root, keep this many timestamped pack roots")
     return parser
@@ -48,6 +49,7 @@ def main() -> None:
         data_dir=Path(args.data_dir).resolve() if args.data_dir else default_data_dir_for_round(args.round),
         fill_model_name=args.fill_mode or default_fill_mode_for_round(args.round),
         mc_workers=args.mc_workers,
+        mc_backend=args.mc_backend,
     )
     if auto_output:
         prune_old_auto_runs(output_dir.parent, keep_runs)

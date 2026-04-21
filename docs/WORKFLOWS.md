@@ -34,16 +34,16 @@ The fast pack writes only:
 
 Measured on 2026-04-21 with the current `strategies/trader.py` on this machine:
 
-- default day-0 replay: about `2.33s`
-- default day-0 compare: about `2.50s`
-- fast pack: about `6.79s`
+- default day-0 replay: about `2.41s`
+- default day-0 compare: about `2.57s`
+- fast pack: about `5.93s`
 
 Useful trust checks during the fast loop:
 
 ```bash
 python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --match-trades worse
 python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --match-trades none
-python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --limit INTARIAN_PEPPER_ROOT:40 --print-trader-output
+python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --limit INTARIAN_PEPPER_ROOT:40 --print
 ```
 
 ## Validation Loop
@@ -62,7 +62,7 @@ This gives:
 
 Measured on 2026-04-21 with the current `strategies/trader.py` on this machine:
 
-- validation pack: about `24.42s`
+- validation pack: about `20.36s`
 
 You can still run the parts separately when needed:
 
@@ -106,7 +106,7 @@ The helper benchmarks each requested day separately, writes `profile_report.json
 - dashboard build time
 - bundle write time
 
-On the current repo state, the previous three-day slowdown was traced to light-output compaction in `reports.py`, not the core replay engine.
+On the current repo state, the slowest three-day replay day is day `0` at about `2.655s`, split roughly into `1.559s` in the market session, `0.644s` in light-output compaction and `0.286s` in dashboard plus bundle write work.
 
 ## Monte Carlo
 
@@ -114,18 +114,21 @@ Use Monte Carlo directly when you want custom sessions, days or workers.
 
 ```bash
 python -m prosperity_backtester monte-carlo strategies/trader.py --name current --days 0 --fill-mode empirical_baseline --noise-profile fitted --quick
+python -m prosperity_backtester monte-carlo strategies/trader.py --name current --days 0 --fill-mode empirical_baseline --noise-profile fitted --sessions 256 --sample-sessions 16 --workers 4 --mc-backend classic
 ```
 
-Review mean, median, P05, expected shortfall, drawdown and limit breaches. The dashboard path bands are computed from all sessions; saved sample runs are examples for qualitative inspection.
+Review mean, median, P05, expected shortfall, drawdown and limit breaches. The dashboard path bands are computed from all sessions; saved sample runs are examples for qualitative inspection. Use the default `streaming` backend for routine research, and use `--mc-backend classic` when you want an explicit parity fallback.
 
 Measured on 2026-04-21 with `analysis/benchmark_runtime.py` on the tracked `250`-tick Monte Carlo fixture:
 
-- quick light, `64` sessions, `8` samples, `1` worker: about `2.69s`
-- quick light, `64` sessions, `8` samples, `4` workers: about `2.24s`
-- default light, `100` sessions, `10` samples, `1` worker: about `4.17s`
-- default light, `100` sessions, `10` samples, `4` workers: about `2.30s`
-- heavy light, `192` sessions, `16` samples, `1` worker: about `7.22s`
-- heavy light, `192` sessions, `16` samples, `4` workers: about `3.72s`
+- quick light, `64` sessions, `8` samples, `1` worker: about `2.41s`
+- quick light, `64` sessions, `8` samples, `4` workers: about `1.79s`
+- default light, `100` sessions, `10` samples, `1` worker: about `3.32s`
+- default light, `100` sessions, `10` samples, `4` workers: about `2.19s`
+- heavy light, `192` sessions, `16` samples, `1` worker: about `7.20s`
+- heavy light, `192` sessions, `16` samples, `4` workers: about `3.50s`
+- versus the current classic backend, streaming is about `5.7%` faster at `100/10` on `1` worker and about `10.9%` faster at `192/16` on `1` worker
+- a heavier `512/32` light run measures about `20.64s` on streaming vs `21.95s` on classic for `1` worker
 
 ## Sweep
 
@@ -191,7 +194,7 @@ python -m prosperity_backtester serve --latest-type replay
 python -m prosperity_backtester serve --latest-type monte-carlo
 ```
 
-Open `http://127.0.0.1:5555/`, then use **Open latest run**, **Latest replay**, **Latest MC**, **Latest compare**, or **Browse local server**.
+Open `http://127.0.0.1:5555/`, then use **Open latest run**, **Latest replay**, **Latest MC**, **Latest compare**, **Latest calibration**, **Latest optimise**, **Latest Round 2**, or **Browse local server**.
 
 To finish a run and open its bundle directly:
 

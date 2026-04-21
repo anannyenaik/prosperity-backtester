@@ -98,6 +98,7 @@ def _run_case(
     bundle_stats = manifest.get("bundle_stats") if isinstance(manifest.get("bundle_stats"), dict) else {}
     provenance = manifest.get("provenance") if isinstance(manifest.get("provenance"), dict) else {}
     runtime = provenance.get("runtime") if isinstance(provenance.get("runtime"), dict) else {}
+    phase_timings = runtime.get("phase_timings_seconds") if isinstance(runtime.get("phase_timings_seconds"), dict) else {}
     size_bytes = int(bundle_stats.get("total_size_bytes") or _dir_size(output_dir))
     session_count = case_meta.get("session_count")
     throughput = None
@@ -111,8 +112,10 @@ def _run_case(
         "size_bytes": size_bytes,
         "workflow_tier": provenance.get("workflow_tier"),
         "engine_backend": runtime.get("engine_backend"),
+        "monte_carlo_backend": runtime.get("monte_carlo_backend"),
         "parallelism": runtime.get("parallelism"),
         "worker_count": runtime.get("worker_count"),
+        "phase_timings_seconds": phase_timings,
         "throughput_sessions_per_second": throughput,
         "stdout_tail": _tail_lines(completed.stdout),
         "stderr_tail": _tail_lines(completed.stderr),
@@ -172,14 +175,42 @@ def _mc_case_meta(*, tier: str, workers: int, session_count: int, sample_session
     }
 
 
+def _format_phase_seconds(value: object) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return "n/a"
+    return f"{number:.3f}s"
+
+
+def _mc_phase_line(case: dict[str, object]) -> str | None:
+    phase = case.get("phase_timings_seconds")
+    if not isinstance(phase, dict) or not phase:
+        return None
+    reporting_seconds = sum(
+        float(phase.get(key) or 0.0)
+        for key in ("sample_row_compaction_seconds", "dashboard_build_seconds", "bundle_write_seconds")
+    )
+    backend = case.get("monte_carlo_backend") or case.get("engine_backend") or "unknown"
+    return (
+        f"- `{case['case']}` [{backend}]: market generation {_format_phase_seconds(phase.get('market_generation_seconds'))}, "
+        f"trader {_format_phase_seconds(phase.get('trader_seconds'))}, "
+        f"execution {_format_phase_seconds(phase.get('execution_seconds'))}, "
+        f"path metrics {_format_phase_seconds(phase.get('path_metrics_seconds'))}, "
+        f"reporting {_format_phase_seconds(reporting_seconds)}, "
+        f"wall {_format_phase_seconds(phase.get('session_execution_wall_seconds'))}"
+    )
+
+
 def _render_case_row(case: dict[str, object], baseline_lookup: dict[str, dict[str, object]]) -> str:
     baseline = baseline_lookup.get(str(case["case"]))
     baseline_seconds = None if baseline is None else float(baseline.get("elapsed_seconds") or 0.0)
     current_seconds = float(case.get("elapsed_seconds") or 0.0)
     throughput = case.get("throughput_sessions_per_second")
     throughput_text = "n/a" if throughput is None else f"{float(throughput):.2f}"
+    backend = case.get("monte_carlo_backend") or case.get("engine_backend") or "n/a"
     return (
-        f"| `{case['case']}` | {current_seconds:.3f}s | "
+        f"| `{case['case']}` | {backend} | {current_seconds:.3f}s | "
         f"{_format_seconds(baseline_seconds)} | {_format_delta(current_seconds, baseline_seconds)} | "
         f"{throughput_text} | {int(case.get('size_bytes') or 0):,} |"
     )
@@ -206,13 +237,29 @@ def render_runtime_benchmark_markdown(report: dict[str, object], baseline_report
         f"- Data dir: `{report['data_dir']}`",
         f"- Fill mode: `{report['fill_mode']}`",
         f"- MC fill mode: `{report['mc_fill_mode']}`",
+        f"- Requested MC backend: `{report['requested_mc_backend'] or 'default'}`",
         f"- MC synthetic tick limit: `{report['mc_synthetic_tick_limit']}`",
         "",
-        "| Case | Current | Baseline | Delta | Sessions/s | Output bytes |",
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "| Case | Backend | Current | Baseline | Delta | Sessions/s | Output bytes |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     for case in report["cases"]:
         lines.append(_render_case_row(case, baseline_lookup))
+    phase_lines = [
+        line
+        for line in (
+            _mc_phase_line(case)
+            for case in report["cases"]
+            if case.get("kind") == "monte_carlo" and case.get("case") in {f"mc_default_light_w{max(report['workers'])}", "mc_default_light_w1", f"mc_heavy_light_w{max(report['workers'])}"}
+        )
+        if line is not None
+    ]
+    if phase_lines:
+        lines.extend([
+            "",
+            "Monte Carlo phase profile",
+            *phase_lines,
+        ])
     lines.extend([
         "",
         "Guidance",
@@ -243,6 +290,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-dir", default="data/round1", help="Historical data directory")
     parser.add_argument("--fill-mode", default="empirical_baseline", help="Replay and compare fill mode")
     parser.add_argument("--mc-fill-mode", default="base", help="Monte Carlo fill mode")
+    parser.add_argument("--mc-backend", default=None, choices=["auto", "classic", "streaming"], help="Optional Monte Carlo backend override for repos that support it")
     parser.add_argument("--mc-synthetic-tick-limit", type=int, default=250, help="Synthetic tick cap for Monte Carlo benchmark cases")
     parser.add_argument("--workers", nargs="*", type=int, default=[1, 2, 4], help="Worker counts for quick and default Monte Carlo cases")
     parser.add_argument("--quick-sessions", type=int, default=64)
@@ -252,6 +300,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--heavy-sessions", type=int, default=192)
     parser.add_argument("--heavy-sample-sessions", type=int, default=16)
     return parser
+
+
+def _mc_backend_args(value: str | None) -> list[str]:
+    if not value:
+        return []
+    return ["--mc-backend", value]
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -271,6 +325,7 @@ def main(argv: list[str] | None = None) -> None:
     workers = _worker_values(args.workers)
     max_worker = workers[-1]
     baseline_report = _json_or_empty(Path(args.compare_report).resolve()) if args.compare_report else None
+    mc_backend_args = _mc_backend_args(args.mc_backend)
 
     cases: list[dict[str, object]] = []
 
@@ -403,6 +458,7 @@ def main(argv: list[str] | None = None) -> None:
                 str(args.quick_sample_sessions),
                 "--workers",
                 str(worker),
+                *mc_backend_args,
                 "--synthetic-tick-limit",
                 str(args.mc_synthetic_tick_limit),
                 "--output-dir",
@@ -443,6 +499,7 @@ def main(argv: list[str] | None = None) -> None:
                 str(args.default_sample_sessions),
                 "--workers",
                 str(worker),
+                *mc_backend_args,
                 "--synthetic-tick-limit",
                 str(args.mc_synthetic_tick_limit),
                 "--output-dir",
@@ -484,6 +541,7 @@ def main(argv: list[str] | None = None) -> None:
                 str(args.heavy_sample_sessions),
                 "--workers",
                 str(worker),
+                *mc_backend_args,
                 "--synthetic-tick-limit",
                 str(args.mc_synthetic_tick_limit),
                 "--output-dir",
@@ -523,6 +581,7 @@ def main(argv: list[str] | None = None) -> None:
             str(args.default_sample_sessions),
             "--workers",
             "1",
+            *mc_backend_args,
             "--synthetic-tick-limit",
             str(args.mc_synthetic_tick_limit),
             "--output-profile",
@@ -564,6 +623,7 @@ def main(argv: list[str] | None = None) -> None:
             str(args.default_sample_sessions),
             "--workers",
             "1",
+            *mc_backend_args,
             "--synthetic-tick-limit",
             str(args.mc_synthetic_tick_limit),
             "--output-profile",
@@ -597,6 +657,7 @@ def main(argv: list[str] | None = None) -> None:
         "data_dir": data_dir,
         "fill_mode": args.fill_mode,
         "mc_fill_mode": args.mc_fill_mode,
+        "requested_mc_backend": args.mc_backend,
         "mc_synthetic_tick_limit": args.mc_synthetic_tick_limit,
         "workers": workers,
         "cases": cases,
