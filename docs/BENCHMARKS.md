@@ -144,11 +144,29 @@ improvement. The change is real.
 Chris Roberts' repo is still the strongest public narrow Monte Carlo reference,
 so it is worth checking on the same machine when feasible.
 
-Same-machine warm notes after the one-time Cargo build:
+The cleanest shared-fixture pass on 2026-04-22 used:
 
-- `prosperity4mcbt example_trader.py --quick`: about `15.974s`
-- `prosperity4mcbt example_trader.py --heavy`: about `148.707s`
+- the same no-op trader file in both repos
+- matched `250` ticks per session
+- matched `100/10`, `512/32`, and `1000/100` session or sample tiers
+- matched `1`, `2`, `4`, and `8` worker settings
 
-Those numbers are not directly comparable to this repo's tracked fixture. Chris's
-repo runs tutorial-round products, `10000` ticks per day and a different output
-contract. They are useful context, not proof of a cross-repo performance crown.
+Warm same-machine runtime results favoured this repo in every measured cell:
+
+- default `100/10`: about `4.3x` to `13.9x` faster
+- heavy `512/32`: about `8.8x` to `15.2x` faster
+- ceiling `1000/100`: about `8.7x` to `13.3x` faster
+
+That shared-fixture pass used Chris's public `prosperity3bt mc` entrypoint with
+`--ticks-per-day 250` and `--tomato-support quarter`, because the headline
+`prosperity4mcbt` CLI does not expose the tick cap needed for a strict
+same-machine normalisation.
+
+The result is still not an undisputed all-axis performance crown:
+
+- Chris kept the lighter RSS footprint in the heavier and ceiling cases
+- Chris also kept the smaller retained output footprint
+- Chris's native public default still means tutorial-round `10000`-tick sessions
+
+So the honest claim is a strong shared-fixture runtime-throughput lead, not a
+blanket claim that every performance dimension now belongs to this repo.

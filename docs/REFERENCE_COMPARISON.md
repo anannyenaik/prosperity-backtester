@@ -137,10 +137,14 @@ That is what the 2026-04-22 pass did.
 Current honest status after this pass:
 
 - overall public-platform lead: yes
-- performance credibility lead: much stronger now
-- undisputed raw-performance crown across public repos: not yet proven
+- same-machine shared-benchmark runtime lead over Chris Roberts: yes
+- memory and retained-output efficiency lead over Chris Roberts: no
+- undisputed all-axis performance crown across public repos: not yet proven
 
-The remaining proof gap is an apples-to-apples shared-fixture benchmark against
-the strongest public external reference. Until that exists, this repo can
-honestly claim the best overall platform and a very strong measured internal
-performance story, but not an undisputed cross-repo raw-throughput crown.
+The remaining proof gap is no longer a shared-fixture runtime check. A strict
+same-machine no-op trader pass now shows this repo ahead on runtime through the
+measured `1`, `2`, `4`, and `8` worker cases. What is still missing for an
+undisputed public performance crown is lower RSS and a lighter retained-output
+footprint on the heavier cases. Until that improves, this repo can honestly
+claim the best overall platform and a strong measured runtime-throughput lead,
+but not a blanket win across every performance dimension.

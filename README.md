@@ -181,7 +181,13 @@ tracked winner through the measured `8`-worker cases, `classic` remains the
 explicit parity fallback, and `rust` stays available as an explicit
 experimental backend rather than a recommendation. Chris Roberts' repo remains
 the strongest narrow tutorial-round Monte Carlo reference, but this repo is
-the stronger end-to-end research platform.
+the stronger end-to-end research platform. On a same-machine shared no-op
+trader benchmark with matched `250`-tick sessions, matched `100/10`,
+`512/32`, and `1000/100` session or sample tiers, and matched `1`, `2`, `4`,
+and `8` worker settings, this repo was `4.3x` to `15.2x` faster end-to-end.
+Chris still kept the lighter RSS and smaller retained bundle footprint, so
+that result proves a runtime-throughput lead rather than an undisputed
+all-axis performance crown.
 
 See [docs/REFERENCE_COMPARISON.md](docs/REFERENCE_COMPARISON.md) for the detailed comparison against the Chris Roberts and Nabayan Saha public repos.
 
