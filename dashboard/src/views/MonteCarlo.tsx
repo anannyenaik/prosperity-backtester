@@ -69,9 +69,22 @@ export function MonteCarlo() {
   const samplePnlData = selectedSample
     ? buildPnlData(selectedSample.pnlSeries ?? [], product)
     : []
-  const samplePreviewNote = selectedSample && selectedSample.pnlSeriesPreviewTruncated
-    ? `Preview rows retained in dashboard.json: ${fmtInt(selectedSample.pnlSeries.length)} of ${fmtInt(selectedSample.pnlSeriesTotalCount)} PnL points.`
-    : null
+  const samplePreviewLines: string[] = []
+  if (selectedSample) {
+    const previewFields: Array<{ label: string; truncated?: boolean; kept?: number; total?: number }> = [
+      { label: 'PnL', truncated: selectedSample.pnlSeriesPreviewTruncated, kept: selectedSample.pnlSeries?.length, total: selectedSample.pnlSeriesTotalCount },
+      { label: 'Inventory', truncated: selectedSample.inventorySeriesPreviewTruncated, kept: selectedSample.inventorySeries?.length, total: selectedSample.inventorySeriesTotalCount },
+      { label: 'Fair value', truncated: selectedSample.fairValueSeriesPreviewTruncated, kept: selectedSample.fairValueSeries?.length, total: selectedSample.fairValueSeriesTotalCount },
+      { label: 'Behaviour', truncated: selectedSample.behaviourSeriesPreviewTruncated, kept: selectedSample.behaviourSeries?.length, total: selectedSample.behaviourSeriesTotalCount },
+      { label: 'Fills', truncated: selectedSample.fillsPreviewTruncated, kept: selectedSample.fills?.length, total: selectedSample.fillsTotalCount },
+      { label: 'Order intent', truncated: selectedSample.orderIntentPreviewTruncated, kept: selectedSample.orderIntent?.length, total: selectedSample.orderIntentTotalCount },
+    ]
+    for (const field of previewFields) {
+      if (field.truncated && field.kept != null && field.total != null) {
+        samplePreviewLines.push(`${field.label}: ${fmtInt(field.kept)} of ${fmtInt(field.total)} rows retained`)
+      }
+    }
+  }
 
   // Worst / best table
   const sortedSessions = [...sessions].sort((a, b) => a.final_pnl - b.final_pnl)
@@ -167,9 +180,12 @@ export function MonteCarlo() {
       >
         {selectedSample ? (
           <div className="space-y-4">
-            {samplePreviewNote && (
-              <div className="rounded-lg border border-warn/25 bg-warn/10 px-3 py-2 text-xs text-warn">
-                {samplePreviewNote}
+            {samplePreviewLines.length > 0 && (
+              <div className="rounded-lg border border-warn/25 bg-warn/10 px-3 py-2 text-xs text-warn space-y-0.5">
+                <div className="font-semibold">Sample preview retained in dashboard.json (light-mode cap):</div>
+                {samplePreviewLines.map((line) => (
+                  <div key={line}>{line}</div>
+                ))}
               </div>
             )}
             <div className="grid grid-cols-3 gap-3">
