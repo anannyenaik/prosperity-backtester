@@ -161,8 +161,9 @@ def resolve_monte_carlo_backend(
     The ``auto`` sentinel (default when nothing is requested) always resolves
     to the ``streaming`` backend. The ``rust`` backend must be requested
     explicitly via ``--mc-backend rust``; it is NOT auto-selected because the
-    tracked benchmark fixture still favours streaming through the measured
-    8-worker cases, and the per-tick IPC cost remains substantial.
+    tracked 2026-04-22 benchmark pass kept ``streaming`` or ``classic`` ahead
+    on realistic cases, while the Rust path still pays build and per-tick IPC
+    cost.
     """
     text = str(requested_backend or AUTO_MONTE_CARLO_BACKEND).strip().lower().replace("-", "_")
     if text not in {"", AUTO_MONTE_CARLO_BACKEND}:

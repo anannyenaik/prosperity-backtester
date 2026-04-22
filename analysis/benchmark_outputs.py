@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from datetime import datetime
 from pathlib import Path
+
+if __package__ in {None, ""}:
+    repo_root = Path(__file__).resolve().parents[1]
+    repo_root_text = str(repo_root)
+    if repo_root_text not in sys.path:
+        sys.path.insert(0, repo_root_text)
 
 from prosperity_backtester.benchmark import render_benchmark_markdown, run_output_benchmark
 from prosperity_backtester.experiments import TraderSpec, default_data_dir_for_round
@@ -40,7 +47,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    effective_argv = list(sys.argv[1:] if argv is None else argv)
+    args = parser.parse_args(effective_argv)
 
     output_dir = Path(args.output_dir).resolve() if args.output_dir else _default_output_dir().resolve()
     data_dir = Path(args.data_dir).resolve() if args.data_dir else default_data_dir_for_round(args.round).resolve()
@@ -64,6 +72,7 @@ def main(argv: list[str] | None = None) -> None:
         mc_seed=args.seed,
         mc_workers=args.workers,
         fixture_timestamp_limit=args.fixture_timestamps,
+        command_argv=[str(Path(__file__).resolve()), *effective_argv],
     )
 
     print(f"Output benchmark: {output_dir}")

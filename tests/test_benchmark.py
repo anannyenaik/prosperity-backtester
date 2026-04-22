@@ -75,5 +75,10 @@ def test_output_benchmark_reports_light_vs_full_bundle_shapes(tmp_path):
     assert by_case["mc_light"]["debug_files"] == []
     assert any(path.startswith("sample_paths/") for path in by_case["mc_full"]["debug_files"])
     assert any(path.startswith("sessions/") for path in by_case["mc_full"]["debug_files"])
+    assert report["repo_root"]
+    assert report["python_executable"]
+    assert isinstance(report["git_dirty"], bool)
+    assert report["mc_workers"] == 1
+    assert report["caveats"]
     assert (tmp_path / "benchmark" / "benchmark_report.json").is_file()
     assert (tmp_path / "benchmark" / "benchmark_report.md").is_file()

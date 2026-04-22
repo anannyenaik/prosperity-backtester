@@ -1,0 +1,497 @@
+{
+  "audited_on": "2026-04-22",
+  "repo": {
+    "git_commit": "b9998044c9ed049ccc7ba06235863c461e027dc2",
+    "git_dirty": true
+  },
+  "machine": {
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python_executable": "D:\\Programming\\prosperity-backtester\\.venv\\Scripts\\python.exe",
+    "cpu_count_logical": 16,
+    "cpu_count_physical": 8,
+    "system_memory_bytes": 16347811840,
+    "memory_sampler": "psutil process-tree rss"
+  },
+  "commands": {
+    "runtime": "D:\\Programming\\prosperity-backtester\\.venv\\Scripts\\python.exe D:\\Programming\\prosperity-backtester\\analysis\\benchmark_runtime.py --output-dir backtests\\_phase5_runtime_current --compare-report backtests\\_phase4_runtime_baseline\\benchmark_report.json --workers 1 2 4 8 --warm-repeat 1",
+    "storage": "D:\\Programming\\prosperity-backtester\\analysis\\benchmark_outputs.py --output-dir backtests\\_phase5_storage_current",
+    "backend": "D:\\Programming\\prosperity-backtester\\.venv\\Scripts\\python.exe D:\\Programming\\prosperity-backtester\\analysis\\benchmark_backends.py --output-dir backtests\\_phase5_backend_benchmark --warmup 1 --measured-repeats 2",
+    "reference": "D:\\Programming\\prosperity-backtester\\.venv\\Scripts\\python.exe D:\\Programming\\prosperity-backtester\\analysis\\benchmark_chris_reference.py --reference-root ..\\_prosperity_reference_repos\\imc-prosperity-4\\backtester --output-dir backtests\\_phase5_reference_benchmark",
+    "architecture_bakeoff": "D:\\Programming\\prosperity-backtester\\.venv\\Scripts\\python.exe D:\\Programming\\prosperity-backtester\\analysis\\architecture_bakeoff.py --output-dir backtests\\_phase5_architecture_bakeoff --bundle backtests\\_phase5_runtime_current\\cases\\mc_ceiling_light_w8\\dashboard.json --workers 8 --tasks 32 --repeats 3"
+  },
+  "runtime": {
+    "replay_day0_light": {
+      "elapsed_seconds": 2.176,
+      "peak_tree_rss_bytes": 213524480,
+      "output_size_bytes": 21148069,
+      "file_count": 6
+    },
+    "compare_day0_light": {
+      "elapsed_seconds": 2.201,
+      "peak_tree_rss_bytes": 196657152,
+      "output_size_bytes": 11955,
+      "file_count": 3
+    },
+    "pack_fast": {
+      "elapsed_seconds": 4.718,
+      "peak_tree_rss_bytes": 399478784,
+      "output_size_bytes": 22851777,
+      "file_count": 17
+    },
+    "pack_validation": {
+      "elapsed_seconds": 15.51,
+      "peak_tree_rss_bytes": 754839552,
+      "output_size_bytes": 65000459,
+      "file_count": 17
+    },
+    "mc_quick_light_w1": {
+      "elapsed_seconds": 1.429,
+      "peak_tree_rss_bytes": 105095168,
+      "output_size_bytes": 4760039,
+      "file_count": 6
+    },
+    "mc_quick_light_w2": {
+      "elapsed_seconds": 1.26,
+      "peak_tree_rss_bytes": 153280512,
+      "output_size_bytes": 4760029,
+      "file_count": 6
+    },
+    "mc_quick_light_w4": {
+      "elapsed_seconds": 1.138,
+      "peak_tree_rss_bytes": 220254208,
+      "output_size_bytes": 4760035,
+      "file_count": 6
+    },
+    "mc_quick_light_w8": {
+      "elapsed_seconds": 1.193,
+      "peak_tree_rss_bytes": 369729536,
+      "output_size_bytes": 4760035,
+      "file_count": 6
+    },
+    "mc_default_light_w1": {
+      "elapsed_seconds": 1.863,
+      "peak_tree_rss_bytes": 118394880,
+      "output_size_bytes": 5746126,
+      "file_count": 6
+    },
+    "mc_default_light_w2": {
+      "elapsed_seconds": 1.548,
+      "peak_tree_rss_bytes": 158789632,
+      "output_size_bytes": 5746124,
+      "file_count": 6
+    },
+    "mc_default_light_w4": {
+      "elapsed_seconds": 1.265,
+      "peak_tree_rss_bytes": 231972864,
+      "output_size_bytes": 5746122,
+      "file_count": 6
+    },
+    "mc_default_light_w8": {
+      "elapsed_seconds": 1.345,
+      "peak_tree_rss_bytes": 378552320,
+      "output_size_bytes": 5746122,
+      "file_count": 6
+    },
+    "mc_heavy_light_w1": {
+      "elapsed_seconds": 3.028,
+      "peak_tree_rss_bytes": 165908480,
+      "output_size_bytes": 8610065,
+      "file_count": 6
+    },
+    "mc_heavy_light_w8": {
+      "elapsed_seconds": 1.635,
+      "peak_tree_rss_bytes": 396431360,
+      "output_size_bytes": 8610065,
+      "file_count": 6
+    },
+    "mc_ceiling_light_w8": {
+      "elapsed_seconds": 3.182,
+      "peak_tree_rss_bytes": 437919744,
+      "output_size_bytes": 13453231,
+      "file_count": 6
+    },
+    "mc_default_full_w1": {
+      "elapsed_seconds": 2.567,
+      "peak_tree_rss_bytes": 155308032,
+      "output_size_bytes": 34131310,
+      "file_count": 122
+    },
+    "mc_default_full_trimmed_w1": {
+      "elapsed_seconds": 2.171,
+      "peak_tree_rss_bytes": 160694272,
+      "output_size_bytes": 21062986,
+      "file_count": 12
+    }
+  },
+  "phase_timings": {
+    "mc_default_light_w1": {
+      "non_engine_overhead_seconds": 0.382,
+      "market_generation_seconds": 0.227358,
+      "trader_seconds": 0.046511,
+      "execution_seconds": 0.522453,
+      "path_metrics_seconds": 0.137909,
+      "sample_row_compaction_seconds": 0.042574,
+      "dashboard_build_seconds": 0.006568,
+      "bundle_write_seconds": 0.158009,
+      "provenance_capture_seconds": 0.107503,
+      "session_execution_wall_seconds": 1.274226
+    },
+    "mc_default_light_w8": {
+      "non_engine_overhead_seconds": 0.416,
+      "market_generation_seconds": 0.331787,
+      "trader_seconds": 0.068373,
+      "execution_seconds": 0.736865,
+      "path_metrics_seconds": 0.19456,
+      "sample_row_compaction_seconds": 0.063397,
+      "dashboard_build_seconds": 0.007153,
+      "bundle_write_seconds": 0.161817,
+      "provenance_capture_seconds": 0.118484,
+      "session_execution_wall_seconds": 0.696531
+    },
+    "mc_heavy_light_w8": {
+      "non_engine_overhead_seconds": 0.401,
+      "market_generation_seconds": 0.596128,
+      "trader_seconds": 0.125453,
+      "execution_seconds": 1.369305,
+      "path_metrics_seconds": 0.359952,
+      "sample_row_compaction_seconds": 0.065388,
+      "dashboard_build_seconds": 0.011413,
+      "bundle_write_seconds": 0.22769,
+      "provenance_capture_seconds": 0.104844,
+      "session_execution_wall_seconds": 0.929381
+    },
+    "mc_ceiling_light_w8": {
+      "non_engine_overhead_seconds": 0.447,
+      "market_generation_seconds": 2.441671,
+      "trader_seconds": 0.513511,
+      "execution_seconds": 5.659082,
+      "path_metrics_seconds": 1.580877,
+      "sample_row_compaction_seconds": 0.142135,
+      "dashboard_build_seconds": 0.019779,
+      "bundle_write_seconds": 0.314773,
+      "provenance_capture_seconds": 0.107734,
+      "session_execution_wall_seconds": 2.258882
+    }
+  },
+  "storage": {
+    "replay_light": {
+      "size_bytes": 1364126,
+      "file_count": 6
+    },
+    "replay_full": {
+      "size_bytes": 1992817,
+      "file_count": 12
+    },
+    "mc_light": {
+      "size_bytes": 1945184,
+      "file_count": 6
+    },
+    "mc_full": {
+      "size_bytes": 7506667,
+      "file_count": 18
+    }
+  },
+  "realistic_backends": {
+    "live_v9_default_w1": {
+      "streaming": {
+        "best_elapsed_seconds": 3.235,
+        "mean_elapsed_seconds": 3.239,
+        "peak_tree_rss_bytes": 103194624,
+        "output_size_bytes": 4066731
+      },
+      "classic": {
+        "best_elapsed_seconds": 3.344,
+        "mean_elapsed_seconds": 3.396,
+        "peak_tree_rss_bytes": 101564416,
+        "output_size_bytes": 4065501
+      },
+      "rust": {
+        "best_elapsed_seconds": 4.093,
+        "mean_elapsed_seconds": 4.104,
+        "peak_tree_rss_bytes": 110571520,
+        "output_size_bytes": 4042068
+      }
+    },
+    "live_v9_default_w8": {
+      "streaming": {
+        "best_elapsed_seconds": 1.49,
+        "mean_elapsed_seconds": 1.494,
+        "peak_tree_rss_bytes": 382107648,
+        "output_size_bytes": 4066720
+      },
+      "classic": {
+        "best_elapsed_seconds": 1.493,
+        "mean_elapsed_seconds": 1.515,
+        "peak_tree_rss_bytes": 380796928,
+        "output_size_bytes": 4065499
+      },
+      "rust": {
+        "best_elapsed_seconds": 1.95,
+        "mean_elapsed_seconds": 1.956,
+        "peak_tree_rss_bytes": 382795776,
+        "output_size_bytes": 4042053
+      }
+    },
+    "live_v9_heavy_w8": {
+      "streaming": {
+        "best_elapsed_seconds": 2.021,
+        "mean_elapsed_seconds": 2.037,
+        "peak_tree_rss_bytes": 384487424,
+        "output_size_bytes": 5916430
+      },
+      "classic": {
+        "best_elapsed_seconds": 2.332,
+        "mean_elapsed_seconds": 2.361,
+        "peak_tree_rss_bytes": 389033984,
+        "output_size_bytes": 5914301
+      },
+      "rust": {
+        "best_elapsed_seconds": 2.992,
+        "mean_elapsed_seconds": 3.145,
+        "peak_tree_rss_bytes": 396951552,
+        "output_size_bytes": 5864426
+      }
+    },
+    "main_default_w8": {
+      "streaming": {
+        "best_elapsed_seconds": 1.454,
+        "mean_elapsed_seconds": 1.532,
+        "peak_tree_rss_bytes": 372400128,
+        "output_size_bytes": 4561561
+      },
+      "classic": {
+        "best_elapsed_seconds": 1.348,
+        "mean_elapsed_seconds": 1.37,
+        "peak_tree_rss_bytes": 375341056,
+        "output_size_bytes": 4559247
+      },
+      "rust": {
+        "best_elapsed_seconds": 1.692,
+        "mean_elapsed_seconds": 1.729,
+        "peak_tree_rss_bytes": 380047360,
+        "output_size_bytes": 4531482
+      }
+    },
+    "main_heavy_w8": {
+      "streaming": {
+        "best_elapsed_seconds": 1.711,
+        "mean_elapsed_seconds": 1.714,
+        "peak_tree_rss_bytes": 384626688,
+        "output_size_bytes": 6625183
+      },
+      "classic": {
+        "best_elapsed_seconds": 1.887,
+        "mean_elapsed_seconds": 1.966,
+        "peak_tree_rss_bytes": 379994112,
+        "output_size_bytes": 6621503
+      },
+      "rust": {
+        "best_elapsed_seconds": 2.293,
+        "mean_elapsed_seconds": 2.346,
+        "peak_tree_rss_bytes": 404324352,
+        "output_size_bytes": 6569267
+      }
+    },
+    "r2_stateful_default_w8": {
+      "streaming": {
+        "best_elapsed_seconds": 1.494,
+        "mean_elapsed_seconds": 1.499,
+        "peak_tree_rss_bytes": 372256768,
+        "output_size_bytes": 4343119
+      },
+      "classic": {
+        "best_elapsed_seconds": 1.44,
+        "mean_elapsed_seconds": 1.502,
+        "peak_tree_rss_bytes": 374071296,
+        "output_size_bytes": 4341329
+      },
+      "rust": {
+        "best_elapsed_seconds": 1.794,
+        "mean_elapsed_seconds": 1.805,
+        "peak_tree_rss_bytes": 385789952,
+        "output_size_bytes": 4315805
+      }
+    },
+    "r2_stateful_heavy_w8": {
+      "streaming": {
+        "best_elapsed_seconds": 1.754,
+        "mean_elapsed_seconds": 1.79,
+        "peak_tree_rss_bytes": 380760064,
+        "output_size_bytes": 6310628
+      },
+      "classic": {
+        "best_elapsed_seconds": 1.788,
+        "mean_elapsed_seconds": 1.795,
+        "peak_tree_rss_bytes": 380653568,
+        "output_size_bytes": 6307683
+      },
+      "rust": {
+        "best_elapsed_seconds": 2.388,
+        "mean_elapsed_seconds": 2.402,
+        "peak_tree_rss_bytes": 407928832,
+        "output_size_bytes": 6258039
+      }
+    }
+  },
+  "reference_comparison": {
+    "default_100_10": {
+      "1": {
+        "prosperity_backtester": {
+          "elapsed_seconds": 1.179,
+          "peak_tree_rss_bytes": 93958144,
+          "output_size_bytes": 2718060,
+          "file_count": 5
+        },
+        "chris_roberts": {
+          "elapsed_seconds": 22.031,
+          "peak_tree_rss_bytes": 137662464,
+          "output_size_bytes": 1519965,
+          "file_count": 50
+        },
+        "speedup_ratio": 18.69
+      },
+      "2": {
+        "prosperity_backtester": {
+          "elapsed_seconds": 1.249,
+          "peak_tree_rss_bytes": 149450752,
+          "output_size_bytes": 2718055,
+          "file_count": 5
+        },
+        "chris_roberts": {
+          "elapsed_seconds": 12.038,
+          "peak_tree_rss_bytes": 174444544,
+          "output_size_bytes": 1519965,
+          "file_count": 50
+        },
+        "speedup_ratio": 9.64
+      },
+      "4": {
+        "prosperity_backtester": {
+          "elapsed_seconds": 1.026,
+          "peak_tree_rss_bytes": 216702976,
+          "output_size_bytes": 2718054,
+          "file_count": 5
+        },
+        "chris_roberts": {
+          "elapsed_seconds": 6.884,
+          "peak_tree_rss_bytes": 250716160,
+          "output_size_bytes": 1519965,
+          "file_count": 50
+        },
+        "speedup_ratio": 6.71
+      },
+      "8": {
+        "prosperity_backtester": {
+          "elapsed_seconds": 1.084,
+          "peak_tree_rss_bytes": 363171840,
+          "output_size_bytes": 2718053,
+          "file_count": 5
+        },
+        "chris_roberts": {
+          "elapsed_seconds": 4.702,
+          "peak_tree_rss_bytes": 400605184,
+          "output_size_bytes": 1519965,
+          "file_count": 50
+        },
+        "speedup_ratio": 4.34
+      }
+    },
+    "ceiling_1000_100": {
+      "1": {
+        "prosperity_backtester": {
+          "elapsed_seconds": 11.431,
+          "peak_tree_rss_bytes": 368185344,
+          "output_size_bytes": 18142859,
+          "file_count": 5
+        },
+        "chris_roberts": {
+          "elapsed_seconds": 200.091,
+          "peak_tree_rss_bytes": 149037056,
+          "output_size_bytes": 9689017,
+          "file_count": 410
+        },
+        "speedup_ratio": 17.5
+      },
+      "2": {
+        "prosperity_backtester": {
+          "elapsed_seconds": 6.977,
+          "peak_tree_rss_bytes": 436658176,
+          "output_size_bytes": 18142857,
+          "file_count": 5
+        },
+        "chris_roberts": {
+          "elapsed_seconds": 102.578,
+          "peak_tree_rss_bytes": 188100608,
+          "output_size_bytes": 9689017,
+          "file_count": 410
+        },
+        "speedup_ratio": 14.7
+      },
+      "4": {
+        "prosperity_backtester": {
+          "elapsed_seconds": 3.889,
+          "peak_tree_rss_bytes": 485765120,
+          "output_size_bytes": 18142859,
+          "file_count": 5
+        },
+        "chris_roberts": {
+          "elapsed_seconds": 57.727,
+          "peak_tree_rss_bytes": 264110080,
+          "output_size_bytes": 9689017,
+          "file_count": 410
+        },
+        "speedup_ratio": 14.84
+      },
+      "8": {
+        "prosperity_backtester": {
+          "elapsed_seconds": 3.598,
+          "peak_tree_rss_bytes": 579186688,
+          "output_size_bytes": 18142855,
+          "file_count": 5
+        },
+        "chris_roberts": {
+          "elapsed_seconds": 40.89,
+          "peak_tree_rss_bytes": 405397504,
+          "output_size_bytes": 9689017,
+          "file_count": 410
+        },
+        "speedup_ratio": 11.36
+      }
+    }
+  },
+  "architecture_bakeoff": {
+    "bundle_size_bytes": 10157359,
+    "serialisation": {
+      "json_size_bytes": 10157359,
+      "msgpack_size_bytes": 8393320,
+      "json_encode_seconds": 0.126943,
+      "msgpack_encode_seconds": 0.02806,
+      "json_decode_seconds": 0.087286,
+      "msgpack_decode_seconds": 0.047654
+    },
+    "transport": {
+      "payload_bytes": 10157359,
+      "workers": 8,
+      "tasks": 32,
+      "pickle_seconds": 0.462,
+      "shared_memory_seconds": 0.336,
+      "speedup_ratio": 1.375,
+      "checksums_match": true
+    }
+  },
+  "artefacts": {
+    "runtime_report": "backtests/_phase5_runtime_current/benchmark_report.json",
+    "storage_report": "backtests/_phase5_storage_current/benchmark_report.json",
+    "backend_report": "backtests/_phase5_backend_benchmark/backend_benchmark.json",
+    "reference_report": "backtests/_phase5_reference_benchmark/reference_benchmark.json",
+    "architecture_bakeoff": "backtests/_phase5_architecture_bakeoff/architecture_bakeoff.json"
+  },
+  "caveats": [
+    "backtests/ artefacts are ignored; this file is the tracked summary surface for the 2026-04-22 audited runs.",
+    "The runtime baseline used for delta checks was backtests/_phase4_runtime_baseline/benchmark_report.json.",
+    "The storage benchmark measures retained output footprint, not runtime throughput.",
+    "The Chris comparison is same-machine and same tick-budget, but not full semantic parity because the reference repo has a different output contract and product scope.",
+    "Realistic trader backend rankings are strategy-sensitive. Streaming remains the recommended default, but classic wins or ties some realistic 8-worker cells.",
+    "The architecture bake-off uses a real dashboard payload and isolates serialisation or transport overhead only; it is not a full engine rewrite prototype."
+  ]
+}

@@ -608,17 +608,35 @@ def new_path_band_accumulator() -> Dict[tuple[str, str, int], Dict[str, object]]
     return {}
 
 
+_MC_PATH_BAND_METRIC_KEYS: tuple[tuple[str, str, str, str], ...] = tuple(
+    (metric_name, row_key, f"{row_key}_bucket_min", f"{row_key}_bucket_max")
+    for metric_name, row_key in _MC_PATH_BAND_METRICS
+)
+_PRODUCTS_SET = frozenset(PRODUCTS)
+
+
 def accumulate_path_band_rows(
     accumulator: Dict[tuple[str, str, int], Dict[str, object]],
     rows: Sequence[Dict[str, object]],
 ) -> None:
+    # Both producers (`_StreamingPathMetricCollector.add` and
+    # `_path_metric_rows`) write metric values as native floats or None, so we
+    # skip the defensive `_number()` coercion that previously dominated the
+    # reporting profile (≈800k isinstance/finite calls per default MC run).
+    products_set = _PRODUCTS_SET
+    metric_keys = _MC_PATH_BAND_METRIC_KEYS
     for row in rows:
-        product = str(row.get("product"))
-        if product not in PRODUCTS:
+        product = row.get("product")
+        if product not in products_set:
             continue
-        bucket_index = int(row.get("bucket_index", 0))
-        for metric_name, row_key in _MC_PATH_BAND_METRICS:
-            value = _number(row.get(row_key))
+        bucket_index = row.get("bucket_index")
+        if not isinstance(bucket_index, int):
+            try:
+                bucket_index = int(bucket_index or 0)
+            except (TypeError, ValueError):
+                continue
+        for metric_name, row_key, min_key, max_key in metric_keys:
+            value = row.get(row_key)
             if value is None:
                 continue
             key = (metric_name, product, bucket_index)
@@ -636,14 +654,16 @@ def accumulate_path_band_rows(
                 }
                 accumulator[key] = state
             state["values"].append(float(value))
-            envelope_min = _number(row.get(f"{row_key}_bucket_min", row.get(row_key)))
-            envelope_max = _number(row.get(f"{row_key}_bucket_max", row.get(row_key)))
+            envelope_min = row.get(min_key, value)
             if envelope_min is not None:
-                current_min = state.get("envelopeMin")
-                state["envelopeMin"] = float(envelope_min) if current_min is None else min(float(current_min), float(envelope_min))
+                current_min = state["envelopeMin"]
+                envelope_min_f = float(envelope_min)
+                state["envelopeMin"] = envelope_min_f if current_min is None else (envelope_min_f if envelope_min_f < current_min else current_min)
+            envelope_max = row.get(max_key, value)
             if envelope_max is not None:
-                current_max = state.get("envelopeMax")
-                state["envelopeMax"] = float(envelope_max) if current_max is None else max(float(current_max), float(envelope_max))
+                current_max = state["envelopeMax"]
+                envelope_max_f = float(envelope_max)
+                state["envelopeMax"] = envelope_max_f if current_max is None else (envelope_max_f if envelope_max_f > current_max else current_max)
 
 
 def merge_path_band_accumulators(

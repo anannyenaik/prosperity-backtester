@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from prosperity_backtester.fill_models import FILL_MODELS, derive_empirical_fill_profile, resolve_fill_model
+from prosperity_backtester.fill_models import FILL_MODELS, FillModel, derive_empirical_fill_profile, resolve_fill_model
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -56,6 +56,20 @@ def test_fill_model_config_can_be_loaded(tmp_path):
 
     assert osmium.passive_fill_rate == 0.42
     assert osmium.missed_fill_probability == 0.12
+
+
+def test_config_for_skips_base_config_when_product_override_exists(monkeypatch):
+    model = FILL_MODELS["empirical_baseline"]
+
+    def _base_should_not_run(_self: FillModel):
+        raise AssertionError("base_product_config should not run when a product override exists")
+
+    monkeypatch.setattr(FillModel, "base_product_config", _base_should_not_run)
+
+    config, regime = model.config_for("ASH_COATED_OSMIUM", [(9990, 20)], [(10010, 20)])
+
+    assert regime in {"normal", "wide_spread"}
+    assert config.passive_fill_rate > 0
 
 
 def test_empirical_fill_profile_derivation_writes_artifacts(tmp_path):

@@ -105,7 +105,9 @@ class FillModel:
         bids: LevelList | None = None,
         asks: LevelList | None = None,
     ) -> tuple[ProductFillConfig, str]:
-        config = self.product_overrides.get(product, self.base_product_config())
+        config = self.product_overrides.get(product)
+        if config is None:
+            config = self.base_product_config()
         regime = liquidity_regime_from_levels(product, bids or [], asks or [], config)
         return config.with_regime(regime), regime
 

@@ -1,157 +1,116 @@
 # Reference Comparison
 
-This repo was audited against the highest-signal public references on
-2026-04-22.
+This page records what the 2026-04-22 local audit could actually prove against
+the reference repos that were available in this session.
 
-Primary references reviewed from source (reference commits recorded during the
-audit; this repo has landed the light-mode retention hardening and fresher
-benchmark evidence at later HEADs):
+## Scope and visibility note
 
-- `anannyenaik/prosperity-backtester` at `32af42d` (audit point) through `1c3ff78` (light-mode retention hardening baseline)
-- `chrispyroberts/imc-prosperity-4` at `fac270e`
-- `nabayansaha/imc-prosperity-4-backtester` at `94ec38d`
-- `jmerle/imc-prosperity-3-backtester` at `26f52ee`
+The strongest fresh external proof in this pass is the same-machine Chris
+Roberts rerun from `analysis/benchmark_chris_reference.py`.
 
-Secondary references were not roadmap-changing for this pass.
-
-The goal of this review was not feature counting. The goal was to answer one
-question: what still blocks this repo from being the strongest public Prosperity
-research platform overall, and what still blocks an honest claim on
-performance.
+This repo's GitHub remote was visible locally, but public visibility was not
+verified in-session. If this repo is private, the proof surface here is an
+internal audit rather than a public leaderboard claim. The wording below is
+therefore intentionally about locally audited evidence, not internet-wide
+closure.
 
 ## Short conclusion
 
-This repo is already the strongest public overall platform.
+Current honest conclusion:
 
-What was still missing before this pass was:
-
-- cleaner benchmark proof
-- a tighter performance story
-- tighter light-mode memory and retained-output discipline
-
-The reference audit did not justify a broad architectural rewrite.
+- strongest overall research platform on the locally audited evidence: yes
+- strongest same-machine runtime-throughput result versus Chris Roberts: yes
+- strongest retained-output efficiency result versus Chris Roberts: no
+- strongest ceiling-RSS result versus Chris Roberts: no
+- undisputed all-axis performance crown: no
 
 ## Versus Chris Roberts
 
-Chris Roberts' repo is the strongest narrow Monte Carlo reference.
+Chris Roberts' repo remains the highest-signal narrow Monte Carlo reference
+that was available locally in this pass.
 
-What it still does better:
+### What the rerun matched
 
-- smaller surface area if you only care about tutorial-round Monte Carlo
-- a very direct Rust-first story
-- a simpler install and mental model for that single use case once Cargo is in place
+The fresh same-machine rerun used:
 
-What this repo already does better:
-
-- deterministic replay is first-class, not a side path
-- compare, sweep, optimisation, calibration, scenario review and Round 2 access work live in one system
-- output contracts, provenance and retention are materially stronger
-- light vs full storage policy is explicit and benchmarked
-- the dashboard covers replay, comparison, Monte Carlo and aggregate workflows instead of only one mode
-
-What was genuinely reusable from the audit:
-
-- treat Chris as the main public performance credibility reference
-- keep backend choice explicit
-- keep same-machine notes honest when workloads are not directly comparable
-
-What was mostly noise for this roadmap:
-
-- tutorial-round-only modelling assumptions
-- any claim that a Rust subprocess design should automatically become this
-  repo's default architecture
-
-Fresh same-machine shared-fixture note, recorded after a one-time Cargo warm-up:
-
-- shared no-op trader in both repos
+- the same no-op trader file in both repos
 - matched `250` ticks per simulated day
 - matched `100/10` and `1000/100` session or sample tiers
 - matched `1`, `2`, `4`, and `8` worker or thread counts
-- this repo measured `4.3x` to `19.0x` faster end-to-end
+- one warm-up pass per repo before the measured runs
 
-That note is useful context, but it is still not apples-to-apples semantic
-parity. Chris's repo uses tutorial-round products and a different output
-contract, so the comparison is a runtime and footprint reference note rather
-than proof that both systems model the same market.
+The exact command is tracked in
+[`docs/BENCHMARK_SUMMARY.json`](BENCHMARK_SUMMARY.json) and in
+`backtests/_phase5_reference_benchmark/reference_benchmark.json`.
 
-## Versus Nabayan Saha
+### Runtime result
 
-Nabayan's repo is still a useful replay-ergonomics reference.
+This repo won every measured runtime cell:
 
-What it still does better:
+- default `100/10`: `4.34x` to `18.69x` faster
+- ceiling `1000/100`: `11.36x` to `17.50x` faster
 
-- smaller replay-first CLI surface
-- very low ceremony for simple visual replay runs
+Representative cells:
 
-What this repo already does better:
+| Case | Workers | This repo | Chris Roberts | Speed-up |
+| --- | ---: | ---: | ---: | ---: |
+| default `100/10` | `1` | `1.179s` | `22.031s` | `18.69x` |
+| default `100/10` | `8` | `1.084s` | `4.702s` | `4.34x` |
+| ceiling `1000/100` | `1` | `11.431s` | `200.091s` | `17.50x` |
+| ceiling `1000/100` | `8` | `3.598s` | `40.890s` | `11.36x` |
 
-- much broader workflow coverage
-- stronger trust controls and manifest metadata
-- better storage policy and output discipline
-- stronger dashboard breadth
-- stronger benchmark and proof tooling
+### Memory and retained-output result
 
-What was genuinely reusable:
+The all-axis story is mixed.
 
-- keep the common replay ergonomics short
-- keep flags like `--match-trades`, `--merge-pnl`, `--print`, `--limit` and
-  quick visual open flows easy to reach
+What this repo did better:
 
-What was mostly noise:
+- less RSS on the smaller default `100/10` cases
+- far fewer retained files, `5` instead of `50` or `410`
+- much stronger runtime throughput
 
-- anything beyond replay convenience, because this repo already covers the
-  deeper research loop Nabayan's repo does not try to solve
+What Chris Roberts still did better:
 
-## Versus Jasper van Merle
+- lower RSS on every `1000/100` ceiling case
+- smaller retained output footprint in every rerun
 
-Jasper's repo matters as a historical reference, but it did not change the
-current roadmap.
+That means the runtime lead is real, but the repo still does not own every
+performance dimension.
 
-What it still does better:
+### Workflow and platform result
 
-- very small, approachable replay-and-visualiser baseline for older rounds
+Chris Roberts' repo still has a cleaner narrow Monte Carlo story when that is
+the only job.
 
-What this repo already does better:
+This repo still has the stronger overall research system:
 
-- current-round workflow depth
-- benchmark credibility
-- provenance and contract surface
-- Monte Carlo and robustness tooling
+- deterministic replay is first-class
+- compare, sweep, optimisation, calibration and scenario work live in one CLI
+- output profiles and storage trade-offs are explicit
+- manifests, provenance and dashboard contracts are stronger
+- the dashboard supports replay, comparison, Monte Carlo and aggregate review
 
-What was reusable:
+## Other references
 
-- keep the repo approachable despite broader scope
+Other local references still matter for context, but they were not rerun as
+fresh same-machine benchmarks in this pass.
 
-What was mostly noise:
+- Nabayan Saha remains a useful replay-first ergonomics reference.
+- Jasper van Merle remains a useful historical small-backtester reference.
 
-- old-round-only assumptions
-- missing modern trust and benchmark surfaces
-
-## Roadmap impact
-
-The reference audit pointed to one high-EV conclusion:
-
-- do not rewrite the core architecture
-- tighten the evidence moat
-- fix the reporting bottleneck the profiler actually showed
-
-That is what the 2026-04-22 pass did.
+Those repos can still shape workflow judgement, but they do not change the
+hardest remaining gap from this pass, which is retained bytes and ceiling RSS
+rather than runtime throughput.
 
 ## Honest status
 
-Current honest status after this pass:
+The current evidence supports these claims:
 
-- overall public-platform lead: yes
-- same-machine shared-benchmark runtime lead over Chris Roberts: yes
-- RSS lead over Chris Roberts: mixed
-- retained-output efficiency lead over Chris Roberts: no
-- undisputed all-axis performance crown across public repos: not yet proven
+- this repo is ahead on same-machine runtime throughput against the strongest
+  local external reference that was rerun
+- this repo is ahead on retained file-count efficiency
+- this repo is not yet ahead on retained output bytes
+- this repo is not yet ahead on ceiling-case RSS
 
-The remaining proof gap is no longer a shared-fixture runtime check. A strict
-same-machine no-op trader pass now shows this repo ahead on runtime through the
-measured `1`, `2`, `4`, and `8` worker cases. What is still missing for an
-undisputed public performance crown is lower retained-output footprint and
-lower ceiling-case RSS on the heavier shared-fixture runs. Until that improves,
-this repo can honestly claim the best overall platform and a strong measured
-runtime-throughput lead, but not a blanket win across every performance
-dimension.
+That is enough to call the repo the stronger overall local platform. It is not
+enough to call it the undisputed winner on every performance axis.

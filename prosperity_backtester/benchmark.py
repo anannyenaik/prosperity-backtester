@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import json
+import platform as platform_module
+import subprocess
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Sequence
 
@@ -38,6 +42,22 @@ def _format_bytes(size_bytes: int) -> str:
     if value >= 1_000:
         return f"{value / 1_000:.1f} KB"
     return f"{int(value)} B"
+
+
+def _git_text(root: Path, *args: str) -> str | None:
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    text = completed.stdout.strip()
+    return text or None
 
 
 def _scan_bundle_files(output_dir: Path) -> List[Dict[str, object]]:
@@ -130,10 +150,18 @@ def _case_result(case_name: str, run_type: str, profile: str, output_dir: Path) 
 
 
 def render_benchmark_markdown(report: Dict[str, object]) -> str:
+    command = report.get("command")
+    caveats = report.get("caveats") if isinstance(report.get("caveats"), list) else []
     lines = [
         "# Output Benchmark",
         "",
         "Fixture",
+        f"- Generated at: `{report.get('generated_at')}`",
+        f"- Repo root: `{report.get('repo_root')}`",
+        f"- Git commit: `{report.get('git_commit')}`",
+        f"- Git dirty: `{report.get('git_dirty')}`",
+        f"- Python: `{report.get('python_executable')}`",
+        f"- Platform: `{report.get('platform')}`",
         f"- Trader: `{report['trader_name']}`",
         f"- Trader path: `{report['trader_path']}`",
         f"- Data dir: `{report['data_dir']}`",
@@ -143,10 +171,20 @@ def render_benchmark_markdown(report: Dict[str, object]) -> str:
         f"- Fill model: `{report['fill_model']}`",
         f"- Monte Carlo sessions: `{report['mc_sessions']}`",
         f"- Monte Carlo sample sessions: `{report['mc_sample_sessions']}`",
+        f"- Monte Carlo workers: `{report['mc_workers']}`",
+    ]
+    if isinstance(command, dict) and command.get("display"):
+        lines.append(f"- Command: `{command['display']}`")
+    if caveats:
+        lines.extend([
+            "- Caveats:",
+            *[f"  - {str(note)}" for note in caveats],
+        ])
+    lines.extend([
         "",
         "| Case | Size | Files | Trade-off |",
         "| --- | ---: | ---: | --- |",
-    ]
+    ])
     for case in report["cases"]:
         lines.append(
             f"| `{case['case']}` | {case['bundle_size_human']} | {case['file_count']} | {case['research_tradeoff']} |"
@@ -181,11 +219,13 @@ def run_output_benchmark(
     mc_seed: int = 20260418,
     mc_workers: int = 1,
     fixture_timestamp_limit: int = 250,
+    command_argv: Sequence[str] | None = None,
 ) -> Dict[str, object]:
     output_root = output_root.resolve()
     output_root.mkdir(parents=True, exist_ok=True)
     if any(output_root.iterdir()):
         raise ValueError(f"Benchmark output directory must be empty: {output_root}")
+    repo_root = Path(__file__).resolve().parent.parent
 
     benchmark_data_dir = _copy_benchmark_fixture(
         data_dir.resolve(),
@@ -251,7 +291,25 @@ def run_output_benchmark(
         register=False,
     )
 
+    command = None
+    if command_argv is not None:
+        argv = [str(token) for token in command_argv]
+        command = {
+            "argv": argv,
+            "display": subprocess.list2cmdline(argv),
+            "cwd": str(Path.cwd().resolve()),
+        }
+
     report = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "repo_root": str(repo_root),
+        "git_commit": _git_text(repo_root, "rev-parse", "HEAD"),
+        "git_dirty": bool(_git_text(repo_root, "status", "--porcelain", "--untracked-files=no")),
+        "git_branch": _git_text(repo_root, "rev-parse", "--abbrev-ref", "HEAD"),
+        "python_executable": sys.executable,
+        "python_version": sys.version,
+        "platform": platform_module.platform(),
+        "command": command,
         "trader_name": trader_spec.name,
         "trader_path": str(trader_spec.path),
         "data_dir": str(data_dir),
@@ -262,6 +320,13 @@ def run_output_benchmark(
         "fill_model": fill_model_name,
         "mc_sessions": int(mc_sessions),
         "mc_sample_sessions": int(mc_sample_sessions),
+        "mc_seed": int(mc_seed),
+        "mc_workers": int(mc_workers),
+        "caveats": [
+            "This benchmark measures retained output footprint, not runtime throughput.",
+            "The fixture copies only the first selected timestamps per chosen day so storage comparisons stay small and reproducible.",
+            "Monte Carlo uses the same truncated fixture and requested worker count for both light and full profiles.",
+        ],
         "cases": [
             _case_result("replay_light", "replay", "light", replay_light_dir),
             _case_result("replay_full", "replay", "full", replay_full_dir),

@@ -999,10 +999,15 @@ def run_market_session(
             market_trades_tick = {product: [] for product in PRODUCTS}
             total_mtm_for_tick = 0.0
 
+            tick_trades = day_dataset.trades_by_timestamp.get(ts)
             for product in PRODUCTS:
                 snapshot = tick_snapshots[product]
                 access_extra_fraction = tick_access_fractions[product]
-                trades = deepcopy(day_dataset.trades_by_timestamp.get(ts, {}).get(product, []))
+                # _execute_order_batch never mutates the input trades list (the
+                # passive path makes its own working copy of TradePrint values),
+                # so pass the source list directly to avoid a per-tick deepcopy
+                # of every TradePrint and the surrounding dict allocations.
+                trades = tick_trades.get(product, ()) if tick_trades else ()
                 product_fills, residual_trades, limit_breach = _execute_order_batch(
                     timestamp=ts,
                     product=product,

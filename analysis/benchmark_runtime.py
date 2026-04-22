@@ -49,6 +49,10 @@ def _dir_size(path: Path) -> int:
     return sum(child.stat().st_size for child in path.rglob("*") if child.is_file())
 
 
+def _dir_file_count(path: Path) -> int:
+    return sum(1 for child in path.rglob("*") if child.is_file())
+
+
 def _format_seconds(value: float | None) -> str:
     if value is None:
         return "n/a"
@@ -250,6 +254,7 @@ def _run_case(
     runtime = provenance.get("runtime") if isinstance(provenance.get("runtime"), dict) else {}
     phase_timings = runtime.get("phase_timings_seconds") if isinstance(runtime.get("phase_timings_seconds"), dict) else {}
     size_bytes = int(bundle_stats.get("total_size_bytes") or _dir_size(output_dir))
+    file_count = int(bundle_stats.get("file_count") or _dir_file_count(output_dir))
     session_count = case_meta.get("session_count")
     throughput = None
     if isinstance(session_count, int) and session_count > 0 and elapsed > 0:
@@ -260,6 +265,7 @@ def _run_case(
         "output_dir": _root_relative(output_dir, repo_root),
         "elapsed_seconds": round(elapsed, 3),
         "size_bytes": size_bytes,
+        "file_count": file_count,
         "workflow_tier": provenance.get("workflow_tier"),
         "engine_backend": runtime.get("engine_backend"),
         "monte_carlo_backend": runtime.get("monte_carlo_backend"),
@@ -319,6 +325,7 @@ def _run_pack_case(
         "output_dir": _root_relative(output_dir, repo_root),
         "elapsed_seconds": round(elapsed, 3),
         "size_bytes": _dir_size(output_dir),
+        "file_count": _dir_file_count(output_dir),
         "workflow_tier": case_meta.get("workflow_tier"),
         "engine_backend": "python",
         "parallelism": "mixed",
@@ -396,7 +403,7 @@ def _render_case_row(case: dict[str, object], baseline_lookup: dict[str, dict[st
     return (
         f"| `{case['case']}` | {backend} | {current_seconds:.3f}s | "
         f"{_format_seconds(baseline_seconds)} | {_format_delta(current_seconds, baseline_seconds)} | "
-        f"{throughput_text} | {peak_rss_text} | {int(case.get('size_bytes') or 0):,} |"
+        f"{throughput_text} | {peak_rss_text} | {int(case.get('size_bytes') or 0):,} | {int(case.get('file_count') or 0):,} |"
     )
 
 
@@ -406,6 +413,7 @@ def render_runtime_benchmark_markdown(report: dict[str, object], baseline_report
         for case in (baseline_report or {}).get("cases", [])
         if isinstance(case, dict)
     }
+    benchmark_command = report.get("benchmark_command")
     lines = [
         "# Runtime Benchmark",
         "",
@@ -427,10 +435,14 @@ def render_runtime_benchmark_markdown(report: dict[str, object], baseline_report
         f"- MC fill mode: `{report['mc_fill_mode']}`",
         f"- Requested MC backend: `{report['requested_mc_backend'] or 'default'}`",
         f"- MC synthetic tick limit: `{report['mc_synthetic_tick_limit']}`",
-        "",
-        "| Case | Backend | Current | Baseline | Delta | Sessions/s | Peak RSS | Output bytes |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
+    if isinstance(benchmark_command, dict) and benchmark_command.get("display"):
+        lines.append(f"- Command: `{benchmark_command['display']}`")
+    lines.extend([
+        "",
+        "| Case | Backend | Current | Baseline | Delta | Sessions/s | Peak RSS | Output bytes | Files |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ])
     for case in report["cases"]:
         lines.append(_render_case_row(case, baseline_lookup))
     phase_lines = [
@@ -511,7 +523,8 @@ def _mc_backend_args(value: str | None) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> None:
-    args = build_parser().parse_args(argv)
+    effective_argv = list(sys.argv[1:] if argv is None else argv)
+    args = build_parser().parse_args(effective_argv)
     repo_root = Path(args.repo_root).resolve()
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     output_root = Path(args.output_dir).resolve() if args.output_dir else repo_root / "backtests" / f"{timestamp}_runtime_benchmark"
@@ -903,6 +916,11 @@ def main(argv: list[str] | None = None) -> None:
         "repo_root": str(repo_root),
         "git_commit": _git_text(repo_root, "rev-parse", "HEAD"),
         "git_dirty": bool(_git_text(repo_root, "status", "--porcelain", "--untracked-files=no")),
+        "benchmark_command": {
+            "argv": [python_executable, str(Path(__file__).resolve()), *effective_argv],
+            "display": subprocess.list2cmdline([python_executable, str(Path(__file__).resolve()), *effective_argv]),
+            "cwd": str(Path.cwd().resolve()),
+        },
         "python_executable": python_executable,
         "platform": platform.platform(),
         "cpu_count_logical": psutil.cpu_count(logical=True) if psutil is not None else os.cpu_count(),

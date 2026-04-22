@@ -49,6 +49,9 @@ python -m pip install -e ".[dev]"
 python -m pytest -q
 ```
 
+Use `python -m pip install -e ".[dev,analysis]"` when you also want the
+benchmark, comparison and architecture bake-off helpers.
+
 Dashboard setup:
 
 ```bash
@@ -141,39 +144,41 @@ python analysis/profile_replay.py strategies/trader.py --compare-trader strategi
 
 Measured on 2026-04-22 with `analysis/benchmark_runtime.py` on this machine:
 
-- default day-0 replay: about `2.26s`
-- default day-0 compare: about `2.22s`
-- fast pack: about `5.07s`
-- validation pack: about `16.24s`
+- default day-0 replay: about `2.18s`
+- default day-0 compare: about `2.20s`
+- fast pack: about `4.72s`
+- validation pack: about `15.51s`
 
 Measured on the tracked `250`-tick Monte Carlo fixture:
 
 | Case | 1 worker | 2 workers | 4 workers | 8 workers |
 | --- | ---: | ---: | ---: | ---: |
-| MC quick light (64 sess) | `1.389s` | `1.147s` | `1.089s` | `1.091s` |
-| MC default light (100 sess) | `1.969s` | `1.576s` | `1.198s` | `1.180s` |
-| MC heavy light (192 sess) | `3.474s` | `n/a` | `n/a` | `1.527s` |
-| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `3.313s` |
+| MC quick light (64 sess) | `1.429s` | `1.260s` | `1.138s` | `1.193s` |
+| MC default light (100 sess) | `1.863s` | `1.548s` | `1.265s` | `1.345s` |
+| MC heavy light (192 sess) | `3.028s` | `n/a` | `n/a` | `1.635s` |
+| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `3.182s` |
 
-After the earlier path-band merge pass, the remaining light-mode Monte Carlo
-cost was retained sampled-run preview data plus Python-list-heavy
-all-session path-band state. Explicit light-mode preview caps and a more
-compact accumulator cut the tracked `mc_ceiling_light_w8` case from
-`4.364s / 632.2 MB RSS / 36.96 MB` to `3.313s / 402.7 MB RSS / 13.45 MB`.
-On `mc_default_light_w8`, reporting is now about `217 ms`, with about
-`154 ms` of that in bundle writes.
+The earlier path-band and retention pass remains the biggest Monte Carlo win.
+It cut the tracked `mc_ceiling_light_w8` case from `4.364s / 632.2 MB RSS /
+36.96 MB` to `3.182s / 437.9 MB RSS / 13.45 MB`. A later hot-path fix in
+`fill_models.py` helped replay, packs and the single-worker default Monte
+Carlo case, but the widest `8`-worker benchmark-trader cells are now mixed
+against the older phase-4 baseline and should not be oversold.
 
 The default streaming Monte Carlo backend remains the recommended choice. It
 avoids building full replay artefacts for unsampled sessions while still
 computing exact all-session distribution metrics and path bands. Use
 `--mc-backend classic` for parity checks. The compiled `rust` backend remains
-available for explicit backend experiments, but the tracked fixture still
-favours streaming through the measured `8`-worker cases.
+available for explicit backend experiments, but same-code realistic-trader
+rankings are now strategy-sensitive rather than one-sided.
 
-Realistic trader checks with `examples/trader_round1_v9.py` and
-`strategies/trader.py` still favour `streaming` in the meaningful
-multi-worker cells. The only near-tie was the lightest `live_v9`
-`100/10`, `1` worker case, where `classic` was faster by `13 ms`.
+Realistic trader checks with `examples/trader_round1_v9.py`,
+`strategies/trader.py` and
+`strategies/prosperity_r2_340934_plus_offset110.py` still favour
+`streaming` on the heavier measured cases, but `classic` edges
+`strategies/trader.py` default `100/10`, `8` workers (`1.348s` vs `1.454s`)
+and `r2_stateful_default_w8` (`1.440s` vs `1.494s`). Rust stayed slower in
+every realistic-trader case that was rerun in this pass.
 
 Forensic work is still deliberate full-profile work and should be treated as a minute-scale task rather than part of the normal branch loop.
 
@@ -182,21 +187,23 @@ Forensic work is still deliberate full-profile work and should be treated as a m
 Compared with simpler replay backtesters, this repo now keeps a short daily loop through day-0 defaults, `--match-trades`, per-day PnL output, `--open`, and `serve --latest`, while still carrying compare, optimisation, calibration, scenarios and Round 2 research.
 
 Compared with Monte Carlo-first repos, this repo now makes the practical path
-faster and the proof layer clearer. The default `streaming` backend is the
-tracked winner through the measured `8`-worker cases, `classic` remains the
-explicit parity fallback, and `rust` stays available as an explicit
-experimental backend rather than a recommendation. Chris Roberts' repo remains
+faster and the proof layer clearer. The default `streaming` backend remains
+the best overall default, `classic` is the explicit parity path and sometimes
+slightly faster realistic-trader fallback, and `rust` stays available as an
+explicit experiment rather than a recommendation. Chris Roberts' repo remains
 the strongest narrow tutorial-round Monte Carlo reference, but this repo is
-the stronger end-to-end research platform. On a same-machine shared no-op
-trader benchmark with matched `250`-tick sessions, matched `100/10` and
-`1000/100` session or sample tiers, and matched `1`, `2`, `4`, and `8`
-worker settings, this repo was `4.3x` to `19.0x` faster end-to-end. On the
-smaller `100/10` cases it also used less RSS, but Chris still kept the
-lighter RSS on the `1000/100` ceiling cases and the smaller retained bundle
-footprint throughout. That proves a runtime-throughput lead rather than an
-undisputed all-axis performance crown.
+the stronger end-to-end research platform on the locally available evidence.
+On a same-machine shared no-op trader benchmark with matched `250`-tick
+sessions, matched `100/10` and `1000/100` session or sample tiers, and
+matched `1`, `2`, `4`, and `8` worker settings, this repo was `4.3x` to
+`18.7x` faster end-to-end and used far fewer files (`5` versus `50` or
+`410`). On the smaller `100/10` cases it also used less RSS, but Chris still
+kept the lighter RSS on the `1000/100` ceiling cases and the smaller retained
+bundle footprint throughout. That proves a runtime-throughput lead rather than
+an undisputed all-axis performance crown.
 
-See [docs/REFERENCE_COMPARISON.md](docs/REFERENCE_COMPARISON.md) for the detailed comparison against the Chris Roberts and Nabayan Saha public repos.
+See [docs/REFERENCE_COMPARISON.md](docs/REFERENCE_COMPARISON.md) for the
+detailed comparison against the locally available reference repos.
 
 Run a parameter sweep or optimisation:
 
@@ -342,6 +349,49 @@ This writes:
 - `benchmark_report.md`
 
 Use `--compare-report` to compare the current repo against an earlier report from another worktree or clone.
+
+For a tracked machine-readable summary of the latest audited local run, see
+[docs/BENCHMARK_SUMMARY.json](docs/BENCHMARK_SUMMARY.json).
+
+## Backend Benchmark
+
+Benchmark `streaming`, `classic` and `rust` on realistic repo traders:
+
+```bash
+python analysis/benchmark_backends.py --output-dir backtests/backend_benchmark --warmup 1 --measured-repeats 2
+```
+
+This writes:
+
+- `backend_benchmark.json`
+- `backend_benchmark.md`
+
+## External Reference Benchmark
+
+Compare this repo against a local Chris Roberts clone on the same machine:
+
+```bash
+python analysis/benchmark_chris_reference.py --reference-root path/to/imc-prosperity-4/backtester --output-dir backtests/reference_benchmark
+```
+
+This writes:
+
+- `reference_benchmark.json`
+- `reference_benchmark.md`
+
+## Architecture Bake-Off
+
+Run the transport and serialisation micro-benchmarks on a real dashboard
+payload:
+
+```bash
+python analysis/architecture_bakeoff.py --output-dir backtests/architecture_bakeoff --bundle backtests/runtime_benchmark/cases/mc_ceiling_light_w8/dashboard.json
+```
+
+This writes:
+
+- `architecture_bakeoff.json`
+- `architecture_bakeoff.md`
 
 ## Bundle Types
 
