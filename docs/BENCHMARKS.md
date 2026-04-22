@@ -107,6 +107,22 @@ For example, `mc_default_light_w1` on streaming records about:
 
 The main improvement in this pass is that unsampled Monte Carlo sessions no longer build full replay artefacts. That improves the one-worker practical path meaningfully, but the high-worker ceiling is still limited by Python process overhead rather than raw trader execution alone.
 
+## Rust Backend Characteristics
+
+The `--mc-backend rust` backend runs market generation and order execution in a compiled Rayon engine. Trader invocation still goes through a Python subprocess per worker via line-delimited JSON IPC (one round-trip per tick).
+
+Measured on the tracked `250`-tick fixture at `50/5` sessions, `1` worker:
+
+| Backend | Wall time | Per-session | Notes |
+| --- | ---: | ---: | --- |
+| `streaming` | `~83.8s` | `~1.68s` | No IPC overhead; direct Python loop |
+| `classic` | `~99.6s` | `~1.99s` | Full artefact materialisation |
+| `rust` | `~108.8s` | `~2.18s` | IPC overhead (~17μs/tick × 30K ticks ≈ +0.5s/session) |
+
+**Key insight:** at 1 worker, per-tick IPC overhead cancels out Rust's computational savings. The `streaming` backend wins. At 6+ workers, Rust scales via Rayon (separate Python processes, no GIL) and can match or exceed streaming wall time when the session count is large enough.
+
+Use `streaming` for all local 1–4 worker work. Use `rust` deliberately for batch runs at 6+ workers. The `auto` sentinel always resolves to `streaming` and never triggers a Rust compile.
+
 ## Files By Mode
 
 Replay light writes:

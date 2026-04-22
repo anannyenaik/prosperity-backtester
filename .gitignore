@@ -19,6 +19,17 @@ demo_outputs/**
 !demo_outputs/.gitkeep
 *.log
 
+# Rust build artifacts
+rust_mc_engine/target/
+
+# Analysis benchmark outputs (reproducible from source)
+analysis/benchmark_outputs/
+analysis/benchmark_outputs_*.json
+
 # Local environment
 .env
 .env.*
+
+# Editor
+.vscode/settings.json
+.idea/

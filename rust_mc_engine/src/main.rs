@@ -853,7 +853,9 @@ fn build_session_chunks(session_indices: &[usize], worker_count: usize) -> Vec<V
     if worker_count <= 1 {
         return vec![session_indices.to_vec()];
     }
-    let chunk_count = session_indices.len().min(worker_count.max(worker_count * 2));
+    // Use exactly worker_count chunks so each Rayon thread spawns exactly one
+    // Python subprocess.  Round-robin assignment gives near-equal load.
+    let chunk_count = session_indices.len().min(worker_count);
     let mut groups = vec![Vec::new(); chunk_count];
     for (idx, session_index) in session_indices.iter().enumerate() {
         groups[idx % chunk_count].push(*session_index);

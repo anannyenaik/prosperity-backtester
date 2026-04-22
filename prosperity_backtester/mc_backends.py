@@ -156,13 +156,25 @@ def resolve_monte_carlo_backend(
     access_scenario: AccessScenario | None = None,
     print_trader_output: bool = False,
 ) -> str:
+    """Resolve the backend to use for Monte Carlo simulation.
+
+    The ``auto`` sentinel (default when nothing is requested) always resolves
+    to the ``streaming`` backend.  The ``rust`` backend must be requested
+    explicitly via ``--mc-backend rust``; it is NOT auto-selected because the
+    per-tick IPC cost makes it slower than streaming at all practical worker
+    counts below ~8 workers.  At high worker counts (8+) the Rust engine can
+    win on wall time due to Rayon parallelism; use it deliberately there.
+    """
     text = str(requested_backend or AUTO_MONTE_CARLO_BACKEND).strip().lower().replace("-", "_")
     if text not in {"", AUTO_MONTE_CARLO_BACKEND}:
-        return normalise_monte_carlo_backend(text)
-    if rust_backend_supported(access_scenario=access_scenario, print_trader_output=print_trader_output):
-        binary = ensure_rust_backend_binary()
-        if binary is not None:
-            return RUST_MONTE_CARLO_BACKEND
+        backend = normalise_monte_carlo_backend(text)
+        if backend == RUST_MONTE_CARLO_BACKEND:
+            if not rust_backend_supported(access_scenario=access_scenario, print_trader_output=print_trader_output):
+                raise ValueError(
+                    "The rust Monte Carlo backend is not supported for this configuration "
+                    "(access scenarios and print_trader_output are incompatible with it)."
+                )
+        return backend
     return DEFAULT_MONTE_CARLO_BACKEND
 
 

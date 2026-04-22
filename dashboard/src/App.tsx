@@ -117,26 +117,40 @@ function LandingScreen() {
   return (
     <div className="mx-auto grid min-h-[calc(100vh-132px)] w-full max-w-[1380px] items-center gap-8 px-4 py-10 md:px-7 md:py-12 lg:grid-cols-[minmax(0,0.98fr)_minmax(380px,0.78fr)] lg:items-stretch lg:gap-12 xl:gap-14">
       <section className="flex min-w-0 flex-col justify-center lg:pr-4">
-        <div className="hud-label chapter-rule mb-4 text-accent">PROSPERITY RESEARCH / ROUND 2</div>
+        <div className="hud-label chapter-rule mb-4 text-accent">IMC PROSPERITY / RESEARCH PLATFORM</div>
         <h1 className="font-display max-w-[760px] text-[2.9rem] font-extrabold uppercase leading-[0.88] tracking-normal text-txt md:text-[4.15rem] lg:text-[3.55rem] xl:text-[4.4rem] 2xl:text-[4.5rem]">
-          <span className="block">Round 2</span>
+          <span className="block">Strategy</span>
           <span className="block">research</span>
           <em className="font-serif block text-[0.74em] font-light normal-case leading-none tracking-normal text-accent-2">decision workspace</em>
         </h1>
         <p className="mt-7 max-w-[640px] text-lg leading-8 text-txt-soft md:text-xl md:leading-9">
-          Load replay, Monte Carlo, calibration, comparison, optimisation or MAF scenario bundles and inspect the run evidence.
+          Load replay, Monte Carlo, calibration, comparison, optimisation or scenario bundles to inspect run evidence and drive research decisions.
         </p>
 
         <div className="mt-9 grid max-w-[700px] grid-cols-1 gap-3 sm:grid-cols-3">
           {[
             { icon: <Radar className="h-4 w-4" />, label: 'Replay', value: 'Path diagnostics' },
-            { icon: <Database className="h-4 w-4" />, label: 'MAF', value: 'Access scenarios' },
-            { icon: <Server className="h-4 w-4" />, label: 'Monte Carlo', value: 'Robust ranking' },
+            { icon: <Database className="h-4 w-4" />, label: 'Scenarios', value: 'Robustness stress' },
+            { icon: <Server className="h-4 w-4" />, label: 'Monte Carlo', value: 'Tail risk ranking' },
           ].map((item) => (
             <div key={item.label} className="glass-panel rounded-lg px-4 py-4">
               <div className="mb-3 text-accent">{item.icon}</div>
               <div className="hud-label text-muted">{item.label}</div>
               <div className="font-display mt-2 text-sm font-semibold uppercase tracking-[0.08em] text-txt">{item.value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-8 grid max-w-[700px] grid-cols-2 gap-2 sm:grid-cols-4">
+          {[
+            { label: 'replay', desc: 'Historical' },
+            { label: 'monte-carlo', desc: 'Synthetic' },
+            { label: 'compare', desc: 'Multi-trader' },
+            { label: 'round2-scenarios', desc: 'MAF access' },
+          ].map((cmd) => (
+            <div key={cmd.label} className="rounded-md border border-border bg-surface-2/50 px-2.5 py-2">
+              <div className="font-mono text-[10px] text-accent">{cmd.label}</div>
+              <div className="hud-label mt-1 text-muted">{cmd.desc}</div>
             </div>
           ))}
         </div>

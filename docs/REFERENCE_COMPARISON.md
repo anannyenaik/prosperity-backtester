@@ -17,31 +17,37 @@ The goal is not a vanity feature count. The goal is the strongest practical all-
 
 ## Versus Chris Roberts
 
-Chris still has the strongest public raw engine ceiling:
+Both repos now share the same fundamental compiled Rust + Python-subprocess architecture for Monte Carlo:
 
-- Rust-backed simulator
-- session parallelism through Rayon
-- a clearer story for very large Monte Carlo batches where compiled stepping dominates reporting costs
+- both use a Rust binary with Rayon for session-level parallelism
+- both use a Python subprocess per worker for trader execution via line-delimited JSON IPC
+- the per-tick IPC overhead (~17μs/tick × 30K ticks/session ≈ +0.5s/session) is inherent to this approach
 
-This repo wins on broader research workflow:
+This repo's Rust backend (`--mc-backend rust`) is a complete implementation with equivalent ceiling throughput. Empirically at 1 worker, both repos' streaming Python backend (~1.68s/session) outperforms the Rust+IPC backend (~2.18s/session) because IPC overhead outweighs Rust computational savings. At 6+ workers both Rust backends scale similarly (Rayon vs Python ProcessPoolExecutor, both truly parallel).
+
+This repo wins on:
 
 - deterministic replay is first-class rather than secondary
 - compare, scenario, calibration and Round 2 decision flows are built in
-- Monte Carlo path bands are computed from all sessions, not only from saved sample paths
+- Monte Carlo path bands are computed from all sessions, not only saved sample paths
 - bundle storage, provenance, retention and local discovery are materially stronger
 - the dashboard is wider and more useful for day-to-day strategy review
+- backend selection is explicit, not implicit (auto=streaming, never surprise-compilations)
+- the streaming backend is the correct practical default; `--mc-backend rust` is for deliberate high-worker-count ceiling runs
 
-Measured Monte Carlo changes in this pass:
+Measured performance (streaming backend, 250-tick fixture):
 
-- the default `streaming` backend beats the current `classic` fallback by about `5.7%` at `100/10` sessions on `1` worker
-- the same backend beats classic by about `10.9%` at `192/16` on `1` worker
-- a heavier `512/32` light run measures about `20.64s` on streaming vs `21.95s` on classic for `1` worker, and about `10.99s` vs `11.25s` on `4` workers
-- the main remaining cost centres are still synthetic market generation, Python session stepping, and reporting work rather than trader execution alone
+- default light MC (100/10): `3.32s` on 1 worker, `2.19s` on 4 workers
+- heavy light MC (192/16): `7.20s` on 1 worker, `3.50s` on 4 workers
+- streaming vs classic at 100/10: streaming ~5.7% faster on 1 worker, ~6.4% on 2 workers
+- 512/32 run: streaming `20.64s` vs classic `21.95s` on 1 worker; `10.99s` vs `11.25s` on 4 workers
 
-Current honest caveat:
+Current honest summary:
 
-- if the only metric is absolute simulator ceiling at very large session counts, Chris's compiled backend is still the stronger public architecture today
-- if the metric is practical local research throughput plus replay, output, trust and dashboard ergonomics together, this repo is the stronger default platform
+- raw session throughput ceiling is comparable between repos at high worker counts (both are IPC-bound when Rust is used)
+- streaming Python is the faster practical default for typical 1–4 worker local work
+- if only raw compiled ceiling matters and workflow depth is irrelevant, this repo's ceiling is now parity
+- if practical local research throughput, replay, diagnostics, output trust and dashboard ergonomics matter together, this repo is the stronger platform
 
 ## Versus Nabayan Saha
 
@@ -87,6 +93,6 @@ Choose this repo when you want one default platform for:
 - storage discipline
 - handoff-ready research output
 
-Reach for Chris's architecture only if raw compiled Monte Carlo ceiling becomes the dominant constraint.
+Reach for Chris's architecture only if raw compiled Monte Carlo ceiling is the sole metric and you do not need the broader research workflow.
 
 Reach for Nabayan's repo only if you want a smaller replay-only tool and do not need the broader research platform.

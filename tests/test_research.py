@@ -314,6 +314,24 @@ def test_mc_profile_rust_session_counter():
 # Backend selection and resolution
 # ---------------------------------------------------------------------------
 
+def test_resolve_mc_backend_auto_always_returns_streaming():
+    # auto must resolve to streaming regardless of Rust binary availability.
+    # The Rust backend is slower at low worker counts due to per-tick IPC
+    # overhead, so it must be requested explicitly with --mc-backend rust.
+    backend = resolve_monte_carlo_backend("auto")
+    assert backend == "streaming"
+
+
+def test_resolve_mc_backend_auto_returns_streaming_even_when_rust_binary_present(monkeypatch):
+    fake_binary = (Path(__file__).parent, Path(__file__).parent)
+    monkeypatch.setattr(
+        "prosperity_backtester.mc_backends.ensure_rust_backend_binary",
+        lambda: fake_binary,
+    )
+    backend = resolve_monte_carlo_backend("auto")
+    assert backend == "streaming", "auto must never silently select rust"
+
+
 def test_resolve_mc_backend_falls_back_when_rust_unavailable(monkeypatch):
     monkeypatch.setattr(
         "prosperity_backtester.mc_backends.ensure_rust_backend_binary",
@@ -333,6 +351,14 @@ def test_resolve_mc_backend_explicit_streaming_ignores_rust_availability(monkeyp
 
 def test_resolve_mc_backend_explicit_classic_ignores_rust_availability():
     assert resolve_monte_carlo_backend("classic") == "classic"
+
+
+def test_resolve_mc_backend_rust_with_access_scenario_raises():
+    import pytest
+    from prosperity_backtester.round2 import AccessScenario
+    access = AccessScenario(name="with_access", enabled=True, contract_won=True)
+    with pytest.raises(ValueError, match="rust"):
+        resolve_monte_carlo_backend("rust", access_scenario=access)
 
 
 def test_mc_runtime_context_rust_sets_engine_and_parallelism():

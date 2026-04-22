@@ -100,7 +100,8 @@ Run Monte Carlo:
 
 ```bash
 python -m prosperity_backtester monte-carlo strategies/trader.py --name current --days 0 --fill-mode empirical_baseline --noise-profile fitted --quick
-python -m prosperity_backtester monte-carlo strategies/trader.py --name current --days 0 --fill-mode empirical_baseline --noise-profile fitted --sessions 256 --sample-sessions 16 --workers 4 --mc-backend classic
+python -m prosperity_backtester monte-carlo strategies/trader.py --name current --days 0 --fill-mode empirical_baseline --noise-profile fitted --sessions 256 --sample-sessions 16 --workers 4
+python -m prosperity_backtester monte-carlo strategies/trader.py --name current --days 0 --fill-mode empirical_baseline --noise-profile fitted --sessions 512 --workers 8 --mc-backend rust
 ```
 
 ## Research Loop
@@ -161,7 +162,7 @@ Forensic work is still deliberate full-profile work and should be treated as a m
 
 Compared with simpler replay backtesters, this repo now keeps a short daily loop through day-0 defaults, `--match-trades`, per-day PnL output, `--open`, and `serve --latest`, while still carrying compare, optimisation, calibration, scenarios and Round 2 research.
 
-Compared with Monte Carlo-first repos, the current performance story is now hybrid. Use light mode, explicit fast and validation packs, the default `streaming` backend, and `--workers` once session counts are high enough. Use `--mc-backend classic` for parity checks. Chris Roberts' compiled Rust plus Rayon design still has the stronger public absolute ceiling.
+Compared with Monte Carlo-first repos, the current performance story is now hybrid. The default `streaming` backend is recommended for all practical work: it avoids building full replay artefacts for unsampled sessions while still computing exact all-session distribution metrics and path bands. Use `--mc-backend classic` for parity checks. A compiled Rust + Rayon engine (`--mc-backend rust`) is available for explicit high-worker-count runs (≥6 workers): at low worker counts its per-tick IPC overhead cancels out the Rust speed advantage, so it is never auto-selected. Chris Roberts' compiled Rust design has a comparable ceiling on throughput but a less complete research workflow overall.
 
 See [docs/REFERENCE_COMPARISON.md](docs/REFERENCE_COMPARISON.md) for the detailed comparison against the Chris Roberts and Nabayan Saha public repos.
 
@@ -409,7 +410,7 @@ Common fields:
 - `perturbation`: replay or Monte Carlo perturbation fields.
 - `synthetic_tick_limit`: optional Monte Carlo tick cap for smoke or benchmark runs.
 - `mc_sessions`, `mc_sample_sessions`, `mc_seed`, `mc_workers`: Monte Carlo controls.
-- `mc_backend`: `auto`, `streaming` or `classic`.
+- `mc_backend`: `auto` (resolves to `streaming`), `streaming`, `classic`, or `rust` (explicit, for ≥6 workers).
 - `output_profile`: `light` or `full`.
 - `save_child_bundles`: keep per-variant or per-scenario child bundles for aggregate workflows.
 - `write_series_csvs` or `series_sidecars`: write chart-series CSV sidecars.
