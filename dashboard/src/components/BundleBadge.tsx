@@ -37,12 +37,12 @@ export function BundleBadge({ payload, className }: Props) {
         </span>
       )}
       {backend && (
-        <span className="hud-label rounded-lg border border-border bg-white/[0.025] px-3 py-2 text-muted">
+        <span className={engineBadgeClass(backend)} title="Engine backend that executed the trader callback">
           {backend}
         </span>
       )}
       {mcBackend && (
-        <span className="hud-label rounded-lg border border-border bg-white/[0.025] px-3 py-2 text-muted">
+        <span className={mcBadgeClass(mcBackend)} title="Monte Carlo execution backend">
           mc: {mcBackend}
         </span>
       )}
@@ -53,4 +53,21 @@ export function BundleBadge({ payload, className }: Props) {
       )}
     </div>
   )
+}
+
+function engineBadgeClass(backend: string): string {
+  // Engine backends: "python" (default replay engine) and "rust" (subprocess
+  // worker for the Rust MC pipeline).  Tint rust gold so the backend choice is
+  // legible at a glance — it is a meaningful trust + perf signal.
+  const base = 'hud-label rounded-lg px-3 py-2'
+  if (backend === 'rust') return `${base} border border-warn/30 bg-warn/10 text-warn`
+  return `${base} border border-border bg-white/[0.025] text-muted`
+}
+
+function mcBadgeClass(mcBackend: string): string {
+  const base = 'hud-label rounded-lg px-3 py-2'
+  if (mcBackend === 'rust') return `${base} border border-warn/30 bg-warn/10 text-warn`
+  if (mcBackend === 'streaming') return `${base} border border-accent/30 bg-accent/10 text-accent`
+  if (mcBackend === 'classic') return `${base} border border-border bg-white/[0.04] text-txt-soft`
+  return `${base} border border-border bg-white/[0.025] text-muted`
 }

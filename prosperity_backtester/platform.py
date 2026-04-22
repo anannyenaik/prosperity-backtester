@@ -180,13 +180,29 @@ def _scaled_snapshot(
     access_volume_multiplier: float = 1.0,
 ) -> BookSnapshot:
     book_noise_std = perturb.book_noise_for(snapshot.product)
+    spread_shift = perturb.spread_shift_ticks
+    vol_scale = perturb.order_book_volume_scale
+    # Identity fast path: when no perturbation modifies the book and access leaves
+    # depth untouched, return the original snapshot.  This is the dominant case in
+    # practice (default configs, no shocks, no access scenario) and avoids per-tick
+    # list+BookSnapshot allocation during 10K-tick sessions.
+    if (
+        spread_shift == 0
+        and vol_scale == 1.0
+        and book_noise_std == 0.0
+        and access_volume_multiplier == 1.0
+    ):
+        return snapshot
+
+    combined_vol_scale = vol_scale * access_volume_multiplier
+    apply_noise = book_noise_std > 0.0
 
     def scale_levels(levels: Sequence[Tuple[int, int]], is_bid: bool) -> List[Tuple[int, int]]:
         out: List[Tuple[int, int]] = []
         for price, volume in levels:
-            shifted = price - perturb.spread_shift_ticks if is_bid else price + perturb.spread_shift_ticks
-            noisy = shifted + int(round(rng.gauss(0.0, book_noise_std))) if book_noise_std > 0 else shifted
-            scaled_volume = max(0, int(round(volume * perturb.order_book_volume_scale * access_volume_multiplier)))
+            shifted = price - spread_shift if is_bid else price + spread_shift
+            noisy = shifted + int(round(rng.gauss(0.0, book_noise_std))) if apply_noise else shifted
+            scaled_volume = max(0, int(round(volume * combined_vol_scale)))
             if scaled_volume > 0:
                 out.append((noisy, scaled_volume))
         out.sort(key=lambda item: -item[0] if is_bid else item[0])
@@ -198,7 +214,7 @@ def _scaled_snapshot(
     if bids and asks:
         mid = (bids[0][0] + asks[0][0]) / 2.0
     ref = snapshot.reference_fair
-    if ref is not None and book_noise_std > 0:
+    if ref is not None and apply_noise:
         ref = ref + rng.gauss(0.0, book_noise_std)
     return BookSnapshot(
         timestamp=snapshot.timestamp,
@@ -370,9 +386,14 @@ def _execute_order_batch(
     access_extra_fraction: float,
     rng: random.Random,
 ) -> Tuple[List[Dict[str, object]], List[TradePrint], int]:
+    fills: List[Dict[str, object]] = []
+    # Fast path: traders that submit nothing on this tick still pay for the
+    # surrounding bookkeeping under the original implementation.  Skip everything
+    # we can prove a no-op, which is by far the common case for many strategies.
+    if not orders:
+        return fills, trades, 0
     bids = [[price, volume] for price, volume in snapshot.bids]
     asks = [[price, volume] for price, volume in snapshot.asks]
-    fills: List[Dict[str, object]] = []
     limit_breaches = 0
     position_limit = _position_limit_for(product, perturb)
     total_buy = sum(max(0, int(order.quantity)) for order in orders)
@@ -460,9 +481,20 @@ def _execute_order_batch(
             if remaining > 0 and rng.random() <= perturb.reentry_probability:
                 passive_candidates.append(("sell", Order(product, int(order.price), -remaining), remaining))
 
+    if not passive_candidates:
+        # Aggressive-only tick: no passive plumbing required.  This avoids the
+        # per-tick TradePrint copy and the BookSnapshot allocation below.
+        residual_trades = [trade for trade in trades if trade.quantity > 0] if trades else trades
+        return fills, residual_trades, limit_breaches
+
     passive_candidates.sort(key=lambda item: (-item[1].price if item[0] == "buy" else item[1].price, -item[2]))
     trade_volume_multiplier = access_scenario.trade_volume_multiplier(access_extra_fraction)
-    working_trades = [TradePrint(**asdict(trade)) for trade in trades]
+    # Direct field-wise construction avoids dataclasses.asdict + ** unpacking,
+    # which is dominant on aggressive-fill ticks because trades is non-empty.
+    working_trades = [
+        TradePrint(t.timestamp, t.buyer, t.seller, t.symbol, t.price, t.quantity, t.synthetic)
+        for t in trades
+    ]
     if trade_volume_multiplier != 1.0:
         for trade in working_trades:
             trade.quantity = max(1, int(round(trade.quantity * trade_volume_multiplier)))
@@ -1231,14 +1263,11 @@ def generate_synthetic_market_days(
 
     for session_day_index, day in enumerate(days):
         latent_paths = {
-            product: simulate_latent_fair(product, calib, session_day_index, rng, continue_from=last_latent[product])
+            product: simulate_latent_fair(product, calib, session_day_index, rng,
+                                          continue_from=last_latent[product],
+                                          tick_count=tick_limit)
             for product in PRODUCTS
         }
-        if tick_limit is not None:
-            latent_paths = {
-                product: path[:tick_limit]
-                for product, path in latent_paths.items()
-            }
         if perturb.shock_tick is not None:
             shock_tick = max(0, int(perturb.shock_tick))
             for product, path in latent_paths.items():
@@ -1247,12 +1276,10 @@ def generate_synthetic_market_days(
                     continue
                 for tick in range(shock_tick, len(path)):
                     path[tick] += shock
-        trade_counts = {product: sample_trade_counts(product, calib, rng) for product in PRODUCTS}
-        if tick_limit is not None:
-            trade_counts = {
-                product: counts[:tick_limit]
-                for product, counts in trade_counts.items()
-            }
+        trade_counts = {
+            product: sample_trade_counts(product, calib, rng, tick_count=tick_limit)
+            for product in PRODUCTS
+        }
         timestamps = [tick * 100 for tick in range(len(next(iter(latent_paths.values()))))]
         books_by_timestamp: Dict[int, Dict[str, BookSnapshot]] = {}
         trades_by_timestamp: Dict[int, Dict[str, List[TradePrint]]] = {}

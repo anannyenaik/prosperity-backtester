@@ -479,7 +479,8 @@ def run_streaming_synthetic_session(
                 session_day_index,
                 market_rng,
                 continue_from=last_latent[product],
-            )[: context.tick_count]
+                tick_count=context.tick_count,
+            )
             for product in PRODUCTS
         }
         if perturb.shock_tick is not None:
@@ -491,7 +492,7 @@ def run_streaming_synthetic_session(
                 for tick in range(shock_tick, len(path)):
                     path[tick] += shock
         trade_counts = {
-            product: sample_trade_counts(product, context.calibration, market_rng)[: context.tick_count]
+            product: sample_trade_counts(product, context.calibration, market_rng, tick_count=context.tick_count)
             for product in PRODUCTS
         }
         timings["market_generation_seconds"] = float(timings["market_generation_seconds"]) + (time.perf_counter() - generation_started)

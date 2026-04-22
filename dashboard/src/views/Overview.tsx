@@ -9,6 +9,7 @@ import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { ProductToggle } from '../components/ProductToggle'
 import { BundleBadge } from '../components/BundleBadge'
+import { PhaseTimings } from '../components/PhaseTimings'
 import { fmtNum, fmtInt, fmtPct, fmtDate, colorForValue } from '../lib/format'
 import { formatBool, getComparisonRows, interpretBundle, isFiniteNumber, numberOrNull } from '../lib/bundles'
 import { POSITION_LIMIT, PRODUCT_LABELS, type DashboardPayload, type DataContractEntry, type Product } from '../types'
@@ -149,6 +150,13 @@ export function Overview() {
           />
         </Card>
       )}
+
+      <PhaseTimings
+        phaseTimings={phaseTimings as Record<string, unknown> | null | undefined}
+        sessionCount={numberOrNull(runtime?.session_count)}
+        workerCount={numberOrNull(runtime?.worker_count)}
+        monteCarloBackend={runtime?.monte_carlo_backend ?? null}
+      />
 
       <Card title="Exact vs approximate assumptions">
         {hasAssumptionNotes(payload) ? (

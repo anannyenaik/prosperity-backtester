@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Cpu, Sliders } from 'lucide-react'
+import { Sliders } from 'lucide-react'
 import { useStore } from '../store'
 import { Card } from '../components/Card'
 import { MetricCard } from '../components/MetricCard'
@@ -8,6 +8,7 @@ import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { ProductToggle } from '../components/ProductToggle'
 import { BundleBadge } from '../components/BundleBadge'
+import { PhaseTimings } from '../components/PhaseTimings'
 import { HistogramChart } from '../charts/HistogramChart'
 import { PathBandsChart } from '../charts/PathBandsChart'
 import { PnlChart } from '../charts/PnlChart'
@@ -82,14 +83,6 @@ export function MonteCarlo() {
     { key: 'limit_breaches', header: 'Breaches', fmt: 'int', tone: (v) => (Number(v) > 0 ? 'bad' : 'neutral') },
   ]
 
-  const wallSeconds = isFiniteNumber(timings?.session_execution_wall_seconds)
-    ? Number(timings!.session_execution_wall_seconds)
-    : null
-  const sessionsPerSecond =
-    wallSeconds && wallSeconds > 0 && summary.session_count > 0
-      ? summary.session_count / wallSeconds
-      : null
-
   return (
     <div className="space-y-5">
       <PageHeader
@@ -108,54 +101,13 @@ export function MonteCarlo() {
         <MetricCard label="Mean max DD" value={fmtNum(summary.mean_max_drawdown)} tone="warn" sub={`P95 ${fmtNum(summary.p95)}`} />
       </div>
 
-      {/* Runtime / engine provenance */}
-      {runtime && (
-        <Card
-          title="Engine provenance"
-          subtitle="Backend selection, worker configuration and phase timing for this run"
-          action={<Cpu className="h-4 w-4 text-muted" />}
-        >
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-            {[
-              { label: 'Backend', value: runtime.monte_carlo_backend ?? runtime.engine_backend ?? '—' },
-              { label: 'Parallelism', value: runtime.parallelism ?? '—' },
-              { label: 'Workers', value: runtime.worker_count != null ? String(runtime.worker_count) : '—' },
-              { label: 'Sessions', value: runtime.session_count != null ? fmtInt(runtime.session_count) : fmtInt(summary.session_count) },
-              { label: 'Wall time', value: wallSeconds != null ? `${wallSeconds.toFixed(1)}s` : '—' },
-              { label: 'Sessions/s', value: sessionsPerSecond != null ? sessionsPerSecond.toFixed(2) : '—' },
-            ].map((item) => (
-              <div key={item.label} className="rounded-lg border border-border bg-surface-2/50 px-3 py-2.5">
-                <div className="hud-label text-muted mb-1">{item.label}</div>
-                <div className="font-mono text-sm font-semibold text-txt">{item.value}</div>
-              </div>
-            ))}
-          </div>
-
-          {timings && (
-            <div className="mt-4 border-t border-border pt-4">
-              <div className="hud-label text-muted mb-3">Phase timings (cumulative across all workers)</div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-                {[
-                  { key: 'market_generation_seconds', label: 'Market gen' },
-                  { key: 'trader_seconds', label: 'Trader' },
-                  { key: 'execution_seconds', label: 'Execution' },
-                  { key: 'path_metrics_seconds', label: 'Path metrics' },
-                  { key: 'postprocess_seconds', label: 'Postprocess' },
-                  { key: 'python_overhead_seconds', label: 'Python overhead' },
-                ].map(({ key, label }) => {
-                  const val = timings[key]
-                  return isFiniteNumber(val) ? (
-                    <div key={key} className="rounded bg-surface-2/30 px-2.5 py-2">
-                      <div className="hud-label text-muted/80 mb-0.5">{label}</div>
-                      <div className="font-mono text-xs text-txt-soft">{Number(val).toFixed(2)}s</div>
-                    </div>
-                  ) : null
-                })}
-              </div>
-            </div>
-          )}
-        </Card>
-      )}
+      {/* Runtime / engine provenance with bar-graph phase breakdown */}
+      <PhaseTimings
+        phaseTimings={timings as Record<string, unknown> | null | undefined}
+        sessionCount={runtime?.session_count != null ? Number(runtime.session_count) : summary.session_count}
+        workerCount={runtime?.worker_count != null ? Number(runtime.worker_count) : null}
+        monteCarloBackend={runtime?.monte_carlo_backend ?? runtime?.engine_backend ?? null}
+      />
 
       {/* Distribution + path bands */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

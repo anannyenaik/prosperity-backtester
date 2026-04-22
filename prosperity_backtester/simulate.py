@@ -16,6 +16,7 @@ the historical data within sampling noise.
 """
 from __future__ import annotations
 
+import bisect
 import json
 import math
 import random
@@ -85,17 +86,17 @@ class _Sampler:
             total += w
             self._cdf.append(total)
         self._total = total
+        # Hoist for the hot path: 60K+ draws per session, attribute access is
+        # measurable.  bisect.bisect_left is implemented in C and ~3x faster than
+        # the previous hand-rolled binary search.
+        self._last_index = len(self._cdf) - 1
 
     def draw(self, rng: random.Random):
         r = rng.random() * self._total
-        lo, hi = 0, len(self._cdf) - 1
-        while lo < hi:
-            mid = (lo + hi) // 2
-            if self._cdf[mid] < r:
-                lo = mid + 1
-            else:
-                hi = mid
-        return self.values[lo]
+        idx = bisect.bisect_left(self._cdf, r)
+        if idx > self._last_index:
+            idx = self._last_index
+        return self.values[idx]
 
 
 def build_samplers(calib: dict) -> dict:
@@ -121,20 +122,24 @@ def build_samplers(calib: dict) -> dict:
 
 def simulate_latent_fair(product: str, calib: dict, day_index: int,
                          rng: random.Random,
-                         continue_from: Optional[float] = None) -> List[float]:
+                         continue_from: Optional[float] = None,
+                         tick_count: Optional[int] = None) -> List[float]:
     """Generate a latent fair value path for one day.
 
     If `continue_from` is provided, the path starts there (preserves continuity
     across days within one session). Otherwise we sample a start from the real
     calibration data - useful when simulating a single standalone day.
 
+    `tick_count` lets the caller request a shorter path (e.g. for benchmark
+    fixtures with --synthetic-tick-limit). When omitted we fall back to a full
+    TICKS_PER_DAY path. Allocating only what the caller needs avoids a 10 KiB
+    list allocation per (day, product, session) on small fixtures.
+
     Calibration notes:
       - OSMIUM: observable mid std approx 4.7 but autocorr(1) = -0.49, a classic
         bid-ask bounce. The latent fair barely moves (we use kappa=0.15, sigma=0.4,
         stationary std < 1).
       - PEPPER: linear drift approx +0.108/tick, residual std approx 1.17.
-
-    Returns a list of TICKS_PER_DAY floats.
     """
     pc = calib[product]
     if continue_from is not None:
@@ -143,21 +148,25 @@ def simulate_latent_fair(product: str, calib: dict, day_index: int,
         starts = pc["start_candidates"]
         start = starts[day_index % len(starts)] if starts else 10000.0
 
-    path = [0.0] * TICKS_PER_DAY
+    length = TICKS_PER_DAY if tick_count is None else max(1, int(tick_count))
+    path = [0.0] * length
     path[0] = start
 
+    # Hoist rng method binding once: ~30% faster than rng.gauss attribute lookup
+    # per iteration in CPython 3.11.
+    gauss = rng.gauss
     if product == "ASH_COATED_OSMIUM":
         kappa = 0.15
         sigma = float(pc.get("simulation_noise_std", 0.4))
         target = 10000.0
-        for i in range(1, TICKS_PER_DAY):
-            pull = -kappa * (path[i - 1] - target)
-            path[i] = path[i - 1] + pull + sigma * rng.gauss(0.0, 1.0)
+        for i in range(1, length):
+            prev = path[i - 1]
+            path[i] = prev - kappa * (prev - target) + sigma * gauss(0.0, 1.0)
     else:  # INTARIAN_PEPPER_ROOT
         drift = pc["drift_per_tick"]
         sigma = float(pc.get("simulation_noise_std", max(0.8, pc["resid_std"] * 0.5)))
-        for i in range(1, TICKS_PER_DAY):
-            path[i] = path[i - 1] + drift + sigma * rng.gauss(0.0, 1.0)
+        for i in range(1, length):
+            path[i] = path[i - 1] + drift + sigma * gauss(0.0, 1.0)
     return path
 
 
@@ -209,40 +218,47 @@ def make_book(product: str, latent_fair: float, samplers: dict,
     inner_bid_vol = s["inner_bid_vol"].draw(rng)
     inner_ask_vol = s["inner_bid_vol"].draw(rng)
 
+    # Build the base inner+outer pairs in the correct sort order.  Safety
+    # checks above guarantee inner_bid > outer_bid and inner_ask < outer_ask, so
+    # bids descend and asks ascend without an explicit sort.
     bids = [(inner_bid, inner_bid_vol), (outer_bid, outer_bid_vol)]
     asks = [(inner_ask, inner_ask_vol), (outer_ask, outer_ask_vol)]
 
-    # Bot 3 inside quote (rare, single-sided only - matches P4 calibration finding)
+    # Bot 3 inside quote (rare, single-sided only - matches P4 calibration finding).
     bot3_rate = pc["bot3_bid_rate"] + pc["bot3_ask_rate"]
+    bot3_added = False
     if rng.random() < bot3_rate:
         bid_share = pc["bot3_bid_rate"] / bot3_rate if bot3_rate > 0 else 0.5
         if rng.random() < bid_share:
             # Bot 3 bid: must strictly improve on the inner bid AND sit below all asks
             offset = rng.choice([-2, -1, 0, 1])
             price = center + offset
-            min_ask = min(a[0] for a in asks)
+            min_ask = inner_ask if inner_ask < outer_ask else outer_ask
             if price > inner_bid and price < min_ask:
                 vol = rng.randint(3, 10)
                 bids.append((price, vol))
+                bot3_added = True
         else:
             # Bot 3 ask: must strictly improve on the inner ask AND sit above all bids
             offset = rng.choice([-1, 0, 1, 2])
             price = center + offset
-            max_bid = max(b[0] for b in bids)
+            max_bid = inner_bid if inner_bid > outer_bid else outer_bid
             if price < inner_ask and price > max_bid:
                 vol = rng.randint(3, 10)
                 asks.append((price, vol))
+                bot3_added = True
 
-    # Sort bids desc, asks asc; dedupe by price (merge volumes if same)
-    def _normalize(levels, descending):
-        agg = {}
-        for p, v in levels:
-            agg[p] = agg.get(p, 0) + v
-        items = sorted(agg.items(), key=lambda x: -x[0] if descending else x[0])
-        return items
-
-    bids = _normalize(bids, descending=True)
-    asks = _normalize(asks, descending=False)
+    if bot3_added:
+        # Only the rare Bot 3 path needs dedupe + sort (a Bot 3 quote can in
+        # principle collide with the inner level, and the new entry is on the
+        # wrong side of the existing two-element sort order).
+        def _normalize(levels, descending):
+            agg: Dict[int, int] = {}
+            for p, v in levels:
+                agg[p] = agg.get(p, 0) + v
+            return sorted(agg.items(), key=lambda x: -x[0] if descending else x[0])
+        bids = _normalize(bids, descending=True)
+        asks = _normalize(asks, descending=False)
     return BotBook(bids=bids, asks=asks)
 
 
@@ -258,17 +274,30 @@ def book_to_order_depth(book: BotBook) -> OrderDepth:
 
 # Trade generation
 
-def sample_trade_counts(product: str, calib: dict, rng: random.Random) -> List[int]:
-    """Per-tick Bernoulli with a tiny second-trade bump."""
+def sample_trade_counts(product: str, calib: dict, rng: random.Random,
+                        tick_count: Optional[int] = None) -> List[int]:
+    """Per-tick Bernoulli with a tiny second-trade bump.
+
+    When `tick_count` is given we only generate that many entries. Combined with
+    the matching change in simulate_latent_fair this avoids two 10 KiB list
+    allocations per (day, product) on shortened benchmark fixtures.
+    """
     pc = calib[product]
     base = pc["trade_active_prob"]
     second = pc["second_trade_prob"]
-    counts = [0] * TICKS_PER_DAY
-    for i in range(TICKS_PER_DAY):
-        if rng.random() < base:
-            counts[i] = 1
-            if second > 0 and rng.random() < second:
-                counts[i] += 1
+    length = TICKS_PER_DAY if tick_count is None else max(1, int(tick_count))
+    counts = [0] * length
+    rand = rng.random
+    if second > 0:
+        for i in range(length):
+            if rand() < base:
+                counts[i] = 1
+                if rand() < second:
+                    counts[i] += 1
+    else:
+        for i in range(length):
+            if rand() < base:
+                counts[i] = 1
     return counts
 
 

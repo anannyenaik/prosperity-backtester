@@ -139,22 +139,37 @@ Profile replay slowdown by day:
 python analysis/profile_replay.py strategies/trader.py --compare-trader strategies/starter.py --data-dir data/round1 --fill-mode empirical_baseline
 ```
 
-Measured on 2026-04-21 with the current `strategies/trader.py`:
+Measured on 2026-04-22 with the current `strategies/trader.py`, post hot-path
+optimisation pass (see `docs/PERFORMANCE.md` for the optimisation list):
 
-- default day-0 replay: about `2.41s`
-- default day-0 compare: about `2.57s`
-- fast pack: about `5.93s`
-- validation pack: about `20.36s`
+- default day-0 replay: about `2.28s`
+- default day-0 compare: about `2.24s`
+- fast pack: about `4.65s`
+- validation pack: about `15.59s`
 
 Measured with `analysis/benchmark_runtime.py` on the tracked `250`-tick Monte Carlo fixture:
 
-- default light Monte Carlo: about `3.32s` on `1` worker, `2.19s` on `4` workers
-- heavy light Monte Carlo: about `7.20s` on `1` worker, `3.50s` on `4` workers
-- versus the current classic backend fallback, default light Monte Carlo is about `5.7%` faster at `100/10` sessions on `1` worker and about `6.4%` faster on `2` workers
-- versus classic, heavy light Monte Carlo is about `10.9%` faster at `192/16` sessions on `1` worker
-- a heavier `512/32` light run measures about `20.64s` on streaming vs `21.95s` on classic for `1` worker, and about `10.99s` vs `11.25s` on `4` workers
+| Case | 1 worker | 2 workers | 4 workers | Sessions/s (1w → 4w) |
+| --- | ---: | ---: | ---: | ---: |
+| MC quick light (64 sess) | `1.50s` | `1.47s` | `1.29s` | 42.7 → 49.4 |
+| MC default light (100 sess) | `2.05s` | `1.99s` | `1.66s` | 48.8 → 60.1 |
+| MC heavy light (192 sess) | `3.67s` | — | `2.72s` | 52.4 → 70.6 |
+| MC ceiling light (256 sess) | — | — | `3.32s` | — → 77.1 |
 
-The main gain comes from the default streaming Monte Carlo backend, which avoids building full replay artefacts for unsampled sessions while still preserving exact all-session final distribution metrics and all-session path bands.
+These numbers reflect a hot-path optimisation pass that landed an identity
+fast-path on `_scaled_snapshot`, an early return for tick-empty
+`_execute_order_batch` calls, a `bisect`-backed empirical sampler, a no-`asdict`
+`TradePrint` copy on aggressive-only ticks, and a no-`Bot 3` fast-path inside
+`make_book`. Versus the previous public main, default light Monte Carlo is
+`~38%` faster on `1` worker (`3.32s → 2.05s`), and heavy light Monte Carlo is
+`~49%` faster on `1` worker (`7.20s → 3.67s`). All wins were validated by
+running the full `analysis/benchmark_runtime.py` harness.
+
+The default streaming Monte Carlo backend remains the recommended choice. It
+avoids building full replay artefacts for unsampled sessions while still
+computing exact all-session distribution metrics and path bands. The compiled
+`rust` backend stays available for explicit `≥6` worker runs where its Rayon
+parallelism amortises per-tick IPC overhead, and is never auto-selected.
 
 Forensic work is still deliberate full-profile work and should be treated as a minute-scale task rather than part of the normal branch loop.
 
