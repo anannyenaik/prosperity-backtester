@@ -51,6 +51,7 @@ export interface ProvenanceInfo {
 export interface OutputProfileInfo {
   profile?: string
   max_series_rows_per_product?: number
+  max_sample_preview_rows_per_series?: number
   include_orders?: boolean
   write_series_csvs?: boolean
   write_sample_path_files?: boolean
@@ -361,12 +362,24 @@ export interface SampleRun {
   runName: string
   summary: Summary
   inventorySeries: InventoryRow[]
+  inventorySeriesPreviewTruncated?: boolean
+  inventorySeriesTotalCount?: number
   pnlSeries: PnlRow[]
+  pnlSeriesPreviewTruncated?: boolean
+  pnlSeriesTotalCount?: number
   fills: FillRow[]
+  fillsPreviewTruncated?: boolean
+  fillsTotalCount?: number
   orderIntent?: OrderIntentRow[]
+  orderIntentPreviewTruncated?: boolean
+  orderIntentTotalCount?: number
   fairValueSeries: FairValueRow[]
+  fairValueSeriesPreviewTruncated?: boolean
+  fairValueSeriesTotalCount?: number
   behaviour: BehaviourData
   behaviourSeries: BehaviourRow[]
+  behaviourSeriesPreviewTruncated?: boolean
+  behaviourSeriesTotalCount?: number
 }
 
 export interface MonteCarloData {

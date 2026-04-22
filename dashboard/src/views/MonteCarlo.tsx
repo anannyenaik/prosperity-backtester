@@ -69,6 +69,9 @@ export function MonteCarlo() {
   const samplePnlData = selectedSample
     ? buildPnlData(selectedSample.pnlSeries ?? [], product)
     : []
+  const samplePreviewNote = selectedSample && selectedSample.pnlSeriesPreviewTruncated
+    ? `Preview rows retained in dashboard.json: ${fmtInt(selectedSample.pnlSeries.length)} of ${fmtInt(selectedSample.pnlSeriesTotalCount)} PnL points.`
+    : null
 
   // Worst / best table
   const sortedSessions = [...sessions].sort((a, b) => a.final_pnl - b.final_pnl)
@@ -164,6 +167,11 @@ export function MonteCarlo() {
       >
         {selectedSample ? (
           <div className="space-y-4">
+            {samplePreviewNote && (
+              <div className="rounded-lg border border-warn/25 bg-warn/10 px-3 py-2 text-xs text-warn">
+                {samplePreviewNote}
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-lg bg-surface-2 border border-border px-3 py-2.5">
                 <div className="text-muted text-xs uppercase tracking-wide mb-1">PnL</div>

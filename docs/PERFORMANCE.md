@@ -54,17 +54,17 @@ Tracked Monte Carlo timings:
 
 | Case | 1 worker | 2 workers | 4 workers | 8 workers | Peak RSS at widest case |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| quick light `64/8` | `1.576s` | `1.515s` | `1.287s` | `1.343s` | `364.5 MB` |
-| default light `100/10` | `2.204s` | `1.798s` | `1.495s` | `1.513s` | `381.7 MB` |
-| heavy light `192/16` | `3.977s` | `n/a` | `n/a` | `1.989s` | `413.7 MB` |
-| ceiling light `768/24` | `n/a` | `n/a` | `n/a` | `4.364s` | `602.9 MB` |
+| quick light `64/8` | `1.389s` | `1.147s` | `1.089s` | `1.091s` | `342.6 MB` |
+| default light `100/10` | `1.969s` | `1.576s` | `1.198s` | `1.180s` | `351.4 MB` |
+| heavy light `192/16` | `3.474s` | `n/a` | `n/a` | `1.527s` | `368.2 MB` |
+| ceiling light `768/24` | `n/a` | `n/a` | `n/a` | `3.313s` | `402.7 MB` |
 
 Practical loop timings from the same report:
 
-- replay day 0 light: `2.314s`
-- compare day 0 light: `2.404s`
-- fast pack: `5.298s`
-- validation pack: `17.902s`
+- replay day 0 light: `2.264s`
+- compare day 0 light: `2.220s`
+- fast pack: `5.067s`
+- validation pack: `16.240s`
 
 Those replay and pack paths were not the target of this pass. Treat the Monte
 Carlo win as the confirmed result, not a claim that every workflow improved.
@@ -76,78 +76,93 @@ fixture.
 
 | Case | Streaming | Classic | Rust |
 | --- | ---: | ---: | ---: |
-| default light `100/10`, 1 worker | `2.204s` | `2.675s` | `3.498s` |
-| default light `100/10`, 8 workers | `1.513s` | `1.652s` | `2.129s` |
-| heavy light `192/16`, 1 worker | `3.977s` | `5.408s` | `5.772s` |
-| heavy light `192/16`, 8 workers | `1.989s` | `2.225s` | `3.119s` |
-| ceiling light `768/24`, 8 workers | `4.364s` | `7.278s` | `7.426s` |
+| default light `100/10`, 1 worker | `1.969s` | `2.459s` | `3.366s` |
+| default light `100/10`, 8 workers | `1.180s` | `1.609s` | `1.913s` |
+| heavy light `192/16`, 1 worker | `3.474s` | `4.936s` | `5.661s` |
+| heavy light `192/16`, 8 workers | `1.527s` | `2.019s` | `2.895s` |
+| ceiling light `768/24`, 8 workers | `3.313s` | `4.627s` | `5.054s` |
 
-The ceiling row comes from direct same-machine commands at current HEAD for
-classic and rust, because the backend comparison harness run used a reduced
-ceiling session count for speed.
+Classic now has a small RSS edge on the widest ceiling row, and Rust still
+keeps the smallest retained bundle footprint on some rows, but neither backend
+beats `streaming` on the practical runtime cells.
+
+## Realistic trader proof
+
+The no-op benchmark is not the whole story, so the current pass also reran
+same-code backend checks with repo-tested traders:
+
+- `examples/trader_round1_v9.py`, default `100/10`, `8` workers: `streaming 1.380s`, `classic 1.399s`, `rust 1.895s`
+- `examples/trader_round1_v9.py`, heavy `192/16`, `8` workers: `streaming 1.877s`, `classic 2.106s`, `rust 2.423s`
+- `strategies/trader.py`, default `100/10`, `8` workers: `streaming 1.280s`, `classic 1.313s`, `rust 1.737s`
+- `strategies/trader.py`, heavy `192/16`, `8` workers: `streaming 1.652s`, `classic 1.663s`, `rust 3.385s`
+
+The only meaningful exception was the lightest `trader_round1_v9.py` default
+`100/10`, `1` worker cell, where `classic` was faster by `13 ms`. That is too
+small to justify changing the default backend.
 
 ## Bottleneck diagnosis
 
-Before the change, the main residual bottleneck was the reporting path, not the
-engine. A focused `cProfile` run on the tracked `mc_default_light_w1` case
-showed:
+After the earlier all-session path-band merge pass, the main residual
+bottleneck was no longer path-band reconstruction. The remaining avoidable cost
+was light-mode sampled-run preview retention plus Python-list-heavy
+all-session accumulator state.
 
-- `reports.build_dashboard_payload`: about `1.803s` cumulative
-- `reports._aggregate_mc_path_bands`: about `1.675s` cumulative
+On the pre-change `mc_ceiling_light_w8` light bundle:
 
-That meant unsampled Monte Carlo sessions were paying too much to rebuild
-all-session path bands after execution had already finished.
+- `dashboard.json` alone was about `33.66 MB`
+- sampled `sampleRuns` inside that payload accounted for about `31.08 MB`
+- peak process-tree RSS was about `632.2 MB`
 
-After the change, the same family of cases shows a very different shape:
+After the change, the tracked phase profile looks much healthier:
 
-- `mc_default_light_w1`: reporting `0.362s`, dashboard build `0.044s`
-- `mc_default_light_w8`: reporting `0.359s`, dashboard build `0.018s`
-- `mc_heavy_light_w8`: reporting `0.564s`, dashboard build `0.018s`
+- `mc_default_light_w1`: reporting `0.216s`, dashboard build `0.007s`, bundle write `0.168s`
+- `mc_default_light_w8`: reporting `0.217s`, dashboard build `0.006s`, bundle write `0.154s`
+- `mc_heavy_light_w8`: reporting `0.301s`, dashboard build `0.010s`, bundle write `0.219s`
+- `mc_ceiling_light_w8`: reporting `0.517s`, dashboard build `0.018s`, bundle write `0.385s`
 
-The reporting tail is now mostly bundle write and summary assembly rather than
-path-band reconstruction.
+Dashboard build is no longer the dominant tail. Write-path cost and retained
+output size are now the main remaining storage-performance frontier.
 
 ## What changed
 
 The high-EV change was narrow and deliberate:
 
-1. All-session Monte Carlo path-band rows are now accumulated during execution,
-   merged across workers, and finalised once.
-2. When a bundle is being written, unsampled sessions can drop their raw
-   `path_metrics` rows after contributing to the merged accumulator.
-3. Provenance capture is timed separately from dashboard build, so the phase
-   chart now tells the truth about where the time went.
-4. The runtime benchmark harness now records peak process RSS, peak process-tree
-   RSS, child-process count, startup or scheduling overhead, provenance timing,
-   and optional cold-vs-warm timing.
+1. Light-mode Monte Carlo sampled runs are now explicit previews, capped per
+   retained series and annotated with truncation and total-count metadata.
+2. The all-session path-band accumulator now stores merged bucket values in
+   `array('d')` and keeps envelopes as scalar min or max state instead of
+   growing Python float lists.
+3. The dashboard surfaces now expose the sampled-run preview policy so the
+   storage trade-off is visible rather than implicit.
 
 ## What it bought
 
-Confirmed gains against the pre-change benchmark report:
+Confirmed gains against the immediately previous benchmark report:
 
-- `mc_default_light_w8`: `1.720s -> 1.513s` (`-12.0%`)
-- `mc_heavy_light_w8`: `2.575s -> 1.989s` (`-22.8%`)
-- `mc_ceiling_light_w8`: `8.998s -> 4.364s` (`-51.5%`)
-- `mc_default_full_w1`: `3.008s -> 2.785s` (`-7.4%`)
-- `mc_default_full_trimmed_w1`: `2.529s -> 2.369s` (`-6.3%`)
+- `mc_light` bundle size: `3.91 MB -> 1.95 MB` (`-50.2%`)
+- `mc_default_light_w8`: `1.513s -> 1.180s` (`-22.0%`), RSS `381.7 MB -> 351.4 MB` (`-8.0%`), output `-63.0%`
+- `mc_heavy_light_w8`: `1.989s -> 1.527s` (`-23.2%`), RSS `413.7 MB -> 368.2 MB` (`-11.0%`), output `-64.5%`
+- `mc_ceiling_light_w8`: `4.364s -> 3.313s` (`-24.1%`), RSS `602.9 MB -> 402.7 MB` (`-33.2%`), output `-63.6%`
 
-This is the key result of the pass. The repo now spends far less time turning
-Monte Carlo outputs into dashboard bundles, especially at higher worker counts.
+This is the key result of the pass. The repo now spends much less memory and
+retains much less output on the tracked light Monte Carlo path without giving
+back the runtime lead.
 
 ## What still limits the next frontier
 
 The next hard frontier is no longer dashboard assembly. On the tracked fixture,
 the remaining shared tail is mostly:
 
-- worker startup and scheduling overhead, about `0.38s` to `0.53s` on the 8-worker cases
-- bundle write time, about `0.41s` to `0.80s`
-- aggregate summary and compaction work around sampled sessions
+- worker startup and scheduling overhead, about `0.33s` to `0.40s` on the 8-worker cases
+- bundle write time, about `0.15s` to `0.38s`
+- retained-output size versus Chris Roberts on the shared no-op reference cases
+- ceiling-case RSS, where `classic` is still slightly lighter than `streaming`
 
 Cold-vs-warm skew is small on the tracked default streaming case:
 
-- cold `mc_default_light_w8`: `1.514s`
-- warm repeat: `1.490s`
+- cold `mc_default_light_w8`: `1.376s`
+- warm repeat: `1.278s`
 
 So the remaining ceiling work should focus on startup, scheduling, write-path
-and memory churn rather than chasing a cache artefact that is not materially
-moving the result.
+and retained-output footprint rather than chasing a cache artefact that is not
+materially moving the result.

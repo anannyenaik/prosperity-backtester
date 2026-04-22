@@ -38,7 +38,7 @@ tests/                    Backend and dashboard adapter checks
 
 Generated research bundles are written to `backtests/` unless `--output-dir` is supplied. `backtests/`, local logs, virtual environments, caches and `dashboard/node_modules/` are ignored.
 
-Runs default to the lightweight output profile. Replay and compare also default to day `0` so the routine branch loop stays fast. Light bundles keep exact summaries and fills, event-aware compact chart paths, compact submitted quote intent and all-session Monte Carlo path bands while avoiding raw order dumps, duplicated series sidecars, sampled path files and child bundles. Use `--output-profile full` only for deep debugging. Full mode can now be trimmed deliberately with `--no-series-sidecars`, `--no-orders`, `--no-sample-path-files` and `--no-session-manifests`. See [docs/OUTPUTS.md](docs/OUTPUTS.md).
+Runs default to the lightweight output profile. Replay and compare also default to day `0` so the routine branch loop stays fast. Light bundles keep exact summaries and fills, event-aware compact chart paths, compact submitted quote intent, preview-capped sampled Monte Carlo runs and all-session Monte Carlo path bands while avoiding raw order dumps, duplicated series sidecars, sampled path files and child bundles. Use `--output-profile full` only for deep debugging. Full mode can now be trimmed deliberately with `--no-series-sidecars`, `--no-orders`, `--no-sample-path-files` and `--no-session-manifests`. See [docs/OUTPUTS.md](docs/OUTPUTS.md).
 
 ## Setup
 
@@ -141,26 +141,27 @@ python analysis/profile_replay.py strategies/trader.py --compare-trader strategi
 
 Measured on 2026-04-22 with `analysis/benchmark_runtime.py` on this machine:
 
-- default day-0 replay: about `2.31s`
-- default day-0 compare: about `2.40s`
-- fast pack: about `5.30s`
-- validation pack: about `17.90s`
+- default day-0 replay: about `2.26s`
+- default day-0 compare: about `2.22s`
+- fast pack: about `5.07s`
+- validation pack: about `16.24s`
 
 Measured on the tracked `250`-tick Monte Carlo fixture:
 
 | Case | 1 worker | 2 workers | 4 workers | 8 workers |
 | --- | ---: | ---: | ---: | ---: |
-| MC quick light (64 sess) | `1.576s` | `1.515s` | `1.287s` | `1.343s` |
-| MC default light (100 sess) | `2.204s` | `1.798s` | `1.495s` | `1.513s` |
-| MC heavy light (192 sess) | `3.977s` | `n/a` | `n/a` | `1.989s` |
-| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `4.364s` |
+| MC quick light (64 sess) | `1.389s` | `1.147s` | `1.089s` | `1.091s` |
+| MC default light (100 sess) | `1.969s` | `1.576s` | `1.198s` | `1.180s` |
+| MC heavy light (192 sess) | `3.474s` | `n/a` | `n/a` | `1.527s` |
+| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `3.313s` |
 
-The last real bottleneck was not the Monte Carlo engine. Profiling showed
-all-session path-band aggregation inside dashboard generation dominating the
-tail of unsampled Monte Carlo runs. That work now happens during execution and
-is merged once per worker, which cut the tracked `mc_ceiling_light_w8` case
-from `8.998s` to `4.364s` and pushed `dashboard_build_seconds` for
-`mc_default_light` down to `44 ms` at `1` worker and `18 ms` at `8` workers.
+After the earlier path-band merge pass, the remaining light-mode Monte Carlo
+cost was retained sampled-run preview data plus Python-list-heavy
+all-session path-band state. Explicit light-mode preview caps and a more
+compact accumulator cut the tracked `mc_ceiling_light_w8` case from
+`4.364s / 632.2 MB RSS / 36.96 MB` to `3.313s / 402.7 MB RSS / 13.45 MB`.
+On `mc_default_light_w8`, reporting is now about `217 ms`, with about
+`154 ms` of that in bundle writes.
 
 The default streaming Monte Carlo backend remains the recommended choice. It
 avoids building full replay artefacts for unsampled sessions while still
@@ -168,6 +169,11 @@ computing exact all-session distribution metrics and path bands. Use
 `--mc-backend classic` for parity checks. The compiled `rust` backend remains
 available for explicit backend experiments, but the tracked fixture still
 favours streaming through the measured `8`-worker cases.
+
+Realistic trader checks with `examples/trader_round1_v9.py` and
+`strategies/trader.py` still favour `streaming` in the meaningful
+multi-worker cells. The only near-tie was the lightest `live_v9`
+`100/10`, `1` worker case, where `classic` was faster by `13 ms`.
 
 Forensic work is still deliberate full-profile work and should be treated as a minute-scale task rather than part of the normal branch loop.
 
@@ -182,12 +188,13 @@ explicit parity fallback, and `rust` stays available as an explicit
 experimental backend rather than a recommendation. Chris Roberts' repo remains
 the strongest narrow tutorial-round Monte Carlo reference, but this repo is
 the stronger end-to-end research platform. On a same-machine shared no-op
-trader benchmark with matched `250`-tick sessions, matched `100/10`,
-`512/32`, and `1000/100` session or sample tiers, and matched `1`, `2`, `4`,
-and `8` worker settings, this repo was `4.3x` to `15.2x` faster end-to-end.
-Chris still kept the lighter RSS and smaller retained bundle footprint, so
-that result proves a runtime-throughput lead rather than an undisputed
-all-axis performance crown.
+trader benchmark with matched `250`-tick sessions, matched `100/10` and
+`1000/100` session or sample tiers, and matched `1`, `2`, `4`, and `8`
+worker settings, this repo was `4.3x` to `19.0x` faster end-to-end. On the
+smaller `100/10` cases it also used less RSS, but Chris still kept the
+lighter RSS on the `1000/100` ceiling cases and the smaller retained bundle
+footprint throughout. That proves a runtime-throughput lead rather than an
+undisputed all-axis performance crown.
 
 See [docs/REFERENCE_COMPARISON.md](docs/REFERENCE_COMPARISON.md) for the detailed comparison against the Chris Roberts and Nabayan Saha public repos.
 
@@ -349,7 +356,7 @@ Replay bundles:
 
 In light mode, `dashboard.json` is the canonical source for compact `inventorySeries`, `pnlSeries`, `fairValueSeries`, `behaviourSeries` and `orderIntent`. Full replay bundles also include full series CSV sidecars, `order_intent.csv` and raw `orders.csv`. Use `--series-sidecars` when you want chart-series CSVs without switching on every full-mode artefact.
 
-Monte Carlo light bundles add exact final distribution stats, all-session `pathBands` and sampled qualitative runs inside `dashboard.json`. The path-band quantiles are exact across all sessions at retained bucket endpoints; omitted ticks contribute min/max envelopes. Full Monte Carlo bundles also add:
+Monte Carlo light bundles add exact final distribution stats, all-session `pathBands` and sampled qualitative preview runs inside `dashboard.json`. The path-band quantiles are exact across all sessions at retained bucket endpoints; omitted ticks contribute min/max envelopes. Full Monte Carlo bundles also add:
 
 - `sample_paths/`
 - `sessions/`
@@ -412,6 +419,7 @@ Every `manifest.json` also records:
 - `round2_maf_sensitivity.csv`: access value before and after tested MAF levels.
 - Monte Carlo `mean`, `p50`, `p05` and expected shortfall: average, typical, downside and tail-risk evidence.
 - Monte Carlo `pathBands`: all-session analysis fair, mid, inventory and PnL quantiles for path diagnostics. Sampled runs remain examples, not the source of the bands.
+- Monte Carlo sample-run `*PreviewTruncated` and `*TotalCount` fields: show when light mode retained only a preview of the sampled run rather than every row.
 
 ## New Round Handoff
 
@@ -444,6 +452,7 @@ Common fields:
 - `write_session_manifests`: write one Monte Carlo manifest per saved session.
 - `max_series_rows_per_product`: light-mode compact path budget. `0` keeps every row.
 - `max_mc_path_rows_per_product`: Monte Carlo path-band bucket budget. `0` keeps every timestamp.
+- `max_sample_preview_rows_per_series`: light-mode sampled-run preview budget per Monte Carlo series. `0` keeps every saved row.
 - `pretty_json`: write indented JSON for debugging.
 - `compact_json`: force compact JSON.
 
@@ -507,6 +516,7 @@ npm test --prefix dashboard
 npm run build --prefix dashboard
 python analysis/profile_replay.py strategies/trader.py --compare-trader strategies/starter.py --data-dir data/round1 --fill-mode empirical_baseline
 python analysis/benchmark_outputs.py --output-dir backtests/repo_output_benchmark
+python analysis/benchmark_runtime.py --output-dir backtests/runtime_benchmark --workers 1 2 4 8
 ```
 
 With `uv`:

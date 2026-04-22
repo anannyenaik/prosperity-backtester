@@ -115,6 +115,7 @@ export function Overview() {
           <KVGrid
             cols={2}
             pairs={[
+              { label: 'MC sample preview rows', value: meta.outputProfile.max_sample_preview_rows_per_series ?? 'legacy' },
               { label: 'Orders', value: formatBool(meta.outputProfile.include_orders) },
               { label: 'Series sidecars', value: formatBool(meta.outputProfile.write_series_csvs) },
               { label: 'Sample path files', value: formatBool(meta.outputProfile.write_sample_path_files) },

@@ -62,7 +62,7 @@ Measured on 2026-04-22 with the default storage benchmark fixture:
 | --- | ---: | ---: | --- |
 | `replay_light` | `1.36 MB` | `6` | Exact replay summary, fills and compact paths remain small enough for daily review. |
 | `replay_full` | `1.99 MB` | `12` | Full replay adds raw orders and chart sidecars without exploding bundle size. |
-| `mc_light` | `3.91 MB` | `6` | Light Monte Carlo keeps exact all-session summary stats and path bands without duplicate sample files. |
+| `mc_light` | `1.95 MB` | `6` | Light Monte Carlo keeps exact all-session summary stats and path bands while preview-capping sampled qualitative runs in `dashboard.json`. |
 | `mc_full` | `7.51 MB` | `18` | Full Monte Carlo roughly doubles size because sample-path files and session manifests are written explicitly. |
 
 ## Current runtime results
@@ -79,14 +79,14 @@ Representative current results:
 
 | Case | Current | Peak RSS | Notes |
 | --- | ---: | ---: | --- |
-| `replay_day0_light` | `2.314s` | `195.3 MB` | practical replay loop |
-| `compare_day0_light` | `2.404s` | `178.9 MB` | practical compare loop |
-| `pack_fast` | `5.298s` | `380.3 MB` | fast research pack |
-| `pack_validation` | `17.902s` | `654.4 MB` | validation pack |
-| `mc_quick_light_w8` | `1.343s` | `364.5 MB` | quickest 8-worker MC loop |
-| `mc_default_light_w8` | `1.513s` | `381.7 MB` | recommended default MC loop |
-| `mc_heavy_light_w8` | `1.989s` | `413.7 MB` | heavier validation MC |
-| `mc_ceiling_light_w8` | `4.364s` | `602.9 MB` | higher-scale ceiling case |
+| `replay_day0_light` | `2.264s` | `167.8 MB` | practical replay loop |
+| `compare_day0_light` | `2.220s` | `175.8 MB` | practical compare loop |
+| `pack_fast` | `5.067s` | `382.9 MB` | fast research pack |
+| `pack_validation` | `16.240s` | `651.2 MB` | validation pack |
+| `mc_quick_light_w8` | `1.091s` | `342.6 MB` | quickest 8-worker MC loop |
+| `mc_default_light_w8` | `1.180s` | `351.4 MB` | recommended default MC loop |
+| `mc_heavy_light_w8` | `1.527s` | `368.2 MB` | heavier validation MC |
+| `mc_ceiling_light_w8` | `3.313s` | `402.7 MB` | higher-scale ceiling case |
 
 ## Phase timing examples
 
@@ -96,23 +96,24 @@ provenance and startup or scheduling components.
 Tracked examples:
 
 - `mc_default_light_w1`
-  - reporting `0.362s`
-  - wall `1.442s`
-  - startup or scheduling `0.400s`
-  - provenance `0.112s`
+  - reporting `0.216s`
+  - wall `1.412s`
+  - startup or scheduling `0.341s`
+  - provenance `0.109s`
 - `mc_default_light_w8`
-  - reporting `0.359s`
-  - wall `0.776s`
-  - startup or scheduling `0.378s`
-  - provenance `0.107s`
+  - reporting `0.217s`
+  - wall `0.632s`
+  - startup or scheduling `0.332s`
+  - provenance `0.103s`
 - `mc_heavy_light_w8`
-  - reporting `0.564s`
-  - wall `1.019s`
-  - startup or scheduling `0.406s`
-  - provenance `0.111s`
+  - reporting `0.301s`
+  - wall `0.889s`
+  - startup or scheduling `0.337s`
+  - provenance `0.104s`
 
-This matters because the previous bottleneck was dashboard-side path-band
-aggregation. The current report shows that bottleneck is now largely gone.
+This matters because dashboard build itself is now only `6` to `18 ms` in the
+tracked cases. The remaining reporting tail is mostly bundle write work and
+sample preview compaction, not path-band reconstruction.
 
 ## Same-code backend comparison
 
@@ -120,21 +121,37 @@ Measured on current HEAD:
 
 | Case | Streaming | Classic | Rust |
 | --- | ---: | ---: | ---: |
-| default light `100/10`, 1 worker | `2.204s` | `2.675s` | `3.498s` |
-| default light `100/10`, 8 workers | `1.513s` | `1.652s` | `2.129s` |
-| heavy light `192/16`, 1 worker | `3.977s` | `5.408s` | `5.772s` |
-| heavy light `192/16`, 8 workers | `1.989s` | `2.225s` | `3.119s` |
-| ceiling light `768/24`, 8 workers | `4.364s` | `7.278s` | `7.426s` |
+| default light `100/10`, 1 worker | `1.969s` | `2.459s` | `3.366s` |
+| default light `100/10`, 8 workers | `1.180s` | `1.609s` | `1.913s` |
+| heavy light `192/16`, 1 worker | `3.474s` | `4.936s` | `5.661s` |
+| heavy light `192/16`, 8 workers | `1.527s` | `2.019s` | `2.895s` |
+| ceiling light `768/24`, 8 workers | `3.313s` | `4.627s` | `5.054s` |
 
 On the tracked fixture, `streaming` is the winner through the measured
 8-worker cases.
+
+## Realistic trader proof
+
+Same-code backend checks with repo-tested realistic traders still favour
+`streaming` where the practical research loop matters:
+
+| Trader and case | Streaming | Classic | Rust |
+| --- | ---: | ---: | ---: |
+| `trader_round1_v9`, default `100/10`, 8 workers | `1.380s` | `1.399s` | `1.895s` |
+| `trader_round1_v9`, heavy `192/16`, 8 workers | `1.877s` | `2.106s` | `2.423s` |
+| `strategies/trader.py`, default `100/10`, 8 workers | `1.280s` | `1.313s` | `1.737s` |
+| `strategies/trader.py`, heavy `192/16`, 8 workers | `1.652s` | `1.663s` | `3.385s` |
+
+The only near-tie on the lighter one-thread cases was `trader_round1_v9`
+default `100/10`, where `classic` was faster by `13 ms`. Rust stayed slower in
+the meaningful multi-worker cells, even when it kept the lowest RSS.
 
 ## Cold and warm note
 
 The tracked default streaming case has a small warm-run effect:
 
-- cold `mc_default_light_w8`: `1.514s`
-- warm repeat: `1.490s`
+- cold `mc_default_light_w8`: `1.376s`
+- warm repeat: `1.278s`
 
 That is worth recording, but it is not large enough to explain the headline
 improvement. The change is real.
@@ -148,14 +165,14 @@ The cleanest shared-fixture pass on 2026-04-22 used:
 
 - the same no-op trader file in both repos
 - matched `250` ticks per session
-- matched `100/10`, `512/32`, and `1000/100` session or sample tiers
+- matched `100/10` and `1000/100` session or sample tiers
 - matched `1`, `2`, `4`, and `8` worker settings
+- one warm-up run per repo before the measured pass
 
 Warm same-machine runtime results favoured this repo in every measured cell:
 
-- default `100/10`: about `4.3x` to `13.9x` faster
-- heavy `512/32`: about `8.8x` to `15.2x` faster
-- ceiling `1000/100`: about `8.7x` to `13.3x` faster
+- default `100/10`: about `4.3x` to `19.0x` faster
+- ceiling `1000/100`: about `10.6x` to `13.1x` faster
 
 That shared-fixture pass used Chris's public `prosperity3bt mc` entrypoint with
 `--ticks-per-day 250` and `--tomato-support quarter`, because the headline
@@ -164,8 +181,8 @@ same-machine normalisation.
 
 The result is still not an undisputed all-axis performance crown:
 
-- Chris kept the lighter RSS footprint in the heavier and ceiling cases
-- Chris also kept the smaller retained output footprint
+- this repo used less RSS on the smaller default `100/10` cases, but Chris kept the lighter RSS footprint on `1000/100`
+- Chris also kept the smaller retained output footprint, by about `1.9x` on the rerun
 - Chris's native public default still means tutorial-round `10000`-tick sessions
 
 So the honest claim is a strong shared-fixture runtime-throughput lead, not a

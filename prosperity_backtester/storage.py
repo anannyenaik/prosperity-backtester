@@ -16,6 +16,7 @@ _AUTO_RUN_DIR = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_.+")
 class OutputOptions:
     profile: str = "light"
     max_series_rows_per_product: int = 1_000
+    max_sample_preview_rows_per_series: int = 120
     include_orders: bool = False
     write_series_csvs: bool = False
     write_sample_path_files: bool = False
@@ -38,6 +39,7 @@ class OutputOptions:
             return cls(
                 profile="full",
                 max_series_rows_per_product=0,
+                max_sample_preview_rows_per_series=0,
                 include_orders=True,
                 write_series_csvs=True,
                 write_sample_path_files=True,
@@ -53,6 +55,8 @@ class OutputOptions:
         options = cls.from_profile(str(config.get("output_profile", "light")))
         if "max_series_rows_per_product" in config:
             options = _replace(options, max_series_rows_per_product=max(0, int(config["max_series_rows_per_product"])))
+        if "max_sample_preview_rows_per_series" in config:
+            options = _replace(options, max_sample_preview_rows_per_series=max(0, int(config["max_sample_preview_rows_per_series"])))
         if "include_orders" in config:
             options = _replace(options, include_orders=bool(config["include_orders"]))
         if "write_series_csvs" in config:
@@ -79,6 +83,7 @@ class OutputOptions:
         return {
             "profile": self.profile,
             "max_series_rows_per_product": self.max_series_rows_per_product,
+            "max_sample_preview_rows_per_series": self.max_sample_preview_rows_per_series,
             "include_orders": self.include_orders,
             "write_series_csvs": self.write_series_csvs,
             "write_sample_path_files": self.write_sample_path_files,

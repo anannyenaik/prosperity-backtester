@@ -197,6 +197,133 @@ def _mc_dashboard(results: list[SessionArtefacts]) -> dict[str, object]:
     )
 
 
+def test_monte_carlo_sample_runs_are_explicit_preview_caps_in_light_mode():
+    options = OutputOptions.from_profile("light")
+    per_product = {
+        product: {
+            "final_mtm": float(product_idx),
+            "final_position": 0,
+        }
+        for product_idx, product in enumerate(PRODUCTS)
+    }
+    rows_per_product = 180
+    inventory_rows = []
+    pnl_rows = []
+    fair_rows = []
+    fill_rows = []
+    behaviour_rows = []
+    for product_idx, product in enumerate(PRODUCTS):
+        for idx in range(rows_per_product):
+            timestamp = idx * 100
+            inventory_rows.append({
+                "day": 0,
+                "timestamp": timestamp,
+                "product": product,
+                "position": idx,
+                "avg_entry_price": 10_000 + product_idx,
+                "mid": 10_000 + product_idx,
+                "fair": 10_000 + product_idx,
+            })
+            pnl_rows.append({
+                "day": 0,
+                "timestamp": timestamp,
+                "product": product,
+                "cash": float(idx),
+                "realised": float(idx),
+                "unrealised": float(idx) / 2,
+                "mtm": float(idx),
+                "mark": 10_000 + product_idx,
+                "mid": 10_000 + product_idx,
+                "fair": 10_000 + product_idx,
+                "spread": 2.0,
+                "position": idx,
+            })
+            fair_rows.append({
+                "day": 0,
+                "timestamp": timestamp,
+                "product": product,
+                "analysis_fair": 10_000 + product_idx,
+                "mid": 10_000 + product_idx,
+            })
+            fill_rows.append({
+                "day": 0,
+                "timestamp": timestamp,
+                "product": product,
+                "side": "buy" if idx % 2 == 0 else "sell",
+                "price": 10_000 + product_idx,
+                "quantity": 1,
+                "kind": "aggressive_visible",
+                "exact": True,
+                "source_trade_price": 10_000 + product_idx,
+                "mid": 10_000 + product_idx,
+                "reference_fair": 10_000 + product_idx,
+                "best_bid": 9_999 + product_idx,
+                "best_ask": 10_001 + product_idx,
+                "markout_1": 0.0,
+                "markout_5": 0.0,
+                "analysis_fair": 10_000 + product_idx,
+                "signed_edge_to_analysis_fair": 0.0,
+            })
+            behaviour_rows.append({
+                "day": 0,
+                "timestamp": timestamp,
+                "product": product,
+                "order_count": 1,
+                "fill_count": 1,
+                "net_fill_qty": 1,
+                "aggressive_fill_count": 1,
+                "passive_fill_count": 0,
+                "abs_position_ratio": 0.1,
+                "buy_order_qty": 1,
+                "sell_order_qty": 0,
+                "buy_fill_qty": 1,
+                "sell_fill_qty": 0,
+            })
+    result = SessionArtefacts(
+        run_name="mc_session_preview",
+        trader_name="starter",
+        mode="monte_carlo",
+        fill_model={"name": "base"},
+        perturbations={},
+        summary={
+                "final_pnl": 1.0,
+                "gross_pnl_before_maf": 1.0,
+                "maf_cost": 0.0,
+                "fill_count": len(fill_rows),
+                "order_count": 0,
+                "limit_breaches": 0,
+                "max_drawdown": 0.0,
+                "per_product": per_product,
+        },
+        session_rows=[{"day": 0}],
+        inventory_series=inventory_rows,
+        pnl_series=pnl_rows,
+        fair_value_series=fair_rows,
+        fills=fill_rows,
+        orders=[],
+        behaviour={"summary": {}, "per_product": {}, "series": behaviour_rows},
+        behaviour_series=behaviour_rows,
+    )
+    dashboard = build_dashboard_payload(
+        run_type="monte_carlo",
+        run_name="mc",
+        trader_name="starter",
+        mode="monte_carlo",
+        fill_model={"name": "base"},
+        perturbations={},
+        monte_carlo_results=[result],
+        output_options=options,
+    )
+
+    sample = dashboard["monteCarlo"]["sampleRuns"][0]
+    assert sample["pnlSeriesPreviewTruncated"] is True
+    assert sample["pnlSeriesTotalCount"] == len(pnl_rows)
+    assert len(sample["pnlSeries"]) == options.max_sample_preview_rows_per_series
+    assert sample["fairValueSeriesPreviewTruncated"] is True
+    assert sample["fillsPreviewTruncated"] is True
+    assert sample["behaviourSeriesPreviewTruncated"] is True
+
+
 def test_monte_carlo_summary_and_path_bands_ignore_sample_count():
     sample_0 = _mc_dashboard([_fake_mc_session(idx, sampled=False) for idx in range(3)])
     sample_2 = _mc_dashboard([_fake_mc_session(idx, sampled=idx < 2) for idx in range(3)])

@@ -25,7 +25,7 @@ What was still missing before this pass was:
 
 - cleaner benchmark proof
 - a tighter performance story
-- removal of one real residual bottleneck in Monte Carlo reporting
+- tighter light-mode memory and retained-output discipline
 
 The reference audit did not justify a broad architectural rewrite.
 
@@ -59,15 +59,18 @@ What was mostly noise for this roadmap:
 - any claim that a Rust subprocess design should automatically become this
   repo's default architecture
 
-Same-machine note, recorded after the one-time Cargo build:
+Fresh same-machine shared-fixture note, recorded after a one-time Cargo warm-up:
 
-- `prosperity4mcbt example_trader.py --quick`: about `15.974s`
-- `prosperity4mcbt example_trader.py --heavy`: about `148.707s`
+- shared no-op trader in both repos
+- matched `250` ticks per simulated day
+- matched `100/10` and `1000/100` session or sample tiers
+- matched `1`, `2`, `4`, and `8` worker or thread counts
+- this repo measured `4.3x` to `19.0x` faster end-to-end
 
-That note is useful context, but it is not an apples-to-apples comparison with
-this repo's Round 1 benchmark fixture. Chris's repo uses tutorial-round
-products, `10000` ticks per day and a different output contract, so it does not
-change the roadmap by itself.
+That note is useful context, but it is still not apples-to-apples semantic
+parity. Chris's repo uses tutorial-round products and a different output
+contract, so the comparison is a runtime and footprint reference note rather
+than proof that both systems model the same market.
 
 ## Versus Nabayan Saha
 
@@ -138,13 +141,15 @@ Current honest status after this pass:
 
 - overall public-platform lead: yes
 - same-machine shared-benchmark runtime lead over Chris Roberts: yes
-- memory and retained-output efficiency lead over Chris Roberts: no
+- RSS lead over Chris Roberts: mixed
+- retained-output efficiency lead over Chris Roberts: no
 - undisputed all-axis performance crown across public repos: not yet proven
 
 The remaining proof gap is no longer a shared-fixture runtime check. A strict
 same-machine no-op trader pass now shows this repo ahead on runtime through the
 measured `1`, `2`, `4`, and `8` worker cases. What is still missing for an
-undisputed public performance crown is lower RSS and a lighter retained-output
-footprint on the heavier cases. Until that improves, this repo can honestly
-claim the best overall platform and a strong measured runtime-throughput lead,
-but not a blanket win across every performance dimension.
+undisputed public performance crown is lower retained-output footprint and
+lower ceiling-case RSS on the heavier shared-fixture runs. Until that improves,
+this repo can honestly claim the best overall platform and a strong measured
+runtime-throughput lead, but not a blanket win across every performance
+dimension.

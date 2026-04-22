@@ -24,7 +24,7 @@ Light keeps compactly:
 
 - `inventorySeries`, `pnlSeries`, `fairValueSeries` and `behaviourSeries` in `dashboard.json`
 - `orderIntent` in `dashboard.json`
-- Monte Carlo sampled runs in `dashboard.json`
+- Monte Carlo sampled-run previews in `dashboard.json`
 - Monte Carlo all-session path bands in `dashboard.json`
 
 Light omits by default:
@@ -73,7 +73,14 @@ Monte Carlo path bands are computed from every session, not from `sample_session
 
 The dashboard stores exact quantiles across sessions at retained bucket endpoints. If a path is bucketed, omitted ticks contribute exact per-session min/max envelopes before the cross-session envelope is written. This means the time axis may be approximate in light mode, but the shown endpoint quantiles and retained envelopes are computed from all sessions.
 
-Sampled runs remain qualitative examples for inspecting individual paths. They are not used as the population for path bands.
+Sampled runs remain qualitative examples for inspecting individual paths. They
+are not used as the population for path bands.
+
+In light mode, sampled-run series inside `dashboard.json` are preview-capped.
+Each retained sample run records `*PreviewTruncated` and `*TotalCount` fields
+so the dashboard can say when a chart is showing a qualitative preview rather
+than every saved row. Full mode leaves these previews uncapped unless you set
+`max_sample_preview_rows_per_series` explicitly.
 
 ## Full Profile
 
@@ -129,6 +136,7 @@ Config files may set:
 - `output_profile`: `light` or `full`
 - `max_series_rows_per_product`: default `1000` in light mode, `0` means no compaction
 - `max_mc_path_rows_per_product`: default `800` in light mode, `0` means every Monte Carlo timestamp
+- `max_sample_preview_rows_per_series`: default `120` in light mode, `0` means every saved sample-run row
 - `synthetic_tick_limit`: cap synthetic Monte Carlo ticks per day for smoke or benchmark runs
 - `mc_backend`: `auto`, `streaming`, `classic` or `rust`
 - `include_orders`: write submitted order rows

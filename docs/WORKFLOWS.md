@@ -29,9 +29,9 @@ python analysis/research_pack.py fast --trader strategies/trader.py --baseline s
 
 Measured on 2026-04-22 on this machine:
 
-- default day-0 replay: about `2.31s`
-- default day-0 compare: about `2.40s`
-- fast pack: about `5.30s`
+- default day-0 replay: about `2.26s`
+- default day-0 compare: about `2.22s`
+- fast pack: about `5.07s`
 
 Useful trust checks during the fast loop:
 
@@ -57,7 +57,7 @@ This gives:
 
 Measured on 2026-04-22 on this machine:
 
-- validation pack: about `17.90s`
+- validation pack: about `16.24s`
 
 ## Heavy forensic loop
 
@@ -91,9 +91,9 @@ The helper benchmarks each requested day separately and reports:
 
 The current slowest replay day is still day `0`, with about:
 
-- `1.559s` in the market session
-- `0.644s` in replay-row compaction
-- `0.286s` in dashboard plus bundle write work
+- `1.421s` in the market session
+- `0.522s` in replay-row compaction
+- `0.276s` in bundle write work
 
 ## Monte Carlo
 
@@ -106,19 +106,19 @@ python -m prosperity_backtester monte-carlo strategies/trader.py --name current 
 
 Review mean, median, P05, expected shortfall, drawdown and limit breaches. The
 dashboard path bands are computed from all sessions. Saved sample runs are
-examples for qualitative inspection only.
+preview-capped examples for qualitative inspection only in light mode.
 
 Measured on 2026-04-22 on the tracked `250`-tick fixture:
 
-- quick light, `64/8`, `1` worker: about `1.58s`
-- quick light, `64/8`, `4` workers: about `1.29s`
-- quick light, `64/8`, `8` workers: about `1.34s`
-- default light, `100/10`, `1` worker: about `2.20s`
-- default light, `100/10`, `4` workers: about `1.50s`
-- default light, `100/10`, `8` workers: about `1.51s`
-- heavy light, `192/16`, `1` worker: about `3.98s`
-- heavy light, `192/16`, `8` workers: about `1.99s`
-- ceiling light, `768/24`, `8` workers: about `4.36s`
+- quick light, `64/8`, `1` worker: about `1.39s`
+- quick light, `64/8`, `4` workers: about `1.09s`
+- quick light, `64/8`, `8` workers: about `1.09s`
+- default light, `100/10`, `1` worker: about `1.97s`
+- default light, `100/10`, `4` workers: about `1.20s`
+- default light, `100/10`, `8` workers: about `1.18s`
+- heavy light, `192/16`, `1` worker: about `3.47s`
+- heavy light, `192/16`, `8` workers: about `1.53s`
+- ceiling light, `768/24`, `8` workers: about `3.31s`
 
 Backend guidance is now simple:
 

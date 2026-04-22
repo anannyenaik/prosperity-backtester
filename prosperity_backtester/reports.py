@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from array import array
 import json
 import math
 import platform as py_platform
@@ -136,7 +137,7 @@ def _data_contract(run_type: str | None, options: OutputOptions) -> List[Dict[st
                 "fidelity": "qualitative",
                 "location": "dashboard.json monteCarlo.sampleRuns",
                 "notes": (
-                    "Sample sessions are for behaviour inspection only. "
+                    "Sample sessions are preview-capped qualitative examples for behaviour inspection only. "
                     "They are not the population used for the final distribution or path bands."
                 ),
             },
@@ -518,8 +519,14 @@ def _compact_behaviour(behaviour: Dict[str, object]) -> Dict[str, object]:
     return {key: value for key, value in behaviour.items() if key != "series"}
 
 
-def _cap_preview_rows(rows: Sequence[Dict[str, object]], options: OutputOptions, *, multiplier: int = 2) -> List[Dict[str, object]]:
-    limit = int(options.max_series_rows_per_product)
+def _cap_preview_rows(
+    rows: Sequence[Dict[str, object]],
+    options: OutputOptions,
+    *,
+    multiplier: int = 2,
+    hard_limit: int | None = None,
+) -> List[Dict[str, object]]:
+    limit = int(options.max_series_rows_per_product) if hard_limit is None else int(hard_limit)
     if limit <= 0:
         return [dict(row) for row in rows]
     hard_limit = max(1, limit * max(1, int(multiplier)))
@@ -540,12 +547,13 @@ def _sample_run_payload(
     replay_rows: Dict[str, List[Dict[str, object]]] | None = None,
 ) -> Dict[str, object]:
     rows = replay_rows or compact_replay_rows(result, options)
-    inventory_preview = _cap_preview_rows(rows["inventorySeries"], options)
-    pnl_preview = _cap_preview_rows(rows["pnlSeries"], options)
-    fair_preview = _cap_preview_rows(rows["fairValueSeries"], options)
-    fills_preview = _cap_preview_rows(rows["fills"], options)
-    order_intent_preview = _cap_preview_rows(rows["orderIntent"], options)
-    behaviour_preview = _cap_preview_rows(rows["behaviourSeries"], options)
+    preview_limit = int(options.max_sample_preview_rows_per_series)
+    inventory_preview = _cap_preview_rows(rows["inventorySeries"], options, multiplier=1, hard_limit=preview_limit)
+    pnl_preview = _cap_preview_rows(rows["pnlSeries"], options, multiplier=1, hard_limit=preview_limit)
+    fair_preview = _cap_preview_rows(rows["fairValueSeries"], options, multiplier=1, hard_limit=preview_limit)
+    fills_preview = _cap_preview_rows(rows["fills"], options, multiplier=1, hard_limit=preview_limit)
+    order_intent_preview = _cap_preview_rows(rows["orderIntent"], options, multiplier=1, hard_limit=preview_limit)
+    behaviour_preview = _cap_preview_rows(rows["behaviourSeries"], options, multiplier=1, hard_limit=preview_limit)
     return {
         "runName": result.run_name,
         "summary": result.summary,
@@ -622,18 +630,20 @@ def accumulate_path_band_rows(
                     "bucketStartTimestamp": row.get("bucket_start_timestamp"),
                     "bucketEndTimestamp": row.get("bucket_end_timestamp"),
                     "bucketCount": row.get("bucket_count"),
-                    "values": [],
-                    "envelopeMins": [],
-                    "envelopeMaxs": [],
+                    "values": array("d"),
+                    "envelopeMin": None,
+                    "envelopeMax": None,
                 }
                 accumulator[key] = state
             state["values"].append(float(value))
             envelope_min = _number(row.get(f"{row_key}_bucket_min", row.get(row_key)))
             envelope_max = _number(row.get(f"{row_key}_bucket_max", row.get(row_key)))
             if envelope_min is not None:
-                state["envelopeMins"].append(float(envelope_min))
+                current_min = state.get("envelopeMin")
+                state["envelopeMin"] = float(envelope_min) if current_min is None else min(float(current_min), float(envelope_min))
             if envelope_max is not None:
-                state["envelopeMaxs"].append(float(envelope_max))
+                current_max = state.get("envelopeMax")
+                state["envelopeMax"] = float(envelope_max) if current_max is None else max(float(current_max), float(envelope_max))
 
 
 def merge_path_band_accumulators(
@@ -649,14 +659,20 @@ def merge_path_band_accumulators(
                 "bucketStartTimestamp": source_state.get("bucketStartTimestamp"),
                 "bucketEndTimestamp": source_state.get("bucketEndTimestamp"),
                 "bucketCount": source_state.get("bucketCount"),
-                "values": list(source_state.get("values", [])),
-                "envelopeMins": list(source_state.get("envelopeMins", [])),
-                "envelopeMaxs": list(source_state.get("envelopeMaxs", [])),
+                "values": array("d", source_state.get("values", ())),
+                "envelopeMin": source_state.get("envelopeMin"),
+                "envelopeMax": source_state.get("envelopeMax"),
             }
             continue
         target_state["values"].extend(source_state.get("values", []))
-        target_state["envelopeMins"].extend(source_state.get("envelopeMins", []))
-        target_state["envelopeMaxs"].extend(source_state.get("envelopeMaxs", []))
+        source_min = source_state.get("envelopeMin")
+        if source_min is not None:
+            target_min = target_state.get("envelopeMin")
+            target_state["envelopeMin"] = float(source_min) if target_min is None else min(float(target_min), float(source_min))
+        source_max = source_state.get("envelopeMax")
+        if source_max is not None:
+            target_max = target_state.get("envelopeMax")
+            target_state["envelopeMax"] = float(source_max) if target_max is None else max(float(target_max), float(source_max))
         for meta_key in ("day", "timestamp", "bucketStartTimestamp", "bucketEndTimestamp", "bucketCount"):
             if target_state.get(meta_key) is None and source_state.get(meta_key) is not None:
                 target_state[meta_key] = source_state.get(meta_key)
@@ -670,7 +686,8 @@ def finalize_path_band_accumulator(
         for metric_name, _row_key in _MC_PATH_BAND_METRICS
     }
     for (metric_name, product, bucket_index), state in sorted(accumulator.items(), key=lambda item: (item[0][0], item[0][1], item[0][2])):
-        values = sorted(float(value) for value in state.get("values", []))
+        raw_values = state.get("values")
+        values = sorted(float(value) for value in raw_values) if raw_values else []
         if not values:
             continue
         output[metric_name][product].append({
@@ -690,8 +707,8 @@ def finalize_path_band_accumulator(
             "p95": _quantile_sorted(values, 0.95),
             "min": values[0],
             "max": values[-1],
-            "envelopeMin": min(state.get("envelopeMins", []) or values),
-            "envelopeMax": max(state.get("envelopeMaxs", []) or values),
+            "envelopeMin": state.get("envelopeMin", values[0]),
+            "envelopeMax": state.get("envelopeMax", values[-1]),
         })
     return output
 
