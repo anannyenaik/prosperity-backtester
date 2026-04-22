@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 from prosperity_backtester.__main__ import _output_options_from_args, _perturb_from_args, build_parser
-from prosperity_backtester.experiments import TraderSpec, run_compare, run_replay, run_sweep_from_config
+from prosperity_backtester.bundle_attribution import build_bundle_attribution
+from prosperity_backtester.dashboard_payload import normalise_dashboard_payload
+from prosperity_backtester.experiments import TraderSpec, run_compare, run_monte_carlo, run_replay, run_sweep_from_config
 from prosperity_backtester.metadata import PRODUCTS
 from prosperity_backtester.platform import PerturbationConfig, SessionArtefacts
 from prosperity_backtester.reports import (
@@ -358,6 +360,38 @@ def test_precomputed_path_bands_keep_all_session_method_even_when_rows_are_clear
     assert dashboard["monteCarlo"]["pathBandMethod"]["source"] == "all_sessions"
     pepper_bands = dashboard["monteCarlo"]["pathBands"]["analysisFair"]["INTARIAN_PEPPER_ROOT"]
     assert pepper_bands[0]["sessionCount"] == 3
+
+
+def test_written_mc_dashboard_uses_compact_storage_and_manifest_attribution(tmp_path):
+    data_dir = tmp_path / "data"
+    trader = _write_aggressive_trader(tmp_path / "aggressive_trader.py")
+    _write_tiny_dataset(data_dir, ticks=6)
+
+    run_monte_carlo(
+        trader_spec=TraderSpec(name="tiny", path=trader),
+        sessions=2,
+        sample_sessions=1,
+        days=(0,),
+        fill_model_name="base",
+        perturbation=PerturbationConfig(synthetic_tick_limit=6),
+        output_dir=tmp_path / "mc",
+        base_seed=20260418,
+        run_name="mc",
+    )
+
+    raw_dashboard = json.loads((tmp_path / "mc" / "dashboard.json").read_text(encoding="utf-8"))
+    assert raw_dashboard["monteCarlo"]["sessions"]["encoding"] == "row_table_v1"
+    assert raw_dashboard["monteCarlo"]["sampleRuns"][0]["pnlSeries"]["encoding"] == "row_table_v1"
+    assert "fairValueBands" not in raw_dashboard["monteCarlo"]
+
+    dashboard = normalise_dashboard_payload(raw_dashboard)
+    assert isinstance(dashboard["monteCarlo"]["sessions"], list)
+    assert isinstance(dashboard["monteCarlo"]["sampleRuns"][0]["pnlSeries"], list)
+
+    manifest = json.loads((tmp_path / "mc" / "manifest.json").read_text(encoding="utf-8"))
+    attribution = build_bundle_attribution(raw_dashboard, manifest["bundle_files"])
+    assert any(row["component"] == "monteCarlo.sampleRuns" for row in attribution["dashboard_sections"])
+    assert any(row["component"] == "dashboard_payload" for row in attribution["file_components"])
 
 
 def test_full_profile_child_bundles_require_explicit_request(tmp_path):

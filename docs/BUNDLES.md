@@ -43,7 +43,17 @@ Dashboard tabs: Overview, Alpha Lab, Comparison.
 
 Purpose: robustness distribution, all-session path bands and sampled path review.
 
-Light Monte Carlo bundles keep session distribution rows, all-session `pathBands` and sampled runs inside `dashboard.json`. `pathBands` cover `analysisFair`, `mid`, `inventory` and `pnl`. Quantiles are exact across all sessions at retained bucket endpoints; omitted ticks contribute min/max envelopes. Full mode also writes:
+Light Monte Carlo bundles keep session distribution rows, all-session
+`pathBands` and sampled runs inside `dashboard.json`. Those light-mode Monte
+Carlo sections may use the internal `row_table_v1` storage encoding for
+`sessions`, sampled preview series and path-band leaves. The dashboard expands
+them back to normal arrays on load, so JSON remains the canonical contract.
+
+`pathBands` cover `analysisFair`, `mid`, `inventory` and `pnl`. Quantiles are
+exact across all sessions at retained bucket endpoints; omitted ticks
+contribute min/max envelopes. When `pathBands` already contain `analysisFair`
+and `mid`, duplicate `fairValueBands` are not retained separately. Full mode
+also writes:
 
 - `sample_paths/`
 - `sessions/`

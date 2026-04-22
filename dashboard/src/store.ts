@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { DashboardPayload, LoadedRun, Product, TabId } from './types'
+import { normaliseDashboardPayload } from './lib/bundles'
 
 interface DashboardStore {
   runs: LoadedRun[]
@@ -55,9 +56,10 @@ export const useStore = create<DashboardStore>((set, get) => ({
   serverRuns: [],
 
   loadRun: (payload, fileName) => {
-    const name = payload.meta?.runName || fileName.replace(/\.json$/, '')
+    const normalisedPayload = normaliseDashboardPayload(payload)
+    const name = normalisedPayload.meta?.runName || fileName.replace(/\.json$/, '')
     const id = `${name}_${Date.now()}`
-    const run: LoadedRun = { id, name, fileName, payload }
+    const run: LoadedRun = { id, name, fileName, payload: normalisedPayload }
     set((state) => {
       const existing = state.runs.findIndex((r) => r.name === name)
       const replacedId = existing >= 0 ? state.runs[existing].id : null

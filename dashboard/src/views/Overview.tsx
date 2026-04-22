@@ -10,7 +10,7 @@ import { PageHeader } from '../components/PageHeader'
 import { ProductToggle } from '../components/ProductToggle'
 import { BundleBadge } from '../components/BundleBadge'
 import { PhaseTimings } from '../components/PhaseTimings'
-import { fmtNum, fmtInt, fmtPct, fmtDate, colorForValue } from '../lib/format'
+import { fmtNum, fmtInt, fmtPct, fmtDate, fmtBytes, colorForValue } from '../lib/format'
 import { formatBool, getComparisonRows, interpretBundle, isFiniteNumber, numberOrNull } from '../lib/bundles'
 import { POSITION_LIMIT, PRODUCT_LABELS, type DashboardPayload, type DataContractEntry, type Product } from '../types'
 
@@ -36,11 +36,24 @@ export function Overview() {
   const runtime = provenance?.runtime
   const git = provenance?.git
   const phaseTimings = runtime?.phase_timings_seconds
+  const phaseRss = runtime?.phase_rss_bytes
   const dataScope = runtime?.data_scope
   const reportingSeconds = sumNumberValues([
     phaseTimings?.sample_row_compaction_seconds,
     phaseTimings?.dashboard_build_seconds,
     phaseTimings?.bundle_write_seconds,
+  ])
+  const reportingPeak = maxNumber([
+    phaseRss?.sample_row_compaction?.rss_peak_bytes,
+    phaseRss?.dashboard_build?.rss_peak_bytes,
+    phaseRss?.bundle_write?.rss_peak_bytes,
+    phaseRss?.manifest_refresh?.rss_peak_bytes,
+  ])
+  const reportingDeltaLeader = maxLabelledNumber([
+    ['Sample row compaction', phaseRss?.sample_row_compaction?.rss_delta_bytes],
+    ['Dashboard build', phaseRss?.dashboard_build?.rss_delta_bytes],
+    ['Bundle write', phaseRss?.bundle_write?.rss_delta_bytes],
+    ['Manifest refresh', phaseRss?.manifest_refresh?.rss_delta_bytes],
   ])
 
   const datasetRows = (payload.datasetReports ?? []).map((r) => ({
@@ -147,6 +160,24 @@ export function Overview() {
               { label: 'Git commit', value: git?.commit ? String(git.commit).slice(0, 12) : 'not recorded' },
               { label: 'Git dirty', value: formatBool(git?.dirty) },
               { label: 'Working dir', value: provenance.command?.cwd ?? 'not recorded' },
+            ]}
+          />
+        </Card>
+      )}
+
+      {phaseRss && (
+        <Card title="Reporting RSS" subtitle="Measured memory growth inside sampled-row compaction, dashboard assembly and bundle writing.">
+          <KVGrid
+            cols={2}
+            pairs={[
+              { label: 'Before reporting', value: fmtBytes(numberOrNull(phaseRss.before_reporting_rss_bytes)) },
+              { label: 'Peak during reporting', value: fmtBytes(reportingPeak), tone: 'warn' },
+              { label: 'Compaction delta', value: fmtBytes(numberOrNull(phaseRss.sample_row_compaction?.rss_delta_bytes)) },
+              { label: 'Compaction peak', value: fmtBytes(numberOrNull(phaseRss.sample_row_compaction?.rss_peak_bytes)) },
+              { label: 'Dashboard build delta', value: fmtBytes(numberOrNull(phaseRss.dashboard_build?.rss_delta_bytes)) },
+              { label: 'Bundle write delta', value: fmtBytes(numberOrNull(phaseRss.bundle_write?.rss_delta_bytes)) },
+              { label: 'After reporting', value: fmtBytes(numberOrNull(phaseRss.after_reporting_rss_bytes)) },
+              { label: 'Largest RSS jump', value: reportingDeltaLeader?.label ?? 'not recorded', tone: 'accent' },
             ]}
           />
         </Card>
@@ -407,6 +438,16 @@ function sumNumberValues(values: unknown[]): number | null {
   const clean = values.map(numberOrNull).filter((value): value is number => value != null)
   if (!clean.length) return null
   return clean.reduce((total, value) => total + value, 0)
+}
+
+function maxLabelledNumber(entries: Array<[string, unknown]>): { label: string; value: number } | null {
+  let best: { label: string; value: number } | null = null
+  for (const [label, rawValue] of entries) {
+    const value = numberOrNull(rawValue)
+    if (value == null) continue
+    if (!best || value > best.value) best = { label, value }
+  }
+  return best
 }
 
 function formatSecondsValue(value: unknown): string {

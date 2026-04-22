@@ -55,6 +55,25 @@ const BUNDLE_DESCRIPTIONS: Record<BundleType, string> = {
   unknown: 'a schema the dashboard cannot classify confidently',
 }
 
+const ROW_TABLE_ENCODING = 'row_table_v1'
+const TOP_LEVEL_SERIES_KEYS = [
+  'orders',
+  'orderIntent',
+  'fills',
+  'inventorySeries',
+  'pnlSeries',
+  'fairValueSeries',
+  'behaviourSeries',
+] as const
+const SAMPLE_RUN_SERIES_KEYS = [
+  'inventorySeries',
+  'pnlSeries',
+  'fills',
+  'orderIntent',
+  'fairValueSeries',
+  'behaviourSeries',
+] as const
+
 export function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
 }
@@ -75,6 +94,61 @@ export function formatBool(value: boolean | null | undefined): string {
 
 function hasRows(value: unknown): boolean {
   return Array.isArray(value) && value.length > 0
+}
+
+function isRowTable(value: unknown): value is { encoding: string; columns: string[]; rows: unknown[][] } {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      (value as Record<string, unknown>).encoding === ROW_TABLE_ENCODING &&
+      Array.isArray((value as Record<string, unknown>).columns) &&
+      Array.isArray((value as Record<string, unknown>).rows),
+  )
+}
+
+function expandRowTable(value: unknown): unknown {
+  if (!isRowTable(value)) return value
+  const columns = value.columns.map((column) => String(column))
+  return value.rows.map((row) =>
+    Object.fromEntries(columns.map((column, index) => [column, Array.isArray(row) ? row[index] : null])),
+  )
+}
+
+function expandTableLeaves(value: unknown): unknown {
+  if (isRowTable(value)) return expandRowTable(value)
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, child]) => [key, expandTableLeaves(child)]),
+  )
+}
+
+function expandSeriesField<T extends object, K extends keyof T>(target: T, key: K): void {
+  target[key] = expandRowTable(target[key]) as T[K]
+}
+
+export function normaliseDashboardPayload(payload: DashboardPayload): DashboardPayload {
+  const normalised: DashboardPayload = { ...payload }
+  for (const key of TOP_LEVEL_SERIES_KEYS) {
+    expandSeriesField(normalised, key)
+  }
+  if (!payload.monteCarlo) return normalised
+  const monteCarlo = { ...payload.monteCarlo }
+  expandSeriesField(monteCarlo, 'sessions')
+  monteCarlo.sampleRuns = (monteCarlo.sampleRuns ?? []).map((sample) => {
+    const expanded = { ...sample }
+    for (const key of SAMPLE_RUN_SERIES_KEYS) {
+      expandSeriesField(expanded, key)
+    }
+    return expanded
+  })
+  if (monteCarlo.pathBands) {
+    monteCarlo.pathBands = expandTableLeaves(monteCarlo.pathBands) as typeof monteCarlo.pathBands
+  }
+  if (monteCarlo.fairValueBands) {
+    monteCarlo.fairValueBands = expandTableLeaves(monteCarlo.fairValueBands) as typeof monteCarlo.fairValueBands
+  }
+  normalised.monteCarlo = monteCarlo
+  return normalised
 }
 
 function normaliseBundleType(value: unknown): BundleType {

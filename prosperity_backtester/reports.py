@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Sequence
 
+from .dashboard_payload import compact_dashboard_payload_for_storage
 from .fair_value import fair_path_bands
 from .metadata import PRODUCTS
 from .platform import SessionArtefacts, describe_series, summarise_monte_carlo_sessions, write_rows_csv
@@ -186,6 +187,17 @@ def _json_text(payload: object, options: OutputOptions) -> str:
     if options.json_indent is None:
         return json.dumps(payload, separators=(",", ":"))
     return json.dumps(payload, indent=options.json_indent)
+
+
+def _write_json(path: Path, payload: object, options: OutputOptions) -> None:
+    # Stream the JSON directly to disk instead of materialising the full
+    # text in memory first. Avoids a transient ~2x payload-size RSS spike
+    # when writing large dashboard bundles.
+    with path.open("w", encoding="utf-8", newline="") as fp:
+        if options.json_indent is None:
+            json.dump(payload, fp, separators=(",", ":"))
+        else:
+            json.dump(payload, fp, indent=options.json_indent)
 
 
 def _number(value: object) -> float | None:
@@ -1116,13 +1128,14 @@ def write_run_bundle(
 ) -> None:
     output_options = output_options or DEFAULT_OUTPUT_OPTIONS
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "dashboard.json").write_text(_json_text(dashboard_payload, output_options), encoding="utf-8")
+    stored_dashboard_payload = compact_dashboard_payload_for_storage(dashboard_payload)
+    _write_json(output_dir / "dashboard.json", stored_dashboard_payload, output_options)
     if extra_csvs:
         for filename, rows in extra_csvs.items():
             if rows or filename in {"run_summary.csv", "session_summary.csv", "comparison.csv", "optimization.csv", "calibration_grid.csv"}:
                 write_rows_csv(output_dir / filename, rows)
     if register:
-        _write_registry_entry(output_dir, dashboard_payload)
+        _write_registry_entry(output_dir, stored_dashboard_payload)
 
 
 def _bundle_file_category(relative_path: str) -> str:
@@ -1330,10 +1343,10 @@ def write_mc_bundle(
         if rows is None:
             rows = compact_replay_rows(result, output_options) if result.inventory_series or result.fills or result.orders or result.behaviour_series else _empty_compact_replay_rows()
         if output_options.write_session_manifests:
-            (sessions_dir / f"{result.run_name}.json").write_text(_json_text(_manifest_base(result), output_options), encoding="utf-8")
+            _write_json(sessions_dir / f"{result.run_name}.json", _manifest_base(result), output_options)
         if result.inventory_series:
             if output_options.write_sample_path_files:
-                (sample_dir / f"{result.run_name}.json").write_text(_json_text(_sample_run_payload(result, output_options), output_options), encoding="utf-8")
+                _write_json(sample_dir / f"{result.run_name}.json", _sample_run_payload(result, output_options), output_options)
         for row in result.session_rows:
             session_rows.append({"run_name": result.run_name, **dict(row)})
         for row in rows["fills"]:

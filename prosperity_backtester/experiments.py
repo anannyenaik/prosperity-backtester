@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import concurrent.futures
+import ctypes
 import json
 import os
 import random
 import statistics
+import threading
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -57,8 +59,98 @@ DEFAULT_ROUND2_DATA_DIR = Path(__file__).parent.parent / "data" / "round2"
 DEFAULT_EXPORT_DIR = Path(__file__).parent.parent / "live_exports"
 
 
+class _ProcessMemoryCounters(ctypes.Structure):
+    _fields_ = [
+        ("cb", ctypes.c_ulong),
+        ("PageFaultCount", ctypes.c_ulong),
+        ("PeakWorkingSetSize", ctypes.c_size_t),
+        ("WorkingSetSize", ctypes.c_size_t),
+        ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+        ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+        ("PagefileUsage", ctypes.c_size_t),
+        ("PeakPagefileUsage", ctypes.c_size_t),
+    ]
+
+
+if os.name == "nt":
+    _KERNEL32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _PSAPI = ctypes.WinDLL("psapi")
+    _GET_CURRENT_PROCESS = _KERNEL32.GetCurrentProcess
+    _GET_CURRENT_PROCESS.restype = ctypes.c_void_p
+    _GET_PROCESS_MEMORY_INFO = _PSAPI.GetProcessMemoryInfo
+    _GET_PROCESS_MEMORY_INFO.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(_ProcessMemoryCounters),
+        ctypes.c_ulong,
+    ]
+    _GET_PROCESS_MEMORY_INFO.restype = ctypes.c_int
+else:
+    _GET_CURRENT_PROCESS = None
+    _GET_PROCESS_MEMORY_INFO = None
+
+
 def default_data_dir_for_round(round_number: int) -> Path:
     return DEFAULT_ROUND2_DATA_DIR if int(round_number) == 2 else DEFAULT_DATA_DIR
+
+
+def _current_process_rss_bytes() -> int | None:
+    if os.name == "nt":
+        counters = _ProcessMemoryCounters()
+        counters.cb = ctypes.sizeof(counters)
+        if _GET_CURRENT_PROCESS is None or _GET_PROCESS_MEMORY_INFO is None:
+            return None
+        if not _GET_PROCESS_MEMORY_INFO(
+            _GET_CURRENT_PROCESS(),
+            ctypes.byref(counters),
+            counters.cb,
+        ):
+            return None
+        return int(counters.WorkingSetSize)
+    statm = Path("/proc/self/statm")
+    if statm.is_file():
+        try:
+            parts = statm.read_text(encoding="utf-8").split()
+            if len(parts) >= 2:
+                return int(parts[1]) * int(os.sysconf("SC_PAGE_SIZE"))
+        except (OSError, ValueError):
+            return None
+    return None
+
+
+def _measure_phase_rss(run) -> tuple[object, Dict[str, object]]:
+    rss_before = _current_process_rss_bytes()
+    rss_peak = rss_before
+    stop = threading.Event()
+
+    def sampler() -> None:
+        nonlocal rss_peak
+        while not stop.wait(0.005):
+            sample = _current_process_rss_bytes()
+            if sample is None:
+                continue
+            rss_peak = sample if rss_peak is None else max(int(rss_peak), int(sample))
+
+    worker = threading.Thread(target=sampler, daemon=True)
+    worker.start()
+    started = time.perf_counter()
+    try:
+        result = run()
+    finally:
+        elapsed = time.perf_counter() - started
+        stop.set()
+        worker.join(timeout=0.1)
+    rss_after = _current_process_rss_bytes()
+    if rss_after is not None:
+        rss_peak = rss_after if rss_peak is None else max(int(rss_peak), int(rss_after))
+    return result, {
+        "elapsed_seconds": round(elapsed, 6),
+        "rss_before_bytes": rss_before,
+        "rss_after_bytes": rss_after,
+        "rss_delta_bytes": None if rss_before is None or rss_after is None else int(rss_after) - int(rss_before),
+        "rss_peak_bytes": rss_peak,
+    }
 
 
 def _load_json_config(config_path: Path) -> Dict[str, object]:
@@ -567,13 +659,22 @@ def _run_monte_carlo_profiled(
         data_scope=data_scope,
     )
     if write_bundle:
-        compact_started = time.perf_counter()
-        monte_carlo_rows = {
-            result.run_name: compact_replay_rows(result, output_options)
-            for result in results
-            if result.inventory_series
+        phase_rss: Dict[str, object] = {
+            "before_reporting_rss_bytes": _current_process_rss_bytes(),
         }
-        compact_seconds = time.perf_counter() - compact_started
+
+        def build_compact_rows() -> Dict[str, Dict[str, List[Dict[str, object]]]]:
+            return {
+                result.run_name: compact_replay_rows(result, output_options)
+                for result in results
+                if result.inventory_series
+            }
+
+        monte_carlo_rows_raw, compact_rss = _measure_phase_rss(build_compact_rows)
+        assert isinstance(monte_carlo_rows_raw, dict)
+        monte_carlo_rows = monte_carlo_rows_raw
+        compact_seconds = float(compact_rss["elapsed_seconds"])
+        phase_rss["sample_row_compaction"] = compact_rss
         phase_timings = finalise_mc_profile(profile)
         phase_timings["result_sort_seconds"] = round(sort_seconds, 6)
         phase_timings["sample_row_compaction_seconds"] = round(compact_seconds, 6)
@@ -584,42 +685,53 @@ def _run_monte_carlo_profiled(
         if "rust_internal_wall_seconds" in profile:
             phase_timings["rust_internal_wall_seconds"] = round(float(profile["rust_internal_wall_seconds"]), 6)
         runtime_context["phase_timings_seconds"] = phase_timings
+        runtime_context["phase_rss_bytes"] = phase_rss
         dashboard_provenance_started = time.perf_counter()
         dashboard_provenance = capture_provenance(runtime_context=runtime_context)
         provenance_seconds += time.perf_counter() - dashboard_provenance_started
         runtime_context["phase_timings_seconds"]["provenance_capture_seconds"] = round(provenance_seconds, 6)
-        dashboard_started = time.perf_counter()
-        dashboard = build_dashboard_payload(
-            run_type="monte_carlo",
-            run_name=run_name,
-            trader_name=trader_spec.name,
-            mode="monte_carlo",
-            fill_model=fill_model.to_dict(),
-            perturbations=perturbation.to_dict(),
-            round_number=round_number,
-            access_scenario=access_scenario.to_dict(),
-            monte_carlo_results=results,
-            monte_carlo_rows=monte_carlo_rows,
-            monte_carlo_path_bands=precomputed_path_bands,
-            monte_carlo_path_band_method=path_band_method,
-            dataset_reports=[],
-            output_options=output_options,
-            runtime_context=runtime_context,
-            provenance=dashboard_provenance,
-        )
-        dashboard_seconds = time.perf_counter() - dashboard_started
+
+        def build_dashboard() -> Dict[str, object]:
+            return build_dashboard_payload(
+                run_type="monte_carlo",
+                run_name=run_name,
+                trader_name=trader_spec.name,
+                mode="monte_carlo",
+                fill_model=fill_model.to_dict(),
+                perturbations=perturbation.to_dict(),
+                round_number=round_number,
+                access_scenario=access_scenario.to_dict(),
+                monte_carlo_results=results,
+                monte_carlo_rows=monte_carlo_rows,
+                monte_carlo_path_bands=precomputed_path_bands,
+                monte_carlo_path_band_method=path_band_method,
+                dataset_reports=[],
+                output_options=output_options,
+                runtime_context=runtime_context,
+                provenance=dashboard_provenance,
+            )
+
+        dashboard_raw, dashboard_rss = _measure_phase_rss(build_dashboard)
+        assert isinstance(dashboard_raw, dict)
+        dashboard = dashboard_raw
+        dashboard_seconds = float(dashboard_rss["elapsed_seconds"])
+        phase_rss["dashboard_build"] = dashboard_rss
         runtime_context["phase_timings_seconds"]["dashboard_build_seconds"] = round(dashboard_seconds, 6)
-        write_started = time.perf_counter()
-        write_mc_bundle(
-            output_dir,
-            results,
-            dashboard,
-            register=register,
-            replay_rows_by_run=monte_carlo_rows,
-            output_options=output_options,
-            runtime_context=runtime_context,
-        )
-        write_seconds = time.perf_counter() - write_started
+
+        def write_bundle() -> None:
+            write_mc_bundle(
+                output_dir,
+                results,
+                dashboard,
+                register=register,
+                replay_rows_by_run=monte_carlo_rows,
+                output_options=output_options,
+                runtime_context=runtime_context,
+            )
+
+        _unused_write_result, write_rss = _measure_phase_rss(write_bundle)
+        write_seconds = float(write_rss["elapsed_seconds"])
+        phase_rss["bundle_write"] = write_rss
         runtime_context["phase_timings_seconds"]["bundle_write_seconds"] = round(write_seconds, 6)
         manifest_path = output_dir / "manifest.json"
         if manifest_path.is_file():
@@ -629,13 +741,19 @@ def _run_monte_carlo_profiled(
                 manifest_provenance = capture_provenance(runtime_context=runtime_context, start=output_dir)
                 provenance_seconds += time.perf_counter() - manifest_provenance_started
                 runtime_context["phase_timings_seconds"]["provenance_capture_seconds"] = round(provenance_seconds, 6)
-                write_manifest(
-                    output_dir,
-                    manifest_payload,
-                    output_options,
-                    runtime_context=runtime_context,
-                    provenance=manifest_provenance,
-                )
+
+                def refresh_manifest() -> None:
+                    write_manifest(
+                        output_dir,
+                        manifest_payload,
+                        output_options,
+                        runtime_context=runtime_context,
+                        provenance=manifest_provenance,
+                    )
+
+                _unused_manifest_result, manifest_rss = _measure_phase_rss(refresh_manifest)
+                phase_rss["manifest_refresh"] = manifest_rss
+        phase_rss["after_reporting_rss_bytes"] = _current_process_rss_bytes()
     final_profile = dict(runtime_context.get("phase_timings_seconds") or finalise_mc_profile(profile))
     final_profile["result_sort_seconds"] = round(sort_seconds, 6)
     final_profile["sample_row_compaction_seconds"] = round(compact_seconds, 6)

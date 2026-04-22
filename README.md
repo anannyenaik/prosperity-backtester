@@ -142,28 +142,44 @@ Profile replay slowdown by day:
 python analysis/profile_replay.py strategies/trader.py --compare-trader strategies/starter.py --data-dir data/round1 --fill-mode empirical_baseline
 ```
 
-Measured on 2026-04-22 with `analysis/benchmark_runtime.py` on this machine:
+The proof split is now explicit.
 
-- default day-0 replay: about `2.18s`
-- default day-0 compare: about `2.20s`
-- fast pack: about `4.72s`
-- validation pack: about `15.51s`
+The least-contended same-code throughput baseline for this dirty worktree is
+still the earlier local runtime suite in
+`backtests/_baseline_runtime/benchmark_report.json` and the full `1/2/4/8`
+table in `backtests/_final_runtime_current/benchmark_report.json`. The later
+exact current-code rerun in `backtests/_final_local_runtime/benchmark_report.json`
+reproduced the same bytes and RSS shape, but the machine was clearly contended
+and wall-clock times roughly doubled together across the whole suite.
 
-Measured on the tracked `250`-tick Monte Carlo fixture:
+Historical same-code baseline on this machine:
+
+- default day-0 replay: about `2.03s`
+- default day-0 compare: about `2.02s`
+- fast pack: about `4.40s`
+- validation pack: about `15.14s`
+
+Tracked `250`-tick Monte Carlo throughput table from the least-contended full
+same-code run:
 
 | Case | 1 worker | 2 workers | 4 workers | 8 workers |
 | --- | ---: | ---: | ---: | ---: |
-| MC quick light (64 sess) | `1.429s` | `1.260s` | `1.138s` | `1.193s` |
-| MC default light (100 sess) | `1.863s` | `1.548s` | `1.265s` | `1.345s` |
-| MC heavy light (192 sess) | `3.028s` | `n/a` | `n/a` | `1.635s` |
-| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `3.182s` |
+| MC quick light (64 sess) | `1.509s` | `1.660s` | `1.126s` | `1.244s` |
+| MC default light (100 sess) | `1.907s` | `1.816s` | `1.328s` | `1.321s` |
+| MC heavy light (192 sess) | `3.679s` | `n/a` | `n/a` | `1.828s` |
+| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `3.089s` |
 
-The earlier path-band and retention pass remains the biggest Monte Carlo win.
-It cut the tracked `mc_ceiling_light_w8` case from `4.364s / 632.2 MB RSS /
-36.96 MB` to `3.182s / 437.9 MB RSS / 13.45 MB`. A later hot-path fix in
-`fill_models.py` helped replay, packs and the single-worker default Monte
-Carlo case, but the widest `8`-worker benchmark-trader cells are now mixed
-against the older phase-4 baseline and should not be oversold.
+The latest high-value Monte Carlo win is retained-output compaction rather than
+a broad runtime rewrite. Against the earlier clean 2026-04-22 audit baseline,
+the tracked light bundles now keep:
+
+- `mc_default_light_w8`: `5.75 MB -> 2.90 MB` with runtime `1.370s -> 1.321s`
+- `mc_ceiling_light_w8`: `13.45 MB -> 6.65 MB` with runtime `3.061s -> 3.089s`
+
+That is a real retained-byte win with mixed runtime movement. Fresh
+current-local ceiling probes now make the remaining gap sharper: the true peak
+is still execution-phase process-tree RSS, not parent-only reporting RSS or
+dashboard assembly.
 
 The default streaming Monte Carlo backend remains the recommended choice. It
 avoids building full replay artefacts for unsampled sessions while still
@@ -174,11 +190,12 @@ rankings are now strategy-sensitive rather than one-sided.
 
 Realistic trader checks with `examples/trader_round1_v9.py`,
 `strategies/trader.py` and
-`strategies/prosperity_r2_340934_plus_offset110.py` still favour
-`streaming` on the heavier measured cases, but `classic` edges
-`strategies/trader.py` default `100/10`, `8` workers (`1.348s` vs `1.454s`)
-and `r2_stateful_default_w8` (`1.440s` vs `1.494s`). Rust stayed slower in
-every realistic-trader case that was rerun in this pass.
+`strategies/prosperity_r2_340934_plus_offset110.py` still keep `streaming` as
+the best default overall, but `classic` wins several realistic cells:
+`live_v9_heavy_w8`, `main_heavy_w8`, and both measured Round 2 stateful
+`8`-worker cases. `streaming` still won the lighter `live_v9` cases and the
+fresh `main_default_w8` rerun. Rust stayed slower in every realistic-trader
+case that was rerun in this pass.
 
 Forensic work is still deliberate full-profile work and should be treated as a minute-scale task rather than part of the normal branch loop.
 
@@ -193,14 +210,15 @@ slightly faster realistic-trader fallback, and `rust` stays available as an
 explicit experiment rather than a recommendation. Chris Roberts' repo remains
 the strongest narrow tutorial-round Monte Carlo reference, but this repo is
 the stronger end-to-end research platform on the locally available evidence.
-On a same-machine shared no-op trader benchmark with matched `250`-tick
-sessions, matched `100/10` and `1000/100` session or sample tiers, and
-matched `1`, `2`, `4`, and `8` worker settings, this repo was `4.3x` to
-`18.7x` faster end-to-end and used far fewer files (`5` versus `50` or
-`410`). On the smaller `100/10` cases it also used less RSS, but Chris still
-kept the lighter RSS on the `1000/100` ceiling cases and the smaller retained
-bundle footprint throughout. That proves a runtime-throughput lead rather than
-an undisputed all-axis performance crown.
+On the fresh same-machine shared no-op trader benchmark in
+`backtests/_final_local_reference`, with matched `250`-tick sessions, matched
+`100/10` and `1000/100` session or sample tiers, and matched `1`, `2`, `4`,
+and `8` worker settings, this repo was `4.43x` to `17.67x` faster end-to-end,
+wrote fewer retained bytes in every measured cell, and used far fewer files
+(`5` versus `50` or `410`). On the smaller `100/10` cases it also used less
+RSS, but Chris still kept the lighter RSS on the `1000/100` ceiling cases.
+That proves a strong same-machine runtime and retained-byte lead on the matched
+no-op comparison, not an undisputed all-axis performance crown.
 
 See [docs/REFERENCE_COMPARISON.md](docs/REFERENCE_COMPARISON.md) for the
 detailed comparison against the locally available reference repos.
@@ -353,6 +371,20 @@ Use `--compare-report` to compare the current repo against an earlier report fro
 For a tracked machine-readable summary of the latest audited local run, see
 [docs/BENCHMARK_SUMMARY.json](docs/BENCHMARK_SUMMARY.json).
 
+## Bundle Attribution Benchmark
+
+Attribute retained bytes, file counts and reporting-phase RSS to concrete
+bundle sections:
+
+```bash
+python analysis/benchmark_attribution.py --runtime-report backtests/runtime_benchmark/benchmark_report.json --output-dir backtests/bundle_attribution
+```
+
+This writes:
+
+- `bundle_attribution.json`
+- `bundle_attribution.md`
+
 ## Backend Benchmark
 
 Benchmark `streaming`, `classic` and `rust` on realistic repo traders:
@@ -406,7 +438,14 @@ Replay bundles:
 
 In light mode, `dashboard.json` is the canonical source for compact `inventorySeries`, `pnlSeries`, `fairValueSeries`, `behaviourSeries` and `orderIntent`. Full replay bundles also include full series CSV sidecars, `order_intent.csv` and raw `orders.csv`. Use `--series-sidecars` when you want chart-series CSVs without switching on every full-mode artefact.
 
-Monte Carlo light bundles add exact final distribution stats, all-session `pathBands` and sampled qualitative preview runs inside `dashboard.json`. The path-band quantiles are exact across all sessions at retained bucket endpoints; omitted ticks contribute min/max envelopes. Full Monte Carlo bundles also add:
+Monte Carlo light bundles add exact final distribution stats, all-session
+`pathBands` and sampled qualitative preview runs inside `dashboard.json`. The
+light bundle may store `sessions`, sampled preview series and path-band leaves
+using the internal `row_table_v1` encoding, which the dashboard expands on
+load. The path-band quantiles are exact across all sessions at retained bucket
+endpoints; omitted ticks contribute min/max envelopes. When `pathBands`
+already carry `analysisFair` and `mid`, duplicate `fairValueBands` are not
+retained separately. Full Monte Carlo bundles also add:
 
 - `sample_paths/`
 - `sessions/`

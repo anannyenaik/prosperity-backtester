@@ -24,6 +24,7 @@ const {
   getComparisonRows,
   getTabAvailability,
   interpretBundle,
+  normaliseDashboardPayload,
   numberOrNull,
 } = await import(pathToFileURL(compiledModule).href)
 
@@ -202,4 +203,35 @@ test('missing numeric values stay missing rather than becoming zero', () => {
   assert.equal(numberOrNull(undefined), null)
   assert.equal(numberOrNull(null), null)
   assert.equal(numberOrNull(0), 0)
+})
+
+test('normalises compact row-table sections on load', () => {
+  const payload = monteCarloPayload()
+  payload.monteCarlo.sessions = {
+    encoding: 'row_table_v1',
+    columns: ['run_name', 'final_pnl', 'fill_count', 'limit_breaches'],
+    rows: [['mc_001', 10, 1, 0]],
+  }
+  payload.monteCarlo.sampleRuns = [{
+    runName: 'mc_001',
+    summary: { final_pnl: 10, fill_count: 1, order_count: 1, limit_breaches: 0, max_drawdown: 1, final_positions: {}, per_product: {}, fair_value: {}, behaviour: {} },
+    inventorySeries: {
+      encoding: 'row_table_v1',
+      columns: ['day', 'timestamp', 'product', 'position', 'avg_entry_price', 'mid', 'fair'],
+      rows: [[0, 100, 'ASH_COATED_OSMIUM', 1, 10000, 10000, 10000]],
+    },
+    pnlSeries: [],
+    fills: [],
+    orderIntent: [],
+    fairValueSeries: [],
+    behaviour: { per_product: {}, summary: {} },
+    behaviourSeries: [],
+  }]
+
+  const normalised = normaliseDashboardPayload(payload)
+
+  assert.equal(Array.isArray(normalised.monteCarlo.sessions), true)
+  assert.equal(normalised.monteCarlo.sessions[0].run_name, 'mc_001')
+  assert.equal(Array.isArray(normalised.monteCarlo.sampleRuns[0].inventorySeries), true)
+  assert.equal(normalised.monteCarlo.sampleRuns[0].inventorySeries[0].product, 'ASH_COATED_OSMIUM')
 })

@@ -1,16 +1,26 @@
 # Performance
 
-This page answers four questions:
-
-- which Monte Carlo backend is honestly recommended now
-- what the latest verified gains actually were
-- where the current bottlenecks still sit
-- whether a deeper architecture move is justified already
+Result: the repo still has the strongest overall local performance story, and
+the retained-byte win held up again, but ceiling-case RSS and final proof
+cleanliness are still the blockers to a full all-axis crown.
 
 All claims below come from local benchmark runs on 2026-04-22. See
 [`docs/BENCHMARKS.md`](BENCHMARKS.md) and
 [`docs/BENCHMARK_SUMMARY.json`](BENCHMARK_SUMMARY.json) for the tracked proof
 surface.
+
+The proof split matters:
+
+- `backtests/_final_local_output`, `_final_local_attribution`,
+  `_final_local_backend`, `_final_local_reference` and
+  `_final_local_architecture` are fresh reruns from the current dirty
+  worktree.
+- `backtests/_final_local_runtime` is also a fresh current-code rerun, but it
+  was clearly machine-contended. Output bytes and RSS stayed in family while
+  every wall-clock roughly doubled together.
+- `backtests/_baseline_runtime` and `backtests/_final_runtime_current` are
+  therefore still the cleanest same-code throughput baselines for this
+  worktree.
 
 ## Current backend choice
 
@@ -19,137 +29,155 @@ There are three Monte Carlo backends in
 
 | Backend | Use it when | Current verdict |
 | --- | --- | --- |
-| `streaming` | normal research work and the default branch loop | Recommended default. Still the best overall balance of runtime, fidelity and workflow simplicity. |
-| `classic` | parity checks and cases where you want full replay-style materialisation | Real parity option. It now wins some realistic `8`-worker default cells, so it is not honest to describe it as only a slower fallback. |
-| `rust` | explicit backend experiments when you want to test the native path | Kept available, but not recommended. It stayed slower than `streaming` and `classic` on every realistic case rerun in this pass. |
+| `streaming` | normal research work and the default branch loop | Recommended default. Still the best overall balance of throughput, fidelity, install sanity and workflow breadth. |
+| `classic` | parity checks and cases where you want full replay-style materialisation | Real parity option. It still wins several realistic measured cells, so it is not honest to describe it as only a slower fallback. |
+| `rust` | explicit backend experiments when you want to test the native path | Kept available, but not recommended. It stayed slower than both Python backends on every realistic rerun in this pass. |
 
 `auto` still resolves to `streaming`.
 
-## Current runtime
+## What the current pass actually proved
 
-Tracked Monte Carlo timings from the audited runtime suite:
+The highest-value change in this pass was not a broad engine rewrite. It was a
+storage and reporting refinement pass:
 
-| Case | 1 worker | 2 workers | 4 workers | 8 workers | Peak RSS at widest case |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| quick light `64/8` | `1.429s` | `1.260s` | `1.138s` | `1.193s` | `352.6 MB` |
-| default light `100/10` | `1.863s` | `1.548s` | `1.265s` | `1.345s` | `361.0 MB` |
-| heavy light `192/16` | `3.028s` | `n/a` | `n/a` | `1.635s` | `378.1 MB` |
-| ceiling light `768/24` | `n/a` | `n/a` | `n/a` | `3.182s` | `417.6 MB` |
+- Monte Carlo `sessions` are now stored as slim row tables
+- sampled preview series are stored as compact row tables
+- path-band leaves are stored compactly
+- duplicate `fairValueBands` are dropped when `pathBands` already carry the
+  same analysis-fair and mid information
+- large JSON payloads are written directly to disk instead of being rendered
+  into one extra in-memory string first
 
-Practical loop timings from the same report:
+That produced a real retained-byte win, and the fresh current-local storage
+rerun reproduced it exactly:
 
-- replay day 0 light: `2.176s`
-- compare day 0 light: `2.201s`
-- fast pack: `4.718s`
-- validation pack: `15.510s`
+- storage benchmark `mc_light`: `1.95 MB -> 819.8 KB` (`-57.9%`)
+- storage benchmark `mc_full`: `7.51 MB -> 5.16 MB` (`-31.3%`)
+- runtime suite `mc_default_light_w8`: `5.75 MB -> 2.90 MB`
+- runtime suite `mc_ceiling_light_w8`: `13.45 MB -> 6.65 MB`
 
-## Same-code realistic backend proof
+Runtime stayed broadly neutral rather than one-sided in the least-contended
+same-code baselines:
+
+- `mc_default_light_w8`: `1.370s -> 1.321s`
+- `mc_ceiling_light_w8`: `3.061s -> 3.089s`
+- `mc_heavy_light_w8`: `1.515s -> 1.828s`
+
+The fresh full current-code runtime rerun in `backtests/_final_local_runtime`
+did not overturn that conclusion. It kept the same output bytes and the same
+RSS shape, but the machine was obviously slower across every case, so it is a
+current-code validation rerun rather than the cleanest throughput headline.
+
+## Current bottleneck picture
+
+Fresh attribution on the current code kept the retained-byte frontier narrow.
+
+The biggest retained-byte owners in light Monte Carlo are now:
+
+1. `monteCarlo.sampleRuns` preview series, especially `fills`, `orderIntent`,
+   `fairValueSeries`, `behaviourSeries` and `pnlSeries`
+2. `fills.csv`
+3. the reporting path itself, specifically sampled-row compaction and bundle
+   writing
+
+`pathBands` used to be a first-order retained-byte problem. After the current
+compaction pass they no longer are.
+
+Fresh local ceiling probes now make the peak shape explicit:
+
+- the fresh runtime-suite rerun recorded `452.5 MB` tree RSS on
+  `mc_ceiling_light_w8`
+- targeted current-local ceiling probes ranged from `450.7 MB` to `459.0 MB`
+  tree RSS
+- every targeted probe put the global peak in execution rather than reporting
+- one high-resolution peak sample showed one driver process at about
+  `100.3 MB` plus eight live workers at about `35.7 MB` to `39.9 MB` each
+- parent-only reporting RSS stayed lower:
+  - before reporting: `252.2 MB`
+  - sampled-row compaction peak: `273.9 MB`
+  - dashboard build peak: `219.4 MB`
+  - bundle-write peak: `246.3 MB`
+
+That is why dashboard build time is no longer the main concern. The true tail
+is execution-phase process-tree RSS, with sampled-row compaction and exact fill
+retention still the main parent-side costs.
+
+## Same-code backend proof
 
 The no-op benchmark is not enough. The backend benchmark was rerun against
 realistic repo traders:
 
 | Case | Streaming | Classic | Rust | Winner |
 | --- | ---: | ---: | ---: | --- |
-| `live_v9_default_w1` | `3.235s` | `3.344s` | `4.093s` | `streaming` |
-| `live_v9_default_w8` | `1.490s` | `1.493s` | `1.950s` | `streaming` by `3 ms` |
-| `live_v9_heavy_w8` | `2.021s` | `2.332s` | `2.992s` | `streaming` |
-| `main_default_w8` | `1.454s` | `1.348s` | `1.692s` | `classic` |
-| `main_heavy_w8` | `1.711s` | `1.887s` | `2.293s` | `streaming` |
-| `r2_stateful_default_w8` | `1.494s` | `1.440s` | `1.794s` | `classic` |
-| `r2_stateful_heavy_w8` | `1.754s` | `1.788s` | `2.388s` | `streaming` |
+| `live_v9_default_w1` | `7.684s` | `7.721s` | `10.824s` | `streaming` |
+| `live_v9_default_w8` | `3.475s` | `3.541s` | `5.038s` | `streaming` |
+| `live_v9_heavy_w8` | `5.231s` | `5.153s` | `6.405s` | `classic` |
+| `main_default_w8` | `2.974s` | `3.040s` | `4.098s` | `streaming` |
+| `main_heavy_w8` | `4.279s` | `4.148s` | `5.685s` | `classic` |
+| `r2_stateful_default_w8` | `3.465s` | `3.115s` | `4.274s` | `classic` |
+| `r2_stateful_heavy_w8` | `4.133s` | `3.920s` | `5.255s` | `classic` |
 
-That is the key correction to the earlier story. `streaming` is still the best
-default, but it is no longer honest to say it wins every meaningful realistic
-multi-worker cell.
+That is the key correction to any oversimplified story:
 
-## What the latest pass actually improved
-
-Two different improvements landed in this overall pass.
-
-The earlier high-value gain was the reporting and retention work in
-`prosperity_backtester/reports.py` plus the lower-copy trade path in
-`prosperity_backtester/platform.py`. That remains the major Monte Carlo memory
-and retained-output win.
-
-The later smaller gain in this pass was a hot-path fix in
-`prosperity_backtester/fill_models.py`: `config_for()` no longer constructs a
-fresh base config on every lookup when a product override already exists.
-
-Against the older `backtests/_phase4_runtime_baseline/benchmark_report.json`
-report that the harness compared against, the latest local numbers are:
-
-- replay day 0 light: `2.313s -> 2.176s` (`-5.9%`)
-- compare day 0 light: `2.223s -> 2.201s` (`-1.0%`)
-- fast pack: `5.117s -> 4.718s` (`-7.8%`)
-- validation pack: `17.786s -> 15.510s` (`-12.8%`)
-- default MC light, `1` worker: `2.079s -> 1.863s` (`-10.4%`)
-
-The widest benchmark-trader Monte Carlo rows are mixed on this machine:
-
-- quick MC light, `8` workers: `1.155s -> 1.193s` (`+3.3%`)
-- default MC light, `8` workers: `1.219s -> 1.345s` (`+10.3%`)
-- heavy MC light, `8` workers: `1.526s -> 1.635s` (`+7.1%`)
-- ceiling MC light, `8` workers: `3.107s -> 3.182s` (`+2.4%`)
-
-So the honest conclusion is:
-
-- the earlier retention pass delivered the major light-mode Monte Carlo win
-- the later fill-model fix improved real hot-path waste
-- the combined pass does not justify a blanket claim that every runtime cell is now faster
-
-## Current bottleneck picture
-
-Fresh profiling on the current default Monte Carlo case still shows the hot
-path inside the Python engine rather than the dashboard frontend:
-
-- `mc_backends.py:run_streaming_synthetic_session`
-- `platform.py:_execute_order_batch`
-- `reports.py:accumulate_path_band_rows`
-- `fill_models.py:config_for`
-
-The remaining shared tail is mostly:
-
-- worker startup or scheduling overhead, about `0.38s` to `0.45s`
-- bundle writing, about `0.16s` to `0.31s`
-- sampled-row compaction, about `0.04s` to `0.14s`
-- retained-output size and ceiling RSS, especially versus Chris Roberts on the shared no-op comparison
-
-Dashboard build itself is no longer the main problem. It is only `7 ms` to
-`20 ms` in the tracked Monte Carlo rows.
+- `streaming` remains the best default overall
+- `classic` still matters and still wins realistic cells
+- `rust` is still an experiment rather than a production default
 
 ## External reference result
 
-The same-machine Chris Roberts rerun proves a strong runtime-throughput lead:
+The fresh same-machine Chris Roberts rerun still proves more than a runtime
+lead on the matched shared no-op benchmark:
 
-- default `100/10`: this repo is `4.34x` to `18.69x` faster
-- ceiling `1000/100`: this repo is `11.36x` to `17.50x` faster
+- default `100/10`: this repo is `4.43x` to `14.18x` faster
+- ceiling `1000/100`: this repo is `10.69x` to `17.67x` faster
+- this repo writes fewer retained bytes in every measured cell
+- this repo still writes far fewer files, `5` instead of `50` or `410`
 
-But the all-axis story is still mixed:
+But the all-axis story is still not closed:
 
-- this repo uses fewer files, `5` rather than `50` or `410`
 - this repo uses less RSS on the smaller default cases
 - Chris keeps lower RSS on every ceiling case
-- Chris keeps the smaller retained output footprint throughout
 
-That is enough for a runtime-throughput lead. It is not enough for an
-undisputed memory or retained-output crown.
+That is enough to claim a strong same-machine throughput lead and a
+same-machine retained-byte lead on the matched no-op comparison. It is not
+enough to claim a full memory-efficiency crown.
 
 ## Architecture direction
 
-The architecture bake-off does show real upside in lower-copy transport and
-binary serialisation:
+The architecture bake-off still shows real upside in binary serialisation:
 
-- MessagePack reduced the real dashboard payload from `10.16 MB` to `8.39 MB`
-- MessagePack encoded faster, `0.028s` versus JSON `0.127s`
-- shared-memory transport beat pickled transport, `0.336s` versus `0.462s`
+- MessagePack reduced the real payload from `3.35 MB` to `2.39 MB`
+- MessagePack encoded and decoded materially faster than JSON
 
-Those are meaningful signals, but not a kill shot against the current design.
-The best current architecture is still the streaming-first Python engine with:
+Shared-memory transport got weaker rather than stronger on the fresh rerun:
 
-- `streaming` as the default backend
-- `classic` kept for parity checks
-- `rust` kept as an explicit experiment, not a default
-- JSON kept as the canonical dashboard bundle contract
+- pickled transport: `0.590s`
+- shared memory: `0.622s`
+- speed-up: `0.948x`
 
-The next frontier is still lower retained bytes, lower ceiling RSS and less
-shared worker overhead, not a broad native rewrite.
+That changes the architecture judgement slightly:
+
+- streaming-first Python still remains the best current architecture
+- optional binary sidecars remain the only still-plausible architecture move,
+  but they do not land now because they do not solve ceiling RSS and a default
+  JSON-plus-sidecar write would increase retained bytes
+- lower-copy shared-memory transport is currently weaker than the status quo on
+  the fresh bake-off evidence
+- Rust, C++, C, Cython and Numba still do not have an isolated measured kernel
+  that justifies crossing the native boundary now
+
+## Honest verdict
+
+Current honest scorecard:
+
+- runtime throughput: very strong on the least-contended same-code baseline,
+  but the fresh full current-code rerun was too machine-contended to be the
+  cleanest headline proof
+- retained-output efficiency: materially stronger and now much closer to
+  closure
+- ceiling-case RSS: still the main unresolved gap
+- trust and proof cleanliness: materially better, but still limited by the
+  dirty worktree and by the need to separate fresh contended reruns from the
+  cleaner historical same-code runtime baseline
+- architecture finality: not fully closed, but the live options are now much
+  narrower and clearer than before

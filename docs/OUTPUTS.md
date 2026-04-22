@@ -24,6 +24,7 @@ Light keeps compactly:
 
 - `inventorySeries`, `pnlSeries`, `fairValueSeries` and `behaviourSeries` in `dashboard.json`
 - `orderIntent` in `dashboard.json`
+- Monte Carlo `sessions` in `dashboard.json`
 - Monte Carlo sampled-run previews in `dashboard.json`
 - Monte Carlo all-session path bands in `dashboard.json`
 
@@ -81,6 +82,13 @@ Each retained sample run records `*PreviewTruncated` and `*TotalCount` fields
 so the dashboard can say when a chart is showing a qualitative preview rather
 than every saved row. Full mode leaves these previews uncapped unless you set
 `max_sample_preview_rows_per_series` explicitly.
+
+The retained light-mode Monte Carlo sections may use the internal
+`row_table_v1` storage encoding for `sessions`, sampled preview series and
+path-band leaves. The React dashboard expands those sections on load, so JSON
+remains the canonical dashboard contract. When `pathBands` already contain
+`analysisFair` and `mid`, duplicate `fairValueBands` are omitted from retained
+storage.
 
 ## Full Profile
 
@@ -165,7 +173,7 @@ CLI `--orders`, `--sample-path-files`, `--session-manifests`, `--no-series-sidec
 - `bundle_files` with per-file byte counts
 - `provenance.command` with argv, display form and working directory
 - `provenance.workflow_tier`
-- `provenance.runtime` with backend, Monte Carlo backend, parallelism, worker count, session counts, data scope and runtime phase timings when relevant
+- `provenance.runtime` with backend, Monte Carlo backend, parallelism, worker count, session counts, data scope, runtime phase timings and reporting-phase RSS where relevant
 - `provenance.git` with root, commit, branch and dirty-worktree state when available
 
 The dashboard server reads the manifest and `run_registry.jsonl` first, so large bundles stay discoverable without loading `dashboard.json`.
@@ -179,6 +187,12 @@ python analysis/benchmark_outputs.py --output-dir backtests/repo_output_benchmar
 ```
 
 See [docs/BENCHMARKS.md](BENCHMARKS.md) for the current measured sizes and created files.
+
+For exact retained-byte attribution by bundle component, use:
+
+```bash
+python analysis/benchmark_attribution.py --runtime-report backtests/runtime_benchmark/benchmark_report.json --output-dir backtests/bundle_attribution
+```
 
 For runtime rather than storage, use:
 

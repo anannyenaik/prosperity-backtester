@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from prosperity_backtester.dashboard_payload import normalise_dashboard_payload
 from prosperity_backtester.dataset import load_round1_dataset
 from prosperity_backtester.experiments import TraderSpec, run_compare, run_monte_carlo, run_optimize_from_config, run_replay
 from prosperity_backtester.platform import PerturbationConfig
@@ -137,8 +138,8 @@ def test_compare_and_monte_carlo(tmp_path):
     )
     assert len(mc) == 2
     assert (tmp_path / "mc" / "dashboard.json").is_file()
-    mc_dashboard = json.loads((tmp_path / "mc" / "dashboard.json").read_text(encoding="utf-8"))
-    pepper_bands = mc_dashboard["monteCarlo"]["fairValueBands"]["analysisFair"]["INTARIAN_PEPPER_ROOT"]
+    mc_dashboard = normalise_dashboard_payload(json.loads((tmp_path / "mc" / "dashboard.json").read_text(encoding="utf-8")))
+    pepper_bands = mc_dashboard["monteCarlo"]["pathBands"]["analysisFair"]["INTARIAN_PEPPER_ROOT"]
     assert not pepper_bands or {"p10", "p25", "p50", "p75", "p90"}.issubset(pepper_bands[0])
     assert mc_dashboard["monteCarlo"]["pathBandMethod"]["source"] == "all_sessions"
     assert mc_dashboard["meta"]["outputProfile"]["profile"] == "light"
@@ -149,6 +150,9 @@ def test_compare_and_monte_carlo(tmp_path):
     assert mc_dashboard["meta"]["provenance"]["runtime"]["session_count"] == 2
     assert mc_dashboard["meta"]["provenance"]["runtime"]["sample_session_count"] == 1
     assert mc_dashboard["meta"]["provenance"]["runtime"]["phase_timings_seconds"]["bundle_write_seconds"] >= 0.0
+    manifest = json.loads((tmp_path / "mc" / "manifest.json").read_text(encoding="utf-8"))
+    bundle_write_rss = manifest["provenance"]["runtime"]["phase_rss_bytes"]["bundle_write"]["rss_peak_bytes"]
+    assert bundle_write_rss is None or bundle_write_rss >= 0
     assert not (tmp_path / "mc" / "sample_paths").exists()
     assert not (tmp_path / "mc" / "behaviour_series.csv").exists()
 

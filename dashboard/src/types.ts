@@ -44,8 +44,26 @@ export interface ProvenanceInfo {
       [key: string]: unknown
     }
     phase_timings_seconds?: Record<string, unknown> | null
+    phase_rss_bytes?: RuntimePhaseRssInfo | null
     [key: string]: unknown
   }
+}
+
+export interface RuntimePhaseRssSample {
+  elapsed_seconds?: number | null
+  rss_before_bytes?: number | null
+  rss_after_bytes?: number | null
+  rss_delta_bytes?: number | null
+  rss_peak_bytes?: number | null
+}
+
+export interface RuntimePhaseRssInfo {
+  before_reporting_rss_bytes?: number | null
+  after_reporting_rss_bytes?: number | null
+  sample_row_compaction?: RuntimePhaseRssSample | null
+  dashboard_build?: RuntimePhaseRssSample | null
+  bundle_write?: RuntimePhaseRssSample | null
+  manifest_refresh?: RuntimePhaseRssSample | null
 }
 
 export interface OutputProfileInfo {
@@ -342,20 +360,12 @@ export interface FairBandPoint {
 
 export interface McSession {
   run_name: string
-  trader_name: string
-  mode: string
   final_pnl: number
   gross_pnl_before_maf?: number
   maf_cost?: number
   fill_count: number
   limit_breaches: number
-  days: number[]
-  per_product: Record<string, { final_mtm: number }>
-  fill_model: Record<string, unknown>
-  perturbations: Record<string, unknown>
-  access_scenario?: AccessScenarioInfo
-  fair_value_summary: Record<string, unknown>
-  behaviour_summary: Record<string, unknown>
+  max_drawdown?: number
 }
 
 export interface SampleRun {
@@ -392,7 +402,7 @@ export interface MonteCarloData {
     inventory?: Record<string, FairBandPoint[]>
     pnl?: Record<string, FairBandPoint[]>
   }
-  fairValueBands: {
+  fairValueBands?: {
     analysisFair: Record<string, FairBandPoint[]>
     mid: Record<string, FairBandPoint[]>
   }

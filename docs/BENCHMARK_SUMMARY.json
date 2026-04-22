@@ -1,8 +1,9 @@
 {
   "audited_on": "2026-04-22",
   "repo": {
-    "git_commit": "b9998044c9ed049ccc7ba06235863c461e027dc2",
-    "git_dirty": true
+    "git_commit": "53fa9001b35a66a0b98dc4241faf505058a34544",
+    "git_dirty": true,
+    "git_branch": "main"
   },
   "machine": {
     "platform": "Windows-10-10.0.26200-SP0",
@@ -13,485 +14,715 @@
     "memory_sampler": "psutil process-tree rss"
   },
   "commands": {
-    "runtime": "D:\\Programming\\prosperity-backtester\\.venv\\Scripts\\python.exe D:\\Programming\\prosperity-backtester\\analysis\\benchmark_runtime.py --output-dir backtests\\_phase5_runtime_current --compare-report backtests\\_phase4_runtime_baseline\\benchmark_report.json --workers 1 2 4 8 --warm-repeat 1",
-    "storage": "D:\\Programming\\prosperity-backtester\\analysis\\benchmark_outputs.py --output-dir backtests\\_phase5_storage_current",
-    "backend": "D:\\Programming\\prosperity-backtester\\.venv\\Scripts\\python.exe D:\\Programming\\prosperity-backtester\\analysis\\benchmark_backends.py --output-dir backtests\\_phase5_backend_benchmark --warmup 1 --measured-repeats 2",
-    "reference": "D:\\Programming\\prosperity-backtester\\.venv\\Scripts\\python.exe D:\\Programming\\prosperity-backtester\\analysis\\benchmark_chris_reference.py --reference-root ..\\_prosperity_reference_repos\\imc-prosperity-4\\backtester --output-dir backtests\\_phase5_reference_benchmark",
-    "architecture_bakeoff": "D:\\Programming\\prosperity-backtester\\.venv\\Scripts\\python.exe D:\\Programming\\prosperity-backtester\\analysis\\architecture_bakeoff.py --output-dir backtests\\_phase5_architecture_bakeoff --bundle backtests\\_phase5_runtime_current\\cases\\mc_ceiling_light_w8\\dashboard.json --workers 8 --tasks 32 --repeats 3"
-  },
-  "runtime": {
-    "replay_day0_light": {
-      "elapsed_seconds": 2.176,
-      "peak_tree_rss_bytes": 213524480,
-      "output_size_bytes": 21148069,
-      "file_count": 6
-    },
-    "compare_day0_light": {
-      "elapsed_seconds": 2.201,
-      "peak_tree_rss_bytes": 196657152,
-      "output_size_bytes": 11955,
-      "file_count": 3
-    },
-    "pack_fast": {
-      "elapsed_seconds": 4.718,
-      "peak_tree_rss_bytes": 399478784,
-      "output_size_bytes": 22851777,
-      "file_count": 17
-    },
-    "pack_validation": {
-      "elapsed_seconds": 15.51,
-      "peak_tree_rss_bytes": 754839552,
-      "output_size_bytes": 65000459,
-      "file_count": 17
-    },
-    "mc_quick_light_w1": {
-      "elapsed_seconds": 1.429,
-      "peak_tree_rss_bytes": 105095168,
-      "output_size_bytes": 4760039,
-      "file_count": 6
-    },
-    "mc_quick_light_w2": {
-      "elapsed_seconds": 1.26,
-      "peak_tree_rss_bytes": 153280512,
-      "output_size_bytes": 4760029,
-      "file_count": 6
-    },
-    "mc_quick_light_w4": {
-      "elapsed_seconds": 1.138,
-      "peak_tree_rss_bytes": 220254208,
-      "output_size_bytes": 4760035,
-      "file_count": 6
-    },
-    "mc_quick_light_w8": {
-      "elapsed_seconds": 1.193,
-      "peak_tree_rss_bytes": 369729536,
-      "output_size_bytes": 4760035,
-      "file_count": 6
-    },
-    "mc_default_light_w1": {
-      "elapsed_seconds": 1.863,
-      "peak_tree_rss_bytes": 118394880,
-      "output_size_bytes": 5746126,
-      "file_count": 6
-    },
-    "mc_default_light_w2": {
-      "elapsed_seconds": 1.548,
-      "peak_tree_rss_bytes": 158789632,
-      "output_size_bytes": 5746124,
-      "file_count": 6
-    },
-    "mc_default_light_w4": {
-      "elapsed_seconds": 1.265,
-      "peak_tree_rss_bytes": 231972864,
-      "output_size_bytes": 5746122,
-      "file_count": 6
-    },
-    "mc_default_light_w8": {
-      "elapsed_seconds": 1.345,
-      "peak_tree_rss_bytes": 378552320,
-      "output_size_bytes": 5746122,
-      "file_count": 6
-    },
-    "mc_heavy_light_w1": {
-      "elapsed_seconds": 3.028,
-      "peak_tree_rss_bytes": 165908480,
-      "output_size_bytes": 8610065,
-      "file_count": 6
-    },
-    "mc_heavy_light_w8": {
-      "elapsed_seconds": 1.635,
-      "peak_tree_rss_bytes": 396431360,
-      "output_size_bytes": 8610065,
-      "file_count": 6
-    },
-    "mc_ceiling_light_w8": {
-      "elapsed_seconds": 3.182,
-      "peak_tree_rss_bytes": 437919744,
-      "output_size_bytes": 13453231,
-      "file_count": 6
-    },
-    "mc_default_full_w1": {
-      "elapsed_seconds": 2.567,
-      "peak_tree_rss_bytes": 155308032,
-      "output_size_bytes": 34131310,
-      "file_count": 122
-    },
-    "mc_default_full_trimmed_w1": {
-      "elapsed_seconds": 2.171,
-      "peak_tree_rss_bytes": 160694272,
-      "output_size_bytes": 21062986,
-      "file_count": 12
-    }
-  },
-  "phase_timings": {
-    "mc_default_light_w1": {
-      "non_engine_overhead_seconds": 0.382,
-      "market_generation_seconds": 0.227358,
-      "trader_seconds": 0.046511,
-      "execution_seconds": 0.522453,
-      "path_metrics_seconds": 0.137909,
-      "sample_row_compaction_seconds": 0.042574,
-      "dashboard_build_seconds": 0.006568,
-      "bundle_write_seconds": 0.158009,
-      "provenance_capture_seconds": 0.107503,
-      "session_execution_wall_seconds": 1.274226
-    },
-    "mc_default_light_w8": {
-      "non_engine_overhead_seconds": 0.416,
-      "market_generation_seconds": 0.331787,
-      "trader_seconds": 0.068373,
-      "execution_seconds": 0.736865,
-      "path_metrics_seconds": 0.19456,
-      "sample_row_compaction_seconds": 0.063397,
-      "dashboard_build_seconds": 0.007153,
-      "bundle_write_seconds": 0.161817,
-      "provenance_capture_seconds": 0.118484,
-      "session_execution_wall_seconds": 0.696531
-    },
-    "mc_heavy_light_w8": {
-      "non_engine_overhead_seconds": 0.401,
-      "market_generation_seconds": 0.596128,
-      "trader_seconds": 0.125453,
-      "execution_seconds": 1.369305,
-      "path_metrics_seconds": 0.359952,
-      "sample_row_compaction_seconds": 0.065388,
-      "dashboard_build_seconds": 0.011413,
-      "bundle_write_seconds": 0.22769,
-      "provenance_capture_seconds": 0.104844,
-      "session_execution_wall_seconds": 0.929381
-    },
-    "mc_ceiling_light_w8": {
-      "non_engine_overhead_seconds": 0.447,
-      "market_generation_seconds": 2.441671,
-      "trader_seconds": 0.513511,
-      "execution_seconds": 5.659082,
-      "path_metrics_seconds": 1.580877,
-      "sample_row_compaction_seconds": 0.142135,
-      "dashboard_build_seconds": 0.019779,
-      "bundle_write_seconds": 0.314773,
-      "provenance_capture_seconds": 0.107734,
-      "session_execution_wall_seconds": 2.258882
-    }
-  },
-  "storage": {
-    "replay_light": {
-      "size_bytes": 1364126,
-      "file_count": 6
-    },
-    "replay_full": {
-      "size_bytes": 1992817,
-      "file_count": 12
-    },
-    "mc_light": {
-      "size_bytes": 1945184,
-      "file_count": 6
-    },
-    "mc_full": {
-      "size_bytes": 7506667,
-      "file_count": 18
-    }
-  },
-  "realistic_backends": {
-    "live_v9_default_w1": {
-      "streaming": {
-        "best_elapsed_seconds": 3.235,
-        "mean_elapsed_seconds": 3.239,
-        "peak_tree_rss_bytes": 103194624,
-        "output_size_bytes": 4066731
-      },
-      "classic": {
-        "best_elapsed_seconds": 3.344,
-        "mean_elapsed_seconds": 3.396,
-        "peak_tree_rss_bytes": 101564416,
-        "output_size_bytes": 4065501
-      },
-      "rust": {
-        "best_elapsed_seconds": 4.093,
-        "mean_elapsed_seconds": 4.104,
-        "peak_tree_rss_bytes": 110571520,
-        "output_size_bytes": 4042068
-      }
-    },
-    "live_v9_default_w8": {
-      "streaming": {
-        "best_elapsed_seconds": 1.49,
-        "mean_elapsed_seconds": 1.494,
-        "peak_tree_rss_bytes": 382107648,
-        "output_size_bytes": 4066720
-      },
-      "classic": {
-        "best_elapsed_seconds": 1.493,
-        "mean_elapsed_seconds": 1.515,
-        "peak_tree_rss_bytes": 380796928,
-        "output_size_bytes": 4065499
-      },
-      "rust": {
-        "best_elapsed_seconds": 1.95,
-        "mean_elapsed_seconds": 1.956,
-        "peak_tree_rss_bytes": 382795776,
-        "output_size_bytes": 4042053
-      }
-    },
-    "live_v9_heavy_w8": {
-      "streaming": {
-        "best_elapsed_seconds": 2.021,
-        "mean_elapsed_seconds": 2.037,
-        "peak_tree_rss_bytes": 384487424,
-        "output_size_bytes": 5916430
-      },
-      "classic": {
-        "best_elapsed_seconds": 2.332,
-        "mean_elapsed_seconds": 2.361,
-        "peak_tree_rss_bytes": 389033984,
-        "output_size_bytes": 5914301
-      },
-      "rust": {
-        "best_elapsed_seconds": 2.992,
-        "mean_elapsed_seconds": 3.145,
-        "peak_tree_rss_bytes": 396951552,
-        "output_size_bytes": 5864426
-      }
-    },
-    "main_default_w8": {
-      "streaming": {
-        "best_elapsed_seconds": 1.454,
-        "mean_elapsed_seconds": 1.532,
-        "peak_tree_rss_bytes": 372400128,
-        "output_size_bytes": 4561561
-      },
-      "classic": {
-        "best_elapsed_seconds": 1.348,
-        "mean_elapsed_seconds": 1.37,
-        "peak_tree_rss_bytes": 375341056,
-        "output_size_bytes": 4559247
-      },
-      "rust": {
-        "best_elapsed_seconds": 1.692,
-        "mean_elapsed_seconds": 1.729,
-        "peak_tree_rss_bytes": 380047360,
-        "output_size_bytes": 4531482
-      }
-    },
-    "main_heavy_w8": {
-      "streaming": {
-        "best_elapsed_seconds": 1.711,
-        "mean_elapsed_seconds": 1.714,
-        "peak_tree_rss_bytes": 384626688,
-        "output_size_bytes": 6625183
-      },
-      "classic": {
-        "best_elapsed_seconds": 1.887,
-        "mean_elapsed_seconds": 1.966,
-        "peak_tree_rss_bytes": 379994112,
-        "output_size_bytes": 6621503
-      },
-      "rust": {
-        "best_elapsed_seconds": 2.293,
-        "mean_elapsed_seconds": 2.346,
-        "peak_tree_rss_bytes": 404324352,
-        "output_size_bytes": 6569267
-      }
-    },
-    "r2_stateful_default_w8": {
-      "streaming": {
-        "best_elapsed_seconds": 1.494,
-        "mean_elapsed_seconds": 1.499,
-        "peak_tree_rss_bytes": 372256768,
-        "output_size_bytes": 4343119
-      },
-      "classic": {
-        "best_elapsed_seconds": 1.44,
-        "mean_elapsed_seconds": 1.502,
-        "peak_tree_rss_bytes": 374071296,
-        "output_size_bytes": 4341329
-      },
-      "rust": {
-        "best_elapsed_seconds": 1.794,
-        "mean_elapsed_seconds": 1.805,
-        "peak_tree_rss_bytes": 385789952,
-        "output_size_bytes": 4315805
-      }
-    },
-    "r2_stateful_heavy_w8": {
-      "streaming": {
-        "best_elapsed_seconds": 1.754,
-        "mean_elapsed_seconds": 1.79,
-        "peak_tree_rss_bytes": 380760064,
-        "output_size_bytes": 6310628
-      },
-      "classic": {
-        "best_elapsed_seconds": 1.788,
-        "mean_elapsed_seconds": 1.795,
-        "peak_tree_rss_bytes": 380653568,
-        "output_size_bytes": 6307683
-      },
-      "rust": {
-        "best_elapsed_seconds": 2.388,
-        "mean_elapsed_seconds": 2.402,
-        "peak_tree_rss_bytes": 407928832,
-        "output_size_bytes": 6258039
-      }
-    }
-  },
-  "reference_comparison": {
-    "default_100_10": {
-      "1": {
-        "prosperity_backtester": {
-          "elapsed_seconds": 1.179,
-          "peak_tree_rss_bytes": 93958144,
-          "output_size_bytes": 2718060,
-          "file_count": 5
-        },
-        "chris_roberts": {
-          "elapsed_seconds": 22.031,
-          "peak_tree_rss_bytes": 137662464,
-          "output_size_bytes": 1519965,
-          "file_count": 50
-        },
-        "speedup_ratio": 18.69
-      },
-      "2": {
-        "prosperity_backtester": {
-          "elapsed_seconds": 1.249,
-          "peak_tree_rss_bytes": 149450752,
-          "output_size_bytes": 2718055,
-          "file_count": 5
-        },
-        "chris_roberts": {
-          "elapsed_seconds": 12.038,
-          "peak_tree_rss_bytes": 174444544,
-          "output_size_bytes": 1519965,
-          "file_count": 50
-        },
-        "speedup_ratio": 9.64
-      },
-      "4": {
-        "prosperity_backtester": {
-          "elapsed_seconds": 1.026,
-          "peak_tree_rss_bytes": 216702976,
-          "output_size_bytes": 2718054,
-          "file_count": 5
-        },
-        "chris_roberts": {
-          "elapsed_seconds": 6.884,
-          "peak_tree_rss_bytes": 250716160,
-          "output_size_bytes": 1519965,
-          "file_count": 50
-        },
-        "speedup_ratio": 6.71
-      },
-      "8": {
-        "prosperity_backtester": {
-          "elapsed_seconds": 1.084,
-          "peak_tree_rss_bytes": 363171840,
-          "output_size_bytes": 2718053,
-          "file_count": 5
-        },
-        "chris_roberts": {
-          "elapsed_seconds": 4.702,
-          "peak_tree_rss_bytes": 400605184,
-          "output_size_bytes": 1519965,
-          "file_count": 50
-        },
-        "speedup_ratio": 4.34
-      }
-    },
-    "ceiling_1000_100": {
-      "1": {
-        "prosperity_backtester": {
-          "elapsed_seconds": 11.431,
-          "peak_tree_rss_bytes": 368185344,
-          "output_size_bytes": 18142859,
-          "file_count": 5
-        },
-        "chris_roberts": {
-          "elapsed_seconds": 200.091,
-          "peak_tree_rss_bytes": 149037056,
-          "output_size_bytes": 9689017,
-          "file_count": 410
-        },
-        "speedup_ratio": 17.5
-      },
-      "2": {
-        "prosperity_backtester": {
-          "elapsed_seconds": 6.977,
-          "peak_tree_rss_bytes": 436658176,
-          "output_size_bytes": 18142857,
-          "file_count": 5
-        },
-        "chris_roberts": {
-          "elapsed_seconds": 102.578,
-          "peak_tree_rss_bytes": 188100608,
-          "output_size_bytes": 9689017,
-          "file_count": 410
-        },
-        "speedup_ratio": 14.7
-      },
-      "4": {
-        "prosperity_backtester": {
-          "elapsed_seconds": 3.889,
-          "peak_tree_rss_bytes": 485765120,
-          "output_size_bytes": 18142859,
-          "file_count": 5
-        },
-        "chris_roberts": {
-          "elapsed_seconds": 57.727,
-          "peak_tree_rss_bytes": 264110080,
-          "output_size_bytes": 9689017,
-          "file_count": 410
-        },
-        "speedup_ratio": 14.84
-      },
-      "8": {
-        "prosperity_backtester": {
-          "elapsed_seconds": 3.598,
-          "peak_tree_rss_bytes": 579186688,
-          "output_size_bytes": 18142855,
-          "file_count": 5
-        },
-        "chris_roberts": {
-          "elapsed_seconds": 40.89,
-          "peak_tree_rss_bytes": 405397504,
-          "output_size_bytes": 9689017,
-          "file_count": 410
-        },
-        "speedup_ratio": 11.36
-      }
-    }
-  },
-  "architecture_bakeoff": {
-    "bundle_size_bytes": 10157359,
-    "serialisation": {
-      "json_size_bytes": 10157359,
-      "msgpack_size_bytes": 8393320,
-      "json_encode_seconds": 0.126943,
-      "msgpack_encode_seconds": 0.02806,
-      "json_decode_seconds": 0.087286,
-      "msgpack_decode_seconds": 0.047654
-    },
-    "transport": {
-      "payload_bytes": 10157359,
-      "workers": 8,
-      "tasks": 32,
-      "pickle_seconds": 0.462,
-      "shared_memory_seconds": 0.336,
-      "speedup_ratio": 1.375,
-      "checksums_match": true
-    }
+    "runtime_current_local": "D:\\Programming\\prosperity-backtester\\.venv\\Scripts\\python.exe D:\\Programming\\prosperity-backtester\\analysis\\benchmark_runtime.py --output-dir backtests\\_final_local_runtime --compare-report backtests\\_audit_runtime_current\\benchmark_report.json --workers 1 2 4 8 --warm-repeat 1",
+    "runtime_historical_baseline": "D:\\Programming\\prosperity-backtester\\.venv\\Scripts\\python.exe D:\\Programming\\prosperity-backtester\\analysis\\benchmark_runtime.py --output-dir backtests/_baseline_runtime --workers 1 8 --warm-repeat 1",
+    "storage_current_local": "D:\\Programming\\prosperity-backtester\\analysis\\benchmark_outputs.py --output-dir backtests\\_final_local_output",
+    "backend_current_local": "D:\\Programming\\prosperity-backtester\\.venv\\Scripts\\python.exe D:\\Programming\\prosperity-backtester\\analysis\\benchmark_backends.py --output-dir backtests\\_final_local_backend --warmup 1 --measured-repeats 2",
+    "reference_current_local": "D:\\Programming\\prosperity-backtester\\.venv\\Scripts\\python.exe D:\\Programming\\prosperity-backtester\\analysis\\benchmark_chris_reference.py --reference-root ..\\_prosperity_reference_repos\\imc-prosperity-4\\backtester --output-dir backtests\\_final_local_reference",
+    "architecture_current_local": "D:\\Programming\\prosperity-backtester\\.venv\\Scripts\\python.exe D:\\Programming\\prosperity-backtester\\analysis\\architecture_bakeoff.py --output-dir backtests\\_final_local_architecture --bundle backtests\\_final_local_runtime\\cases\\mc_ceiling_light_w8\\dashboard.json --workers 8 --tasks 32 --repeats 3",
+    "attribution_current_local": ".venv\\Scripts\\python.exe analysis\\benchmark_attribution.py --runtime-report backtests\\_final_local_runtime\\benchmark_report.json --output-dir backtests\\_final_local_attribution"
   },
   "artefacts": {
-    "runtime_report": "backtests/_phase5_runtime_current/benchmark_report.json",
-    "storage_report": "backtests/_phase5_storage_current/benchmark_report.json",
-    "backend_report": "backtests/_phase5_backend_benchmark/backend_benchmark.json",
-    "reference_report": "backtests/_phase5_reference_benchmark/reference_benchmark.json",
-    "architecture_bakeoff": "backtests/_phase5_architecture_bakeoff/architecture_bakeoff.json"
+    "runtime_current_local": "backtests/_final_local_runtime/benchmark_report.json",
+    "runtime_historical_baseline": "backtests/_baseline_runtime/benchmark_report.json",
+    "storage_current_local": "backtests/_final_local_output/benchmark_report.json",
+    "attribution_current_local": "backtests/_final_local_attribution/bundle_attribution.json",
+    "backend_current_local": "backtests/_final_local_backend/backend_benchmark.json",
+    "reference_current_local": "backtests/_final_local_reference/reference_benchmark.json",
+    "architecture_current_local": "backtests/_final_local_architecture/architecture_bakeoff.json",
+    "rss_frontier_current": "backtests/_final_rss_frontier_current/rss_frontier_report.json",
+    "rss_process_breakdown_current": "backtests/_final_rss_process_breakdown_current/process_breakdown.json"
   },
   "caveats": [
-    "backtests/ artefacts are ignored; this file is the tracked summary surface for the 2026-04-22 audited runs.",
-    "The runtime baseline used for delta checks was backtests/_phase4_runtime_baseline/benchmark_report.json.",
-    "The storage benchmark measures retained output footprint, not runtime throughput.",
-    "The Chris comparison is same-machine and same tick-budget, but not full semantic parity because the reference repo has a different output contract and product scope.",
-    "Realistic trader backend rankings are strategy-sensitive. Streaming remains the recommended default, but classic wins or ties some realistic 8-worker cells.",
-    "The architecture bake-off uses a real dashboard payload and isolates serialisation or transport overhead only; it is not a full engine rewrite prototype."
-  ]
+    "The fresh full runtime rerun in backtests/_final_local_runtime was clearly machine-contended. Use it as current-code validation, not as the cleanest throughput headline.",
+    "The least-contended same-code throughput baselines for this dirty worktree are backtests/_baseline_runtime and backtests/_final_runtime_current.",
+    "The Chris Roberts comparison is same-machine and matched on a shared no-op trader plus tick budget, but it is not full semantic parity.",
+    "All results remain dirty-worktree local evidence until the worktree is cleaned and rerun from a stable machine state."
+  ],
+  "current_local": {
+    "storage": {
+      "replay_light": {
+        "bundle_size_bytes": 1364094,
+        "file_count": 6,
+        "output_dir": "D:\\Programming\\prosperity-backtester\\backtests\\_final_local_output\\replay_light"
+      },
+      "replay_full": {
+        "bundle_size_bytes": 1992785,
+        "file_count": 12,
+        "output_dir": "D:\\Programming\\prosperity-backtester\\backtests\\_final_local_output\\replay_full"
+      },
+      "mc_light": {
+        "bundle_size_bytes": 819776,
+        "file_count": 6,
+        "output_dir": "D:\\Programming\\prosperity-backtester\\backtests\\_final_local_output\\mc_light"
+      },
+      "mc_full": {
+        "bundle_size_bytes": 5159187,
+        "file_count": 18,
+        "output_dir": "D:\\Programming\\prosperity-backtester\\backtests\\_final_local_output\\mc_full"
+      }
+    },
+    "runtime_validation": {
+      "replay_day0_light": {
+        "elapsed_seconds": 5.097,
+        "peak_tree_rss_bytes": 186560512,
+        "output_size_bytes": 21148057,
+        "file_count": 6,
+        "phase_rss_bytes": {}
+      },
+      "compare_day0_light": {
+        "elapsed_seconds": 4.228,
+        "peak_tree_rss_bytes": 201498624,
+        "output_size_bytes": 11943,
+        "file_count": 3,
+        "phase_rss_bytes": {}
+      },
+      "mc_default_light_w8": {
+        "elapsed_seconds": 2.708,
+        "peak_tree_rss_bytes": 380747776,
+        "output_size_bytes": 2900797,
+        "file_count": 6,
+        "phase_rss_bytes": {
+          "before_reporting_rss_bytes": 97927168,
+          "sample_row_compaction": {
+            "elapsed_seconds": 0.106966,
+            "rss_before_bytes": 97927168,
+            "rss_after_bytes": 116981760,
+            "rss_delta_bytes": 19054592,
+            "rss_peak_bytes": 116981760
+          },
+          "dashboard_build": {
+            "elapsed_seconds": 0.011822,
+            "rss_before_bytes": 117104640,
+            "rss_after_bytes": 121798656,
+            "rss_delta_bytes": 4694016,
+            "rss_peak_bytes": 121798656
+          },
+          "bundle_write": {
+            "elapsed_seconds": 0.446574,
+            "rss_before_bytes": 121798656,
+            "rss_after_bytes": 128069632,
+            "rss_delta_bytes": 6270976,
+            "rss_peak_bytes": 131383296
+          }
+        }
+      },
+      "mc_heavy_light_w8": {
+        "elapsed_seconds": 3.822,
+        "peak_tree_rss_bytes": 400019456,
+        "output_size_bytes": 4439705,
+        "file_count": 6,
+        "phase_rss_bytes": {
+          "before_reporting_rss_bytes": 124698624,
+          "sample_row_compaction": {
+            "elapsed_seconds": 0.140223,
+            "rss_before_bytes": 124698624,
+            "rss_after_bytes": 153997312,
+            "rss_delta_bytes": 29298688,
+            "rss_peak_bytes": 153997312
+          },
+          "dashboard_build": {
+            "elapsed_seconds": 0.017108,
+            "rss_before_bytes": 154263552,
+            "rss_after_bytes": 161738752,
+            "rss_delta_bytes": 7475200,
+            "rss_peak_bytes": 161742848
+          },
+          "bundle_write": {
+            "elapsed_seconds": 0.755665,
+            "rss_before_bytes": 161738752,
+            "rss_after_bytes": 168501248,
+            "rss_delta_bytes": 6762496,
+            "rss_peak_bytes": 179593216
+          }
+        }
+      },
+      "mc_ceiling_light_w8": {
+        "elapsed_seconds": 8.538,
+        "peak_tree_rss_bytes": 452497408,
+        "output_size_bytes": 6645833,
+        "file_count": 6,
+        "phase_rss_bytes": {
+          "before_reporting_rss_bytes": 252231680,
+          "sample_row_compaction": {
+            "elapsed_seconds": 0.24943,
+            "rss_before_bytes": 252231680,
+            "rss_after_bytes": 207626240,
+            "rss_delta_bytes": -44605440,
+            "rss_peak_bytes": 273883136
+          },
+          "dashboard_build": {
+            "elapsed_seconds": 0.033929,
+            "rss_before_bytes": 207867904,
+            "rss_after_bytes": 219385856,
+            "rss_delta_bytes": 11517952,
+            "rss_peak_bytes": 219385856
+          },
+          "bundle_write": {
+            "elapsed_seconds": 1.069045,
+            "rss_before_bytes": 219385856,
+            "rss_after_bytes": 243396608,
+            "rss_delta_bytes": 24010752,
+            "rss_peak_bytes": 246284288
+          }
+        }
+      },
+      "mc_default_full_w1": {
+        "elapsed_seconds": 7.106,
+        "peak_tree_rss_bytes": 144736256,
+        "output_size_bytes": 25175571,
+        "file_count": 122,
+        "phase_rss_bytes": {
+          "before_reporting_rss_bytes": 59539456,
+          "sample_row_compaction": {
+            "elapsed_seconds": 0.078811,
+            "rss_before_bytes": 59539456,
+            "rss_after_bytes": 81051648,
+            "rss_delta_bytes": 21512192,
+            "rss_peak_bytes": 81051648
+          },
+          "dashboard_build": {
+            "elapsed_seconds": 0.031227,
+            "rss_before_bytes": 82083840,
+            "rss_after_bytes": 100913152,
+            "rss_delta_bytes": 18829312,
+            "rss_peak_bytes": 100913152
+          },
+          "bundle_write": {
+            "elapsed_seconds": 3.4344,
+            "rss_before_bytes": 100913152,
+            "rss_after_bytes": 130052096,
+            "rss_delta_bytes": 29138944,
+            "rss_peak_bytes": 133193728
+          }
+        }
+      }
+    },
+    "attribution": {
+      "top_targets": [
+        {
+          "component": "orderIntent",
+          "mean_json_bytes": 14496369,
+          "bundle_count": 2
+        },
+        {
+          "component": "orders",
+          "mean_json_bytes": 14471672,
+          "bundle_count": 1
+        },
+        {
+          "component": "behaviourSeries",
+          "mean_json_bytes": 6221982,
+          "bundle_count": 2
+        },
+        {
+          "component": "fairValueSeries",
+          "mean_json_bytes": 4544152,
+          "bundle_count": 2
+        },
+        {
+          "component": "pnlSeries",
+          "mean_json_bytes": 2962663,
+          "bundle_count": 2
+        },
+        {
+          "component": "monteCarlo",
+          "mean_json_bytes": 2300454,
+          "bundle_count": 13
+        },
+        {
+          "component": "monteCarlo.sampleRuns",
+          "mean_json_bytes": 1982062,
+          "bundle_count": 13
+        },
+        {
+          "component": "inventorySeries",
+          "mean_json_bytes": 1816783,
+          "bundle_count": 2
+        },
+        {
+          "component": "monteCarlo.sampleRuns.fills",
+          "mean_json_bytes": 460482,
+          "bundle_count": 13
+        },
+        {
+          "component": "monteCarlo.sampleRuns.orderIntent",
+          "mean_json_bytes": 417963,
+          "bundle_count": 13
+        }
+      ],
+      "default_light_w8": {
+        "bundle_dir": "backtests/_final_local_runtime/cases/mc_default_light_w8",
+        "top_dashboard_sections": [
+          {
+            "component": "monteCarlo",
+            "schema_path": "$.monteCarlo",
+            "writer_path": "prosperity_backtester.reports.build_dashboard_payload",
+            "json_bytes": 1560167,
+            "estimated_object_size_bytes": 5887206,
+            "entry_count": 5
+          },
+          {
+            "component": "monteCarlo.sampleRuns",
+            "schema_path": "$.monteCarlo.sampleRuns",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 1243393,
+            "estimated_object_size_bytes": 4624029,
+            "row_count": 10
+          },
+          {
+            "component": "monteCarlo.pathBands",
+            "schema_path": "$.monteCarlo.pathBands",
+            "writer_path": "prosperity_backtester.reports.finalize_path_band_accumulator",
+            "json_bytes": 308931,
+            "estimated_object_size_bytes": 1228092,
+            "entry_count": 4
+          },
+          {
+            "component": "monteCarlo.sampleRuns.fills",
+            "schema_path": "$.monteCarlo.sampleRuns[*].fills",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 283252,
+            "estimated_object_size_bytes": 1206974,
+            "storage_encoding": "row_table_v1",
+            "row_count": 1200,
+            "column_count": 25
+          },
+          {
+            "component": "monteCarlo.sampleRuns.orderIntent",
+            "schema_path": "$.monteCarlo.sampleRuns[*].orderIntent",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 257141,
+            "estimated_object_size_bytes": 939090,
+            "storage_encoding": "row_table_v1",
+            "row_count": 1200,
+            "column_count": 27
+          },
+          {
+            "component": "monteCarlo.sampleRuns.fairValueSeries",
+            "schema_path": "$.monteCarlo.sampleRuns[*].fairValueSeries",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 223022,
+            "estimated_object_size_bytes": 678749,
+            "storage_encoding": "row_table_v1",
+            "row_count": 1200,
+            "column_count": 14
+          },
+          {
+            "component": "monteCarlo.sampleRuns.behaviourSeries",
+            "schema_path": "$.monteCarlo.sampleRuns[*].behaviourSeries",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 177112,
+            "estimated_object_size_bytes": 654724,
+            "storage_encoding": "row_table_v1",
+            "row_count": 1200,
+            "column_count": 24
+          },
+          {
+            "component": "monteCarlo.sampleRuns.pnlSeries",
+            "schema_path": "$.monteCarlo.sampleRuns[*].pnlSeries",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 144331,
+            "estimated_object_size_bytes": 548200,
+            "storage_encoding": "row_table_v1",
+            "row_count": 1200,
+            "column_count": 12
+          }
+        ],
+        "phase_rss_bytes": {
+          "before_reporting_rss_bytes": 97927168,
+          "sample_row_compaction": {
+            "elapsed_seconds": 0.106966,
+            "rss_before_bytes": 97927168,
+            "rss_after_bytes": 116981760,
+            "rss_delta_bytes": 19054592,
+            "rss_peak_bytes": 116981760
+          },
+          "dashboard_build": {
+            "elapsed_seconds": 0.011822,
+            "rss_before_bytes": 117104640,
+            "rss_after_bytes": 121798656,
+            "rss_delta_bytes": 4694016,
+            "rss_peak_bytes": 121798656
+          },
+          "bundle_write": {
+            "elapsed_seconds": 0.446574,
+            "rss_before_bytes": 121798656,
+            "rss_after_bytes": 128069632,
+            "rss_delta_bytes": 6270976,
+            "rss_peak_bytes": 131383296
+          }
+        }
+      },
+      "ceiling_light_w8": {
+        "bundle_dir": "backtests/_final_local_runtime/cases/mc_ceiling_light_w8",
+        "top_dashboard_sections": [
+          {
+            "component": "monteCarlo",
+            "schema_path": "$.monteCarlo",
+            "writer_path": "prosperity_backtester.reports.build_dashboard_payload",
+            "json_bytes": 3342494,
+            "estimated_object_size_bytes": 12611862,
+            "entry_count": 5
+          },
+          {
+            "component": "monteCarlo.sampleRuns",
+            "schema_path": "$.monteCarlo.sampleRuns",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 2986485,
+            "estimated_object_size_bytes": 11085517,
+            "row_count": 24
+          },
+          {
+            "component": "monteCarlo.sampleRuns.fills",
+            "schema_path": "$.monteCarlo.sampleRuns[*].fills",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 680250,
+            "estimated_object_size_bytes": 2892590,
+            "storage_encoding": "row_table_v1",
+            "row_count": 2880,
+            "column_count": 25
+          },
+          {
+            "component": "monteCarlo.sampleRuns.orderIntent",
+            "schema_path": "$.monteCarlo.sampleRuns[*].orderIntent",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 616955,
+            "estimated_object_size_bytes": 2249230,
+            "storage_encoding": "row_table_v1",
+            "row_count": 2880,
+            "column_count": 27
+          },
+          {
+            "component": "monteCarlo.sampleRuns.fairValueSeries",
+            "schema_path": "$.monteCarlo.sampleRuns[*].fairValueSeries",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 534751,
+            "estimated_object_size_bytes": 1626005,
+            "storage_encoding": "row_table_v1",
+            "row_count": 2880,
+            "column_count": 14
+          },
+          {
+            "component": "monteCarlo.sampleRuns.behaviourSeries",
+            "schema_path": "$.monteCarlo.sampleRuns[*].behaviourSeries",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 424652,
+            "estimated_object_size_bytes": 1566700,
+            "storage_encoding": "row_table_v1",
+            "row_count": 2880,
+            "column_count": 24
+          },
+          {
+            "component": "monteCarlo.sampleRuns.pnlSeries",
+            "schema_path": "$.monteCarlo.sampleRuns[*].pnlSeries",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 346573,
+            "estimated_object_size_bytes": 1312336,
+            "storage_encoding": "row_table_v1",
+            "row_count": 2880,
+            "column_count": 12
+          },
+          {
+            "component": "monteCarlo.pathBands",
+            "schema_path": "$.monteCarlo.pathBands",
+            "writer_path": "prosperity_backtester.reports.finalize_path_band_accumulator",
+            "json_bytes": 302699,
+            "estimated_object_size_bytes": 1284092,
+            "entry_count": 4
+          }
+        ],
+        "phase_rss_bytes": {
+          "before_reporting_rss_bytes": 252231680,
+          "sample_row_compaction": {
+            "elapsed_seconds": 0.24943,
+            "rss_before_bytes": 252231680,
+            "rss_after_bytes": 207626240,
+            "rss_delta_bytes": -44605440,
+            "rss_peak_bytes": 273883136
+          },
+          "dashboard_build": {
+            "elapsed_seconds": 0.033929,
+            "rss_before_bytes": 207867904,
+            "rss_after_bytes": 219385856,
+            "rss_delta_bytes": 11517952,
+            "rss_peak_bytes": 219385856
+          },
+          "bundle_write": {
+            "elapsed_seconds": 1.069045,
+            "rss_before_bytes": 219385856,
+            "rss_after_bytes": 243396608,
+            "rss_delta_bytes": 24010752,
+            "rss_peak_bytes": 246284288
+          }
+        }
+      }
+    },
+    "rss_frontier": {
+      "fresh_runtime_tree_peak_bytes": 452497408,
+      "targeted_probe_tree_peak_range_bytes": {
+        "min": 450736128,
+        "max": 459034624
+      },
+      "targeted_probe_peak_phase_counts": {
+        "execution_or_overlap": 3,
+        "reporting": 0
+      },
+      "parent_reporting_peaks_bytes": {
+        "before_reporting_rss_bytes": 252231680,
+        "sample_row_compaction": {
+          "elapsed_seconds": 0.24943,
+          "rss_before_bytes": 252231680,
+          "rss_after_bytes": 207626240,
+          "rss_delta_bytes": -44605440,
+          "rss_peak_bytes": 273883136
+        },
+        "dashboard_build": {
+          "elapsed_seconds": 0.033929,
+          "rss_before_bytes": 207867904,
+          "rss_after_bytes": 219385856,
+          "rss_delta_bytes": 11517952,
+          "rss_peak_bytes": 219385856
+        },
+        "bundle_write": {
+          "elapsed_seconds": 1.069045,
+          "rss_before_bytes": 219385856,
+          "rss_after_bytes": 243396608,
+          "rss_delta_bytes": 24010752,
+          "rss_peak_bytes": 246284288
+        }
+      },
+      "process_breakdown_peak": {
+        "tree_rss_bytes": 413036544,
+        "driver_rss_bytes": 100339712,
+        "worker_rss_range_bytes": {
+          "min": 35680256,
+          "max": 39882752,
+          "mean": 37711286.86
+        },
+        "worker_count": 7,
+        "child_process_count": 8,
+        "peak_sample_time_seconds": 6.678837
+      }
+    },
+    "backend": {
+      "live_v9_default_w1": {
+        "winner": "streaming",
+        "streaming_best_seconds": 7.684,
+        "classic_best_seconds": 7.721,
+        "rust_best_seconds": 10.824
+      },
+      "live_v9_default_w8": {
+        "winner": "streaming",
+        "streaming_best_seconds": 3.475,
+        "classic_best_seconds": 3.541,
+        "rust_best_seconds": 5.038
+      },
+      "live_v9_heavy_w8": {
+        "winner": "classic",
+        "streaming_best_seconds": 5.231,
+        "classic_best_seconds": 5.153,
+        "rust_best_seconds": 6.405
+      },
+      "main_default_w8": {
+        "winner": "streaming",
+        "streaming_best_seconds": 2.974,
+        "classic_best_seconds": 3.04,
+        "rust_best_seconds": 4.098
+      },
+      "main_heavy_w8": {
+        "winner": "classic",
+        "streaming_best_seconds": 4.279,
+        "classic_best_seconds": 4.148,
+        "rust_best_seconds": 5.685
+      },
+      "r2_stateful_default_w8": {
+        "winner": "classic",
+        "streaming_best_seconds": 3.465,
+        "classic_best_seconds": 3.115,
+        "rust_best_seconds": 4.274
+      },
+      "r2_stateful_heavy_w8": {
+        "winner": "classic",
+        "streaming_best_seconds": 4.133,
+        "classic_best_seconds": 3.92,
+        "rust_best_seconds": 5.255
+      }
+    },
+    "reference": {
+      "default_100_10": [
+        {
+          "workers": 1,
+          "current_elapsed_seconds": 2.759,
+          "reference_elapsed_seconds": 39.127,
+          "speedup_ratio": 14.182,
+          "current_peak_tree_rss_bytes": 90406912,
+          "reference_peak_tree_rss_bytes": 137502720,
+          "current_output_size_bytes": 927990,
+          "reference_output_size_bytes": 1519955,
+          "current_file_count": 5,
+          "reference_file_count": 50
+        },
+        {
+          "workers": 2,
+          "current_elapsed_seconds": 2.333,
+          "reference_elapsed_seconds": 20.401,
+          "speedup_ratio": 8.745,
+          "current_peak_tree_rss_bytes": 141099008,
+          "reference_peak_tree_rss_bytes": 175849472,
+          "current_output_size_bytes": 927987,
+          "reference_output_size_bytes": 1519955,
+          "current_file_count": 5,
+          "reference_file_count": 50
+        },
+        {
+          "workers": 4,
+          "current_elapsed_seconds": 1.945,
+          "reference_elapsed_seconds": 12.423,
+          "speedup_ratio": 6.387,
+          "current_peak_tree_rss_bytes": 219906048,
+          "reference_peak_tree_rss_bytes": 250322944,
+          "current_output_size_bytes": 927988,
+          "reference_output_size_bytes": 1519955,
+          "current_file_count": 5,
+          "reference_file_count": 50
+        },
+        {
+          "workers": 8,
+          "current_elapsed_seconds": 2.228,
+          "reference_elapsed_seconds": 9.878,
+          "speedup_ratio": 4.434,
+          "current_peak_tree_rss_bytes": 364347392,
+          "reference_peak_tree_rss_bytes": 401137664,
+          "current_output_size_bytes": 927984,
+          "reference_output_size_bytes": 1519955,
+          "current_file_count": 5,
+          "reference_file_count": 50
+        }
+      ],
+      "ceiling_1000_100": [
+        {
+          "workers": 1,
+          "current_elapsed_seconds": 20.732,
+          "reference_elapsed_seconds": 366.363,
+          "speedup_ratio": 17.671,
+          "current_peak_tree_rss_bytes": 355069952,
+          "reference_peak_tree_rss_bytes": 149377024,
+          "current_output_size_bytes": 6870774,
+          "reference_output_size_bytes": 9689007,
+          "current_file_count": 5,
+          "reference_file_count": 410
+        },
+        {
+          "workers": 2,
+          "current_elapsed_seconds": 13.06,
+          "reference_elapsed_seconds": 186.711,
+          "speedup_ratio": 14.296,
+          "current_peak_tree_rss_bytes": 400285696,
+          "reference_peak_tree_rss_bytes": 186953728,
+          "current_output_size_bytes": 6870772,
+          "reference_output_size_bytes": 9689007,
+          "current_file_count": 5,
+          "reference_file_count": 410
+        },
+        {
+          "workers": 4,
+          "current_elapsed_seconds": 8.563,
+          "reference_elapsed_seconds": 101.003,
+          "speedup_ratio": 11.795,
+          "current_peak_tree_rss_bytes": 444760064,
+          "reference_peak_tree_rss_bytes": 260997120,
+          "current_output_size_bytes": 6870764,
+          "reference_output_size_bytes": 9689007,
+          "current_file_count": 5,
+          "reference_file_count": 410
+        },
+        {
+          "workers": 8,
+          "current_elapsed_seconds": 7.688,
+          "reference_elapsed_seconds": 82.169,
+          "speedup_ratio": 10.688,
+          "current_peak_tree_rss_bytes": 585904128,
+          "reference_peak_tree_rss_bytes": 407052288,
+          "current_output_size_bytes": 6870774,
+          "reference_output_size_bytes": 9689007,
+          "current_file_count": 5,
+          "reference_file_count": 410
+        }
+      ]
+    },
+    "architecture": {
+      "serialisation": {
+        "json_size_bytes": 3349433,
+        "msgpack_size_bytes": 2388425,
+        "json_encode_seconds": 0.107326,
+        "msgpack_encode_seconds": 0.01711,
+        "json_decode_seconds": 0.067052,
+        "msgpack_decode_seconds": 0.021479
+      },
+      "transport": {
+        "payload_bytes": 3349433,
+        "workers": 8,
+        "tasks": 32,
+        "pickle_seconds": 0.59,
+        "shared_memory_seconds": 0.622,
+        "speedup_ratio": 0.948,
+        "checksums_match": true
+      }
+    }
+  },
+  "historical_same_code_baseline": {
+    "runtime": {
+      "replay_day0_light": {
+        "elapsed_seconds": 2.031,
+        "peak_tree_rss_bytes": 194486272,
+        "output_size_bytes": 21148045,
+        "file_count": 6
+      },
+      "compare_day0_light": {
+        "elapsed_seconds": 2.021,
+        "peak_tree_rss_bytes": 196325376,
+        "output_size_bytes": 11931,
+        "file_count": 3
+      },
+      "mc_quick_light_w8": {
+        "elapsed_seconds": 1.194,
+        "peak_tree_rss_bytes": 378630144,
+        "output_size_bytes": 2369509,
+        "file_count": 6
+      },
+      "mc_default_light_w8": {
+        "elapsed_seconds": 1.214,
+        "peak_tree_rss_bytes": 382234624,
+        "output_size_bytes": 2900783,
+        "file_count": 6
+      },
+      "mc_heavy_light_w8": {
+        "elapsed_seconds": 1.499,
+        "peak_tree_rss_bytes": 402907136,
+        "output_size_bytes": 4439696,
+        "file_count": 6
+      },
+      "mc_ceiling_light_w8": {
+        "elapsed_seconds": 3.079,
+        "peak_tree_rss_bytes": 444788736,
+        "output_size_bytes": 6645816,
+        "file_count": 6
+      },
+      "mc_default_full_w1": {
+        "elapsed_seconds": 2.481,
+        "peak_tree_rss_bytes": 164114432,
+        "output_size_bytes": 25175565,
+        "file_count": 122
+      }
+    }
+  },
+  "decisions": {
+    "default_architecture": "streaming_first_python",
+    "classic_backend_status": "keep_as_real_parity_and_performance_fallback",
+    "rust_backend_status": "keep_experimental_only",
+    "optional_binary_sidecars": "not_landing_now",
+    "shared_memory_transport": "reject_for_now",
+    "deeper_native_path": "not_justified"
+  }
 }

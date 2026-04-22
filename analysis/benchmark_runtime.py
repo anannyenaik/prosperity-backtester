@@ -253,6 +253,7 @@ def _run_case(
     provenance = manifest.get("provenance") if isinstance(manifest.get("provenance"), dict) else {}
     runtime = provenance.get("runtime") if isinstance(provenance.get("runtime"), dict) else {}
     phase_timings = runtime.get("phase_timings_seconds") if isinstance(runtime.get("phase_timings_seconds"), dict) else {}
+    phase_rss = runtime.get("phase_rss_bytes") if isinstance(runtime.get("phase_rss_bytes"), dict) else {}
     size_bytes = int(bundle_stats.get("total_size_bytes") or _dir_size(output_dir))
     file_count = int(bundle_stats.get("file_count") or _dir_file_count(output_dir))
     session_count = case_meta.get("session_count")
@@ -272,6 +273,7 @@ def _run_case(
         "parallelism": runtime.get("parallelism"),
         "worker_count": runtime.get("worker_count"),
         "phase_timings_seconds": phase_timings,
+        "phase_rss_bytes": phase_rss,
         "peak_process_rss_bytes": peak_memory.get("peak_process_rss_bytes"),
         "peak_tree_rss_bytes": peak_memory.get("peak_tree_rss_bytes"),
         "peak_child_process_count": peak_memory.get("peak_child_process_count"),

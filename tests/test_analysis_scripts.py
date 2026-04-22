@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
     "script_path",
     [
         "analysis/benchmark_outputs.py",
+        "analysis/benchmark_attribution.py",
         "analysis/benchmark_backends.py",
         "analysis/benchmark_chris_reference.py",
         "analysis/architecture_bakeoff.py",
