@@ -3,9 +3,11 @@
 This repo was audited against the highest-signal public references on
 2026-04-22.
 
-Primary references reviewed from source:
+Primary references reviewed from source (reference commits recorded during the
+audit; this repo has landed the light-mode retention hardening and fresher
+benchmark evidence at later HEADs):
 
-- `anannyenaik/prosperity-backtester` at `32af42d`
+- `anannyenaik/prosperity-backtester` at `32af42d` (audit point) through `1c3ff78` (light-mode retention hardening baseline)
 - `chrispyroberts/imc-prosperity-4` at `fac270e`
 - `nabayansaha/imc-prosperity-4-backtester` at `94ec38d`
 - `jmerle/imc-prosperity-3-backtester` at `26f52ee`
