@@ -130,7 +130,7 @@ Config files may set:
 - `max_series_rows_per_product`: default `1000` in light mode, `0` means no compaction
 - `max_mc_path_rows_per_product`: default `800` in light mode, `0` means every Monte Carlo timestamp
 - `synthetic_tick_limit`: cap synthetic Monte Carlo ticks per day for smoke or benchmark runs
-- `mc_backend`: `auto`, `streaming` or `classic`
+- `mc_backend`: `auto`, `streaming`, `classic` or `rust`
 - `include_orders`: write submitted order rows
 - `write_series_csvs` or `series_sidecars`: write chart-series CSV sidecars
 - `write_sample_path_files`: write Monte Carlo `sample_paths/`

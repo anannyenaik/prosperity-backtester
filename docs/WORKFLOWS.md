@@ -6,37 +6,32 @@ Use the repo in three tiers.
 - Validation loop: promising branches
 - Heavy forensic loop: finalists, suspicious behaviour, or raw-order debugging
 
-The normal default is now day `0` replay and compare in light mode. Three-day and full-fidelity work are deliberate.
+The normal default is day `0` replay and compare in light mode. Three-day and
+full-fidelity work are deliberate.
 
-## Fast Loop
+## Fast loop
 
 Use this for normal branch testing.
 
-Default replay and compare now target day `0`:
+Default replay and compare target day `0`:
 
 ```bash
 python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline
 python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --names current starter --data data/round1 --fill-mode empirical_baseline --merge-pnl
 ```
 
-Use the bundled fast pack when you want the standard replay, compare and smoke Monte Carlo set in one go:
+Use the bundled fast pack when you want the standard replay, compare and smoke
+Monte Carlo set in one go:
 
 ```bash
 python analysis/research_pack.py fast --trader strategies/trader.py --baseline strategies/starter.py
 ```
 
-The fast pack writes only:
+Measured on 2026-04-22 on this machine:
 
-- `replay/`
-- `compare/`
-- `monte_carlo/`
-- `pack_summary.json`
-
-Measured on 2026-04-21 with the current `strategies/trader.py` on this machine:
-
-- default day-0 replay: about `2.41s`
-- default day-0 compare: about `2.57s`
-- fast pack: about `5.93s`
+- default day-0 replay: about `2.31s`
+- default day-0 compare: about `2.40s`
+- fast pack: about `5.30s`
 
 Useful trust checks during the fast loop:
 
@@ -46,7 +41,7 @@ python -m prosperity_backtester replay strategies/trader.py --name current --dat
 python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --limit INTARIAN_PEPPER_ROOT:40 --print
 ```
 
-## Validation Loop
+## Validation loop
 
 Use this when a branch looks worth promoting.
 
@@ -60,18 +55,11 @@ This gives:
 - three-day compare
 - stronger Monte Carlo than the fast loop, still trimmed for local iteration
 
-Measured on 2026-04-21 with the current `strategies/trader.py` on this machine:
+Measured on 2026-04-22 on this machine:
 
-- validation pack: about `20.36s`
+- validation pack: about `17.90s`
 
-You can still run the parts separately when needed:
-
-```bash
-python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --days -2 -1 0 --fill-mode empirical_baseline
-python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --names current starter --data data/round1 --days -2 -1 0 --fill-mode empirical_baseline --merge-pnl
-```
-
-## Heavy Forensic Loop
+## Heavy forensic loop
 
 Use this only when you explicitly want full-fidelity evidence.
 
@@ -79,17 +67,12 @@ Use this only when you explicitly want full-fidelity evidence.
 python analysis/research_pack.py forensic --trader strategies/trader.py --baseline strategies/starter.py
 ```
 
-This switches replay and Monte Carlo to full output and uses a heavier Monte Carlo run across all three days.
+This switches replay and Monte Carlo to full output and uses a heavier Monte
+Carlo run across all three days.
 
 Treat this as a minute-scale task rather than part of the default branch loop.
 
-Standalone forensic replay:
-
-```bash
-python -m prosperity_backtester replay strategies/trader.py --name current --data-dir data/round1 --days -2 -1 0 --fill-mode empirical_baseline --output-profile full
-```
-
-## Replay Profiling
+## Replay profiling
 
 Use the profiling helper when replay speed looks wrong.
 
@@ -97,7 +80,7 @@ Use the profiling helper when replay speed looks wrong.
 python analysis/profile_replay.py strategies/trader.py --compare-trader strategies/starter.py --data-dir data/round1 --fill-mode empirical_baseline
 ```
 
-The helper benchmarks each requested day separately, writes `profile_report.json`, and reports:
+The helper benchmarks each requested day separately and reports:
 
 - dataset load time
 - trader construction time
@@ -106,7 +89,11 @@ The helper benchmarks each requested day separately, writes `profile_report.json
 - dashboard build time
 - bundle write time
 
-On the current repo state, the slowest three-day replay day is day `0` at about `2.655s`, split roughly into `1.559s` in the market session, `0.644s` in light-output compaction and `0.286s` in dashboard plus bundle write work.
+The current slowest replay day is still day `0`, with about:
+
+- `1.559s` in the market session
+- `0.644s` in replay-row compaction
+- `0.286s` in dashboard plus bundle write work
 
 ## Monte Carlo
 
@@ -117,18 +104,30 @@ python -m prosperity_backtester monte-carlo strategies/trader.py --name current 
 python -m prosperity_backtester monte-carlo strategies/trader.py --name current --days 0 --fill-mode empirical_baseline --noise-profile fitted --sessions 256 --sample-sessions 16 --workers 4 --mc-backend classic
 ```
 
-Review mean, median, P05, expected shortfall, drawdown and limit breaches. The dashboard path bands are computed from all sessions; saved sample runs are examples for qualitative inspection. Use the default `streaming` backend for routine research, and use `--mc-backend classic` when you want an explicit parity fallback.
+Review mean, median, P05, expected shortfall, drawdown and limit breaches. The
+dashboard path bands are computed from all sessions. Saved sample runs are
+examples for qualitative inspection only.
 
-Measured on 2026-04-21 with `analysis/benchmark_runtime.py` on the tracked `250`-tick Monte Carlo fixture:
+Measured on 2026-04-22 on the tracked `250`-tick fixture:
 
-- quick light, `64` sessions, `8` samples, `1` worker: about `2.41s`
-- quick light, `64` sessions, `8` samples, `4` workers: about `1.79s`
-- default light, `100` sessions, `10` samples, `1` worker: about `3.32s`
-- default light, `100` sessions, `10` samples, `4` workers: about `2.19s`
-- heavy light, `192` sessions, `16` samples, `1` worker: about `7.20s`
-- heavy light, `192` sessions, `16` samples, `4` workers: about `3.50s`
-- versus the current classic backend, streaming is about `5.7%` faster at `100/10` on `1` worker and about `10.9%` faster at `192/16` on `1` worker
-- a heavier `512/32` light run measures about `20.64s` on streaming vs `21.95s` on classic for `1` worker
+- quick light, `64/8`, `1` worker: about `1.58s`
+- quick light, `64/8`, `4` workers: about `1.29s`
+- quick light, `64/8`, `8` workers: about `1.34s`
+- default light, `100/10`, `1` worker: about `2.20s`
+- default light, `100/10`, `4` workers: about `1.50s`
+- default light, `100/10`, `8` workers: about `1.51s`
+- heavy light, `192/16`, `1` worker: about `3.98s`
+- heavy light, `192/16`, `8` workers: about `1.99s`
+- ceiling light, `768/24`, `8` workers: about `4.36s`
+
+Backend guidance is now simple:
+
+- use `streaming` for normal research work
+- use `classic` when you want a parity fallback against full replay materialisation
+- use `rust` only for explicit backend experiments
+
+On the tracked fixture, `streaming` beats both `classic` and `rust` through the
+measured 8-worker cases.
 
 ## Sweep
 
@@ -146,7 +145,8 @@ Use optimisation when each variant needs replay and Monte Carlo evidence.
 python -m prosperity_backtester optimize configs/pepper_optimize_quick.json
 ```
 
-The score combines replay PnL, Monte Carlo mean, downside, expected shortfall, volatility, drawdown and limit-breach penalties.
+The score combines replay PnL, Monte Carlo mean, downside, expected shortfall,
+volatility, drawdown and limit-breach penalties.
 
 ## Calibration
 
@@ -156,9 +156,10 @@ Use calibration when live-export evidence is available.
 python -m prosperity_backtester calibrate examples/trader_round1_v9.py --name live_v9 --data-dir data/round1 --days 0 --live-export live_exports/259168/259168.json --quick
 ```
 
-Calibration is useful for choosing conservative assumptions, not for proving exact website replication. It is not part of the default fast pack.
+Calibration is useful for choosing conservative assumptions, not for proving
+exact website replication. It is not part of the default fast pack.
 
-## Scenario Compare
+## Scenario compare
 
 Use scenario compare when rankings need to survive stress.
 
@@ -166,9 +167,10 @@ Use scenario compare when rankings need to survive stress.
 python -m prosperity_backtester scenario-compare configs/research_scenarios.json
 ```
 
-Review `robustness_ranking.csv` and `scenario_winners.csv` before trusting small replay gains.
+Review `robustness_ranking.csv` and `scenario_winners.csv` before trusting
+small replay gains.
 
-## Round 2 Scenarios
+## Round 2 scenarios
 
 Use Round 2 scenarios for Market Access Fee and extra-access decisions.
 
@@ -176,15 +178,10 @@ Use Round 2 scenarios for Market Access Fee and extra-access decisions.
 python -m prosperity_backtester round2-scenarios configs/round2_scenarios.json
 ```
 
-The checked-in default config is replay-only so it stays suitable for a normal local verification pass.
+The checked-in default config is replay-only so it stays suitable for a normal
+local verification pass.
 
-For a shared bundle containing the main Round 2 strategy comparison:
-
-```bash
-python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_research.json --output-dir backtests/round2_all_in_one_research_bundle
-```
-
-## Dashboard Review
+## Dashboard review
 
 ```bash
 npm run build --prefix dashboard
@@ -194,7 +191,8 @@ python -m prosperity_backtester serve --latest-type replay
 python -m prosperity_backtester serve --latest-type monte-carlo
 ```
 
-Open `http://127.0.0.1:5555/`, then use **Open latest run**, **Latest replay**, **Latest MC**, **Latest compare**, **Latest calibration**, **Latest optimise**, **Latest Round 2**, or **Browse local server**.
+Open `http://127.0.0.1:5555/`, then use the latest-run shortcuts or browse the
+local server directly.
 
 To finish a run and open its bundle directly:
 
@@ -203,11 +201,12 @@ python -m prosperity_backtester replay strategies/trader.py --data data/round1 -
 python -m prosperity_backtester monte-carlo strategies/trader.py --days 0 --fill-mode empirical_baseline --noise-profile fitted --quick --open
 ```
 
-## Storage And Retention
+## Storage and retention
 
 The default output profile is light. Use full mode only for forensic work.
 
-Default timestamped runs under `backtests/` keep the newest 30 runs. Use `--keep-runs` or:
+Default timestamped runs under `backtests/` keep the newest `30` runs. Use
+`--keep-runs` or:
 
 ```bash
 python -m prosperity_backtester clean --keep 30

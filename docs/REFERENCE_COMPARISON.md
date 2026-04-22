@@ -1,100 +1,146 @@
 # Reference Comparison
 
-This repo was reviewed against two public Prosperity-style research repos on 2026-04-21,
-with performance numbers refreshed on 2026-04-22 after a hot-path optimisation pass.
+This repo was audited against the highest-signal public references on
+2026-04-22.
 
-- Chris Roberts: `chrispyroberts/imc-prosperity-4` at `fac270e`
-- Nabayan Saha: `nabayansaha/imc-prosperity-4-backtester` at `94ec38d`
+Primary references reviewed from source:
 
-The goal is not a vanity feature count. The goal is the strongest practical all-round research platform.
+- `anannyenaik/prosperity-backtester` at `32af42d`
+- `chrispyroberts/imc-prosperity-4` at `fac270e`
+- `nabayansaha/imc-prosperity-4-backtester` at `94ec38d`
+- `jmerle/imc-prosperity-3-backtester` at `26f52ee`
 
-## Where This Repo Clearly Leads
+Secondary references were not roadmap-changing for this pass.
 
-- Wider research surface: replay, compare, calibration, scenario compare, optimisation, Round 2 MAF and access modelling, bundle contracts, retention and benchmark helpers.
-- Stronger storage design: light and full output profiles, canonical files, compact order-intent rows, exact fills, explicit debug artefacts and manifest data contracts.
-- Stronger dashboard surface: one dashboard for replay, comparison, Monte Carlo, calibration, optimisation, Round 2 and inspect workflows.
-- Stronger trust story: manifest provenance, workflow tier, backend metadata, git provenance, output-contract tests and dashboard adapter tests.
-- Stronger handoff quality: workflow packs, benchmark helpers, architecture notes, assumptions notes and round-specific docs.
+The goal of this review was not feature counting. The goal was to answer one
+question: what still blocks this repo from being the strongest public Prosperity
+research platform overall, and what still blocks an honest claim on
+performance.
+
+## Short conclusion
+
+This repo is already the strongest public overall platform.
+
+What was still missing before this pass was:
+
+- cleaner benchmark proof
+- a tighter performance story
+- removal of one real residual bottleneck in Monte Carlo reporting
+
+The reference audit did not justify a broad architectural rewrite.
 
 ## Versus Chris Roberts
 
-Both repos now share the same fundamental compiled Rust + Python-subprocess architecture for Monte Carlo:
+Chris Roberts' repo is the strongest narrow Monte Carlo reference.
 
-- both use a Rust binary with Rayon for session-level parallelism
-- both use a Python subprocess per worker for trader execution via line-delimited JSON IPC
-- the per-tick IPC overhead (~17μs/tick × 30K ticks/session ≈ +0.5s/session) is inherent to this approach
+What it still does better:
 
-This repo's Rust backend (`--mc-backend rust`) is a complete implementation with equivalent ceiling throughput. After the 2026-04-22 hot-path optimisation pass, the streaming Python backend is materially faster than the Rust+IPC backend at 1–4 workers (streaming ~9 ms/session amortised on the 250-tick fixture; Rust pays ~17 µs/tick × 30 K ticks ≈ +0.5 s/session in line-delimited JSON IPC overhead). At 6+ workers both Rust backends scale similarly via Rayon, while streaming scales linearly via `multiprocessing.Pool`. See `docs/PERFORMANCE.md` for the optimisation list and reproducible numbers.
+- smaller surface area if you only care about tutorial-round Monte Carlo
+- a very direct Rust-first story
+- a simpler install and mental model for that single use case once Cargo is in place
 
-This repo wins on:
+What this repo already does better:
 
-- deterministic replay is first-class rather than secondary
-- compare, scenario, calibration and Round 2 decision flows are built in
-- Monte Carlo path bands are computed from all sessions, not only saved sample paths
-- bundle storage, provenance, retention and local discovery are materially stronger
-- the dashboard is wider and more useful for day-to-day strategy review
-- backend selection is explicit, not implicit (auto=streaming, never surprise-compilations)
-- the streaming backend is the correct practical default; `--mc-backend rust` is for deliberate high-worker-count ceiling runs
+- deterministic replay is first-class, not a side path
+- compare, sweep, optimisation, calibration, scenario review and Round 2 access work live in one system
+- output contracts, provenance and retention are materially stronger
+- light vs full storage policy is explicit and benchmarked
+- the dashboard covers replay, comparison, Monte Carlo and aggregate workflows instead of only one mode
 
-Measured performance (streaming backend, 250-tick fixture, post hot-path optimisation):
+What was genuinely reusable from the audit:
 
-- MC quick light (64/8): `1.50s` on 1 worker (42.7 sess/s), `1.29s` on 4 workers (49.4 sess/s)
-- MC default light (100/10): `2.05s` on 1 worker (48.8 sess/s), `1.66s` on 4 workers (60.1 sess/s)
-- MC heavy light (192/16): `3.67s` on 1 worker (52.4 sess/s), `2.72s` on 4 workers (70.6 sess/s)
-- MC ceiling light (256/16) on 4 workers: `3.32s` (77.1 sess/s)
-- versus the previous public main: default light MC is ~38% faster on 1 worker, heavy light MC is ~49% faster on 1 worker
+- treat Chris as the main public performance credibility reference
+- keep backend choice explicit
+- keep same-machine notes honest when workloads are not directly comparable
 
-Current honest summary:
+What was mostly noise for this roadmap:
 
-- streaming Python is now the strongest practical backend for typical 1–6 worker local work, not just competitive
-- raw session throughput ceiling at very high worker counts (≥8) remains comparable between Rust backends across repos
-- streaming + multiprocessing scales linearly without IPC overhead and is recommended up to ~6 workers
-- if practical local research throughput, replay, diagnostics, output trust and dashboard ergonomics matter together, this repo is the stronger platform
+- tutorial-round-only modelling assumptions
+- any claim that a Rust subprocess design should automatically become this
+  repo's default architecture
+
+Same-machine note, recorded after the one-time Cargo build:
+
+- `prosperity4mcbt example_trader.py --quick`: about `15.974s`
+- `prosperity4mcbt example_trader.py --heavy`: about `148.707s`
+
+That note is useful context, but it is not an apples-to-apples comparison with
+this repo's Round 1 benchmark fixture. Chris's repo uses tutorial-round
+products, `10000` ticks per day and a different output contract, so it does not
+change the roadmap by itself.
 
 ## Versus Nabayan Saha
 
-Nabayan's main strengths are replay neatness and convenience:
+Nabayan's repo is still a useful replay-ergonomics reference.
 
-- concise Typer CLI
-- `--vis`
-- `--merge-pnl`
-- `--print`
-- `--match-trades`
-- `--limit PRODUCT:LIMIT`
-- simple custom data-path handling
+What it still does better:
 
-This repo now closes or surpasses those replay UX points while keeping much more research depth:
+- smaller replay-first CLI surface
+- very low ceremony for simple visual replay runs
 
-- `--data` alias is available alongside `--data-dir`
-- `--merge-pnl` is available on compare
-- `--print` and `--print-trader-output` both expose live trader stdout when needed
-- `--vis` aliases `--open`
-- `--limit PRODUCT:LIMIT` overrides per-product position limits
-- `--match-trades` remains explicit and trust-oriented
-- `--open` plus `serve --latest-type ...` gives a short local-open flow
-- the dashboard landing screen now exposes latest replay, latest MC, latest compare, latest calibration, latest optimise and latest Round 2 buttons
-- run naming is cleaner for auto-generated outputs
-- CLI help includes concrete examples instead of only flag lists
+What this repo already does better:
 
-This repo still keeps the advantages Nabayan's repo does not try to cover:
+- much broader workflow coverage
+- stronger trust controls and manifest metadata
+- better storage policy and output discipline
+- stronger dashboard breadth
+- stronger benchmark and proof tooling
 
-- Monte Carlo robustness
-- benchmark tooling
-- calibration
-- scenario compare
-- Round 2 access modelling
-- richer bundle and manifest contracts
+What was genuinely reusable:
 
-## Practical Recommendation
+- keep the common replay ergonomics short
+- keep flags like `--match-trades`, `--merge-pnl`, `--print`, `--limit` and
+  quick visual open flows easy to reach
 
-Choose this repo when you want one default platform for:
+What was mostly noise:
 
-- branch-loop replay and compare
-- robustness checks
-- dashboard review
-- storage discipline
-- handoff-ready research output
+- anything beyond replay convenience, because this repo already covers the
+  deeper research loop Nabayan's repo does not try to solve
 
-Reach for Chris's architecture only if raw compiled Monte Carlo ceiling is the sole metric and you do not need the broader research workflow.
+## Versus Jasper van Merle
 
-Reach for Nabayan's repo only if you want a smaller replay-only tool and do not need the broader research platform.
+Jasper's repo matters as a historical reference, but it did not change the
+current roadmap.
+
+What it still does better:
+
+- very small, approachable replay-and-visualiser baseline for older rounds
+
+What this repo already does better:
+
+- current-round workflow depth
+- benchmark credibility
+- provenance and contract surface
+- Monte Carlo and robustness tooling
+
+What was reusable:
+
+- keep the repo approachable despite broader scope
+
+What was mostly noise:
+
+- old-round-only assumptions
+- missing modern trust and benchmark surfaces
+
+## Roadmap impact
+
+The reference audit pointed to one high-EV conclusion:
+
+- do not rewrite the core architecture
+- tighten the evidence moat
+- fix the reporting bottleneck the profiler actually showed
+
+That is what the 2026-04-22 pass did.
+
+## Honest status
+
+Current honest status after this pass:
+
+- overall public-platform lead: yes
+- performance credibility lead: much stronger now
+- undisputed raw-performance crown across public repos: not yet proven
+
+The remaining proof gap is an apples-to-apples shared-fixture benchmark against
+the strongest public external reference. Until that exists, this repo can
+honestly claim the best overall platform and a very strong measured internal
+performance story, but not an undisputed cross-repo raw-throughput crown.

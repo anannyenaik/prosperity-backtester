@@ -34,6 +34,12 @@ _SERIES_PRIORITY_METRICS = (
     "order_count",
     "fill_count",
 )
+_MC_PATH_BAND_METRICS = (
+    ("analysisFair", "analysis_fair"),
+    ("mid", "mid"),
+    ("inventory", "inventory"),
+    ("pnl", "pnl"),
+)
 
 
 def _normalise_run_type(run_type: str | None) -> str:
@@ -578,74 +584,136 @@ def _quantile(clean: Sequence[float], q: float) -> float:
     return values[lo] * (1.0 - weight) + values[hi] * weight
 
 
-def _aggregate_mc_path_bands(results: Sequence[SessionArtefacts]) -> Dict[str, Dict[str, List[Dict[str, object]]]]:
-    metric_map = {
-        "analysisFair": "analysis_fair",
-        "mid": "mid",
-        "inventory": "inventory",
-        "pnl": "pnl",
-    }
+def _quantile_sorted(values: Sequence[float], q: float) -> float:
+    if len(values) == 1:
+        return values[0]
+    idx = q * (len(values) - 1)
+    lo = int(math.floor(idx))
+    hi = int(math.ceil(idx))
+    if lo == hi:
+        return values[lo]
+    weight = idx - lo
+    return values[lo] * (1.0 - weight) + values[hi] * weight
+
+
+def new_path_band_accumulator() -> Dict[tuple[str, str, int], Dict[str, object]]:
+    return {}
+
+
+def accumulate_path_band_rows(
+    accumulator: Dict[tuple[str, str, int], Dict[str, object]],
+    rows: Sequence[Dict[str, object]],
+) -> None:
+    for row in rows:
+        product = str(row.get("product"))
+        if product not in PRODUCTS:
+            continue
+        bucket_index = int(row.get("bucket_index", 0))
+        for metric_name, row_key in _MC_PATH_BAND_METRICS:
+            value = _number(row.get(row_key))
+            if value is None:
+                continue
+            key = (metric_name, product, bucket_index)
+            state = accumulator.get(key)
+            if state is None:
+                state = {
+                    "day": row.get("day"),
+                    "timestamp": row.get("timestamp"),
+                    "bucketStartTimestamp": row.get("bucket_start_timestamp"),
+                    "bucketEndTimestamp": row.get("bucket_end_timestamp"),
+                    "bucketCount": row.get("bucket_count"),
+                    "values": [],
+                    "envelopeMins": [],
+                    "envelopeMaxs": [],
+                }
+                accumulator[key] = state
+            state["values"].append(float(value))
+            envelope_min = _number(row.get(f"{row_key}_bucket_min", row.get(row_key)))
+            envelope_max = _number(row.get(f"{row_key}_bucket_max", row.get(row_key)))
+            if envelope_min is not None:
+                state["envelopeMins"].append(float(envelope_min))
+            if envelope_max is not None:
+                state["envelopeMaxs"].append(float(envelope_max))
+
+
+def merge_path_band_accumulators(
+    target: Dict[tuple[str, str, int], Dict[str, object]],
+    source: Dict[tuple[str, str, int], Dict[str, object]],
+) -> None:
+    for key, source_state in source.items():
+        target_state = target.get(key)
+        if target_state is None:
+            target[key] = {
+                "day": source_state.get("day"),
+                "timestamp": source_state.get("timestamp"),
+                "bucketStartTimestamp": source_state.get("bucketStartTimestamp"),
+                "bucketEndTimestamp": source_state.get("bucketEndTimestamp"),
+                "bucketCount": source_state.get("bucketCount"),
+                "values": list(source_state.get("values", [])),
+                "envelopeMins": list(source_state.get("envelopeMins", [])),
+                "envelopeMaxs": list(source_state.get("envelopeMaxs", [])),
+            }
+            continue
+        target_state["values"].extend(source_state.get("values", []))
+        target_state["envelopeMins"].extend(source_state.get("envelopeMins", []))
+        target_state["envelopeMaxs"].extend(source_state.get("envelopeMaxs", []))
+        for meta_key in ("day", "timestamp", "bucketStartTimestamp", "bucketEndTimestamp", "bucketCount"):
+            if target_state.get(meta_key) is None and source_state.get(meta_key) is not None:
+                target_state[meta_key] = source_state.get(meta_key)
+
+
+def finalize_path_band_accumulator(
+    accumulator: Dict[tuple[str, str, int], Dict[str, object]],
+) -> Dict[str, Dict[str, List[Dict[str, object]]]]:
     output: Dict[str, Dict[str, List[Dict[str, object]]]] = {
         metric_name: {product: [] for product in PRODUCTS}
-        for metric_name in metric_map
+        for metric_name, _row_key in _MC_PATH_BAND_METRICS
     }
-    grouped: Dict[tuple[str, str, int], List[Dict[str, object]]] = {}
-    for result in results:
-        for row in result.path_metrics:
-            product = str(row.get("product"))
-            if product not in PRODUCTS:
-                continue
-            bucket_index = int(row.get("bucket_index", 0))
-            for metric_name, row_key in metric_map.items():
-                if _number(row.get(row_key)) is None:
-                    continue
-                grouped.setdefault((metric_name, product, bucket_index), []).append(row)
-
-    for (metric_name, product, bucket_index), rows in sorted(grouped.items(), key=lambda item: (item[0][0], item[0][1], item[0][2])):
-        row_key = metric_map[metric_name]
-        values = [float(row[row_key]) for row in rows if _number(row.get(row_key)) is not None]
+    for (metric_name, product, bucket_index), state in sorted(accumulator.items(), key=lambda item: (item[0][0], item[0][1], item[0][2])):
+        values = sorted(float(value) for value in state.get("values", []))
         if not values:
             continue
-        envelope_min_values = [
-            float(row.get(f"{row_key}_bucket_min", row[row_key]))
-            for row in rows
-            if _number(row.get(f"{row_key}_bucket_min", row.get(row_key))) is not None
-        ]
-        envelope_max_values = [
-            float(row.get(f"{row_key}_bucket_max", row[row_key]))
-            for row in rows
-            if _number(row.get(f"{row_key}_bucket_max", row.get(row_key))) is not None
-        ]
-        first = rows[0]
         output[metric_name][product].append({
-            "day": first.get("day"),
-            "timestamp": first.get("timestamp"),
+            "day": state.get("day"),
+            "timestamp": state.get("timestamp"),
             "bucketIndex": bucket_index,
-            "bucketStartTimestamp": first.get("bucket_start_timestamp"),
-            "bucketEndTimestamp": first.get("bucket_end_timestamp"),
-            "bucketCount": first.get("bucket_count"),
+            "bucketStartTimestamp": state.get("bucketStartTimestamp"),
+            "bucketEndTimestamp": state.get("bucketEndTimestamp"),
+            "bucketCount": state.get("bucketCount"),
             "sessionCount": len(values),
-            "p05": _quantile(values, 0.05),
-            "p10": _quantile(values, 0.10),
-            "p25": _quantile(values, 0.25),
-            "p50": _quantile(values, 0.50),
-            "p75": _quantile(values, 0.75),
-            "p90": _quantile(values, 0.90),
-            "p95": _quantile(values, 0.95),
-            "min": min(values),
-            "max": max(values),
-            "envelopeMin": min(envelope_min_values) if envelope_min_values else min(values),
-            "envelopeMax": max(envelope_max_values) if envelope_max_values else max(values),
+            "p05": _quantile_sorted(values, 0.05),
+            "p10": _quantile_sorted(values, 0.10),
+            "p25": _quantile_sorted(values, 0.25),
+            "p50": _quantile_sorted(values, 0.50),
+            "p75": _quantile_sorted(values, 0.75),
+            "p90": _quantile_sorted(values, 0.90),
+            "p95": _quantile_sorted(values, 0.95),
+            "min": values[0],
+            "max": values[-1],
+            "envelopeMin": min(state.get("envelopeMins", []) or values),
+            "envelopeMax": max(state.get("envelopeMaxs", []) or values),
         })
     return output
 
 
-def _path_band_method(results: Sequence[SessionArtefacts], options: OutputOptions) -> Dict[str, object]:
-    session_count = len(results)
-    bucketed_sessions = sum(1 for result in results if result.path_metrics)
+def _aggregate_mc_path_bands(results: Sequence[SessionArtefacts]) -> Dict[str, Dict[str, List[Dict[str, object]]]]:
+    accumulator = new_path_band_accumulator()
+    for result in results:
+        if result.path_metrics:
+            accumulate_path_band_rows(accumulator, result.path_metrics)
+    return finalize_path_band_accumulator(accumulator)
+
+
+def all_session_path_band_method(
+    *,
+    session_count: int,
+    options: OutputOptions,
+    sessions_with_path_metrics: int | None = None,
+) -> Dict[str, object]:
+    bucketed_sessions = session_count if sessions_with_path_metrics is None else int(sessions_with_path_metrics)
     return {
         "source": "all_sessions",
-        "session_count": session_count,
+        "session_count": int(session_count),
         "sessions_with_path_metrics": bucketed_sessions,
         "metrics": ["analysisFair", "mid", "inventory", "pnl"],
         "quantiles": "Exact across sessions at retained bucket endpoints.",
@@ -861,10 +929,11 @@ def build_dashboard_payload(
     monte_carlo_path_band_method: Dict[str, object] | None = None,
     output_options: OutputOptions | None = None,
     runtime_context: Dict[str, object] | None = None,
+    provenance: Dict[str, object] | None = None,
 ) -> Dict[str, object]:
     output_options = output_options or DEFAULT_OUTPUT_OPTIONS
     access_scenario = access_scenario or {}
-    provenance = capture_provenance(runtime_context=runtime_context)
+    provenance = provenance or capture_provenance(runtime_context=runtime_context)
     assumptions: Dict[str, object] = {
         "exact": [
             "CSV and live-export parsing",
@@ -944,7 +1013,14 @@ def build_dashboard_payload(
                 "analysisFair": path_bands["analysisFair"],
                 "mid": path_bands["mid"],
             }
-            path_band_method = monte_carlo_path_band_method or _path_band_method(monte_carlo_results, output_options)
+            sessions_with_path_metrics = sum(1 for result in monte_carlo_results if result.path_metrics)
+            if sessions_with_path_metrics == 0:
+                sessions_with_path_metrics = len(monte_carlo_results)
+            path_band_method = monte_carlo_path_band_method or all_session_path_band_method(
+                session_count=len(monte_carlo_results),
+                sessions_with_path_metrics=sessions_with_path_metrics,
+                options=output_options,
+            )
         else:
             fair_value_bands = {
                 "analysisFair": fair_path_bands(sample_runs, "analysis_fair"),
@@ -1049,6 +1125,7 @@ def write_manifest(
     manifest: Dict[str, object],
     output_options: OutputOptions | None = None,
     runtime_context: Dict[str, object] | None = None,
+    provenance: Dict[str, object] | None = None,
 ) -> None:
     output_options = output_options or DEFAULT_OUTPUT_OPTIONS
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1066,7 +1143,7 @@ def write_manifest(
         "created_at": manifest.get("created_at") or datetime.now(timezone.utc).isoformat(),
         **manifest,
         "output_profile": output_options.to_manifest(),
-        "provenance": capture_provenance(runtime_context=internal_runtime_context, start=output_dir),
+        "provenance": provenance or capture_provenance(runtime_context=internal_runtime_context, start=output_dir),
     }
     payload.pop("runtime_context", None)
     if run_type and "data_contract" not in payload:

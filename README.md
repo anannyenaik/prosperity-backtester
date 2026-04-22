@@ -139,37 +139,35 @@ Profile replay slowdown by day:
 python analysis/profile_replay.py strategies/trader.py --compare-trader strategies/starter.py --data-dir data/round1 --fill-mode empirical_baseline
 ```
 
-Measured on 2026-04-22 with the current `strategies/trader.py`, post hot-path
-optimisation pass (see `docs/PERFORMANCE.md` for the optimisation list):
+Measured on 2026-04-22 with `analysis/benchmark_runtime.py` on this machine:
 
-- default day-0 replay: about `2.28s`
-- default day-0 compare: about `2.24s`
-- fast pack: about `4.65s`
-- validation pack: about `15.59s`
+- default day-0 replay: about `2.31s`
+- default day-0 compare: about `2.40s`
+- fast pack: about `5.30s`
+- validation pack: about `17.90s`
 
-Measured with `analysis/benchmark_runtime.py` on the tracked `250`-tick Monte Carlo fixture:
+Measured on the tracked `250`-tick Monte Carlo fixture:
 
-| Case | 1 worker | 2 workers | 4 workers | Sessions/s (1w → 4w) |
+| Case | 1 worker | 2 workers | 4 workers | 8 workers |
 | --- | ---: | ---: | ---: | ---: |
-| MC quick light (64 sess) | `1.50s` | `1.47s` | `1.29s` | 42.7 → 49.4 |
-| MC default light (100 sess) | `2.05s` | `1.99s` | `1.66s` | 48.8 → 60.1 |
-| MC heavy light (192 sess) | `3.67s` | — | `2.72s` | 52.4 → 70.6 |
-| MC ceiling light (256 sess) | — | — | `3.32s` | — → 77.1 |
+| MC quick light (64 sess) | `1.576s` | `1.515s` | `1.287s` | `1.343s` |
+| MC default light (100 sess) | `2.204s` | `1.798s` | `1.495s` | `1.513s` |
+| MC heavy light (192 sess) | `3.977s` | `n/a` | `n/a` | `1.989s` |
+| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `4.364s` |
 
-These numbers reflect a hot-path optimisation pass that landed an identity
-fast-path on `_scaled_snapshot`, an early return for tick-empty
-`_execute_order_batch` calls, a `bisect`-backed empirical sampler, a no-`asdict`
-`TradePrint` copy on aggressive-only ticks, and a no-`Bot 3` fast-path inside
-`make_book`. Versus the previous public main, default light Monte Carlo is
-`~38%` faster on `1` worker (`3.32s → 2.05s`), and heavy light Monte Carlo is
-`~49%` faster on `1` worker (`7.20s → 3.67s`). All wins were validated by
-running the full `analysis/benchmark_runtime.py` harness.
+The last real bottleneck was not the Monte Carlo engine. Profiling showed
+all-session path-band aggregation inside dashboard generation dominating the
+tail of unsampled Monte Carlo runs. That work now happens during execution and
+is merged once per worker, which cut the tracked `mc_ceiling_light_w8` case
+from `8.998s` to `4.364s` and pushed `dashboard_build_seconds` for
+`mc_default_light` down to `44 ms` at `1` worker and `18 ms` at `8` workers.
 
 The default streaming Monte Carlo backend remains the recommended choice. It
 avoids building full replay artefacts for unsampled sessions while still
-computing exact all-session distribution metrics and path bands. The compiled
-`rust` backend stays available for explicit `≥6` worker runs where its Rayon
-parallelism amortises per-tick IPC overhead, and is never auto-selected.
+computing exact all-session distribution metrics and path bands. Use
+`--mc-backend classic` for parity checks. The compiled `rust` backend remains
+available for explicit backend experiments, but the tracked fixture still
+favours streaming through the measured `8`-worker cases.
 
 Forensic work is still deliberate full-profile work and should be treated as a minute-scale task rather than part of the normal branch loop.
 
@@ -177,7 +175,13 @@ Forensic work is still deliberate full-profile work and should be treated as a m
 
 Compared with simpler replay backtesters, this repo now keeps a short daily loop through day-0 defaults, `--match-trades`, per-day PnL output, `--open`, and `serve --latest`, while still carrying compare, optimisation, calibration, scenarios and Round 2 research.
 
-Compared with Monte Carlo-first repos, the current performance story is now hybrid. The default `streaming` backend is recommended for all practical work: it avoids building full replay artefacts for unsampled sessions while still computing exact all-session distribution metrics and path bands. Use `--mc-backend classic` for parity checks. A compiled Rust + Rayon engine (`--mc-backend rust`) is available for explicit high-worker-count runs (≥6 workers): at low worker counts its per-tick IPC overhead cancels out the Rust speed advantage, so it is never auto-selected. Chris Roberts' compiled Rust design has a comparable ceiling on throughput but a less complete research workflow overall.
+Compared with Monte Carlo-first repos, this repo now makes the practical path
+faster and the proof layer clearer. The default `streaming` backend is the
+tracked winner through the measured `8`-worker cases, `classic` remains the
+explicit parity fallback, and `rust` stays available as an explicit
+experimental backend rather than a recommendation. Chris Roberts' repo remains
+the strongest narrow tutorial-round Monte Carlo reference, but this repo is
+the stronger end-to-end research platform.
 
 See [docs/REFERENCE_COMPARISON.md](docs/REFERENCE_COMPARISON.md) for the detailed comparison against the Chris Roberts and Nabayan Saha public repos.
 
@@ -425,7 +429,7 @@ Common fields:
 - `perturbation`: replay or Monte Carlo perturbation fields.
 - `synthetic_tick_limit`: optional Monte Carlo tick cap for smoke or benchmark runs.
 - `mc_sessions`, `mc_sample_sessions`, `mc_seed`, `mc_workers`: Monte Carlo controls.
-- `mc_backend`: `auto` (resolves to `streaming`), `streaming`, `classic`, or `rust` (explicit, for ≥6 workers).
+- `mc_backend`: `auto` (resolves to `streaming`), `streaming`, `classic`, or `rust` (explicit only, never auto-selected).
 - `output_profile`: `light` or `full`.
 - `save_child_bundles`: keep per-variant or per-scenario child bundles for aggregate workflows.
 - `write_series_csvs` or `series_sidecars`: write chart-series CSV sidecars.

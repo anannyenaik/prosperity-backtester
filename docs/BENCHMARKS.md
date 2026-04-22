@@ -1,171 +1,154 @@
 # Benchmarks
 
-Use the benchmark helpers when you want reproducible storage and runtime evidence.
+Use the benchmark helpers when you want reproducible storage and runtime
+evidence rather than one-off timing anecdotes.
 
-Use `analysis/benchmark_outputs.py` for storage footprint and `analysis/benchmark_runtime.py` for runtime.
+## Benchmark tools
 
-## Storage Benchmark
+Storage footprint:
 
 ```bash
-python analysis/benchmark_outputs.py --output-dir backtests/repo_output_benchmark
+python analysis/benchmark_outputs.py --output-dir backtests/output_benchmark
 ```
 
-Default benchmark fixture:
+Runtime suite:
 
-- trader: `examples/benchmark_trader.py`
-- round: `1`
-- days: `0`
-- replay fixture: first 250 tracked timestamps copied from `data/round1`
-- Monte Carlo fixture: synthetic sessions truncated to the same 250 ticks
-- Monte Carlo: 4 sessions, 2 saved sample sessions
+```bash
+python analysis/benchmark_runtime.py --output-dir backtests/runtime_benchmark --compare-report path/to/previous/benchmark_report.json --workers 1 2 4 8
+```
 
-This is intentionally a quick storage benchmark, not a research-quality robustness run. Use `--trader`, `--sessions`, `--sample-sessions` or `--fixture-timestamps` when you want numbers for a heavier real strategy.
+Optional warm-repeat pass:
 
-## Representative Results
+```bash
+python analysis/benchmark_runtime.py --output-dir backtests/runtime_benchmark_warm --workers 1 2 4 8 --warm-repeat 1
+```
 
-Measured on 2026-04-21 with the default command above:
+## What the runtime harness records
+
+Each runtime case now records:
+
+- wall time
+- output bundle size
+- peak process RSS
+- peak process-tree RSS
+- peak child-process count
+- engine and reporting phase timings
+- startup or scheduling overhead outside the measured engine wall
+- provenance capture time
+- optional cold and warm timings
+- git commit, dirty state, Python executable, platform and machine metadata
+
+This keeps performance claims tied to the environment that produced them.
+
+## Comparability notes
+
+The benchmark suite is intentionally split by purpose.
+
+- Replay, compare and pack cases use `strategies/trader.py`. These are the
+  practical branch-loop timings.
+- Monte Carlo uses `examples/benchmark_trader.py` and a `250`-tick synthetic
+  cap. This keeps 1, 2, 4 and 8 worker runs local and reproducible.
+- Backend comparisons are same-code, same-machine comparisons. That is the most
+  trustworthy way to compare `streaming`, `classic` and `rust`.
+- Cross-repo comparisons are harder. Chris Roberts' repo uses tutorial-round
+  products, a different day structure and a different output surface. Same-machine
+  notes are useful context, but not an apples-to-apples proof of superiority.
+
+## Current storage results
+
+Measured on 2026-04-22 with the default storage benchmark fixture:
 
 | Case | Size | Files | What it proves |
 | --- | ---: | ---: | --- |
-| `replay_light` | 1.36 MB | 6 | Exact replay summary and fills fit in a small daily-use bundle. |
-| `replay_full` | 1.99 MB | 12 | Full replay adds raw orders and chart-series sidecars for debugging. |
-| `mc_light` | 3.89 MB | 6 | Light Monte Carlo keeps exact final distribution stats and all-session path bands without duplicate sample files. |
-| `mc_full` | 7.47 MB | 18 | Full Monte Carlo roughly doubles bundle size because sample-path files, session manifests and sidecars are written explicitly. |
+| `replay_light` | `1.36 MB` | `6` | Exact replay summary, fills and compact paths remain small enough for daily review. |
+| `replay_full` | `1.99 MB` | `12` | Full replay adds raw orders and chart sidecars without exploding bundle size. |
+| `mc_light` | `3.91 MB` | `6` | Light Monte Carlo keeps exact all-session summary stats and path bands without duplicate sample files. |
+| `mc_full` | `7.51 MB` | `18` | Full Monte Carlo roughly doubles size because sample-path files and session manifests are written explicitly. |
 
-## Runtime Benchmark
+## Current runtime results
 
-Reproducible command:
+Measured on 2026-04-22 on:
 
-```bash
-python analysis/benchmark_runtime.py --output-dir backtests/runtime_benchmark
-```
+- Windows 10
+- Python 3.11
+- 8 physical cores
+- 16 logical CPUs
+- 15.6 GB system memory
 
-To compare against an earlier report from another worktree or clone:
+Representative current results:
 
-```bash
-python analysis/benchmark_runtime.py --output-dir backtests/runtime_benchmark --compare-report path/to/benchmark_report.json
-```
-
-Default runtime benchmark fixture:
-
-- replay and compare use `strategies/trader.py` against tracked day `0`
-- pack cases use `analysis/research_pack.py`
-- Monte Carlo uses `examples/benchmark_trader.py`
-- Monte Carlo synthetic sessions are capped to `250` ticks so quick, default and heavy tiers all stay local and reproducible
-- workers default to `1 2 4`
-
-Measured on 2026-04-21 against:
-
-- clean baseline worktree at commit `1f05eb4`
-- current working tree with the streaming Monte Carlo backend enabled by default
-
-| Case | Clean baseline | Current repo | Delta |
-| --- | ---: | ---: | ---: |
-| day `0` light replay, `strategies/trader.py` | `2.862s` | `2.413s` | `-15.7%` |
-| day `0` light compare, `strategies/trader.py` vs `strategies/starter.py` | `2.543s` | `2.572s` | `+1.1%` |
-| fast pack | `5.494s` | `5.929s` | `+7.9%` |
-| validation pack | `18.272s` | `20.358s` | `+11.4%` |
-| Monte Carlo quick light, `64/8`, `1` worker | `2.295s` | `2.405s` | `+4.8%` |
-| Monte Carlo default light, `100/10`, `1` worker | `3.355s` | `3.318s` | `-1.1%` |
-| Monte Carlo default light, `100/10`, `2` workers | `2.591s` | `2.576s` | `-0.6%` |
-| Monte Carlo default light, `100/10`, `4` workers | `2.014s` | `2.191s` | `+8.8%` |
-| Monte Carlo heavy light, `192/16`, `1` worker | `6.994s` | `7.196s` | `+2.9%` |
-| Monte Carlo heavy light, `192/16`, `4` workers | `3.277s` | `3.497s` | `+6.7%` |
-| Monte Carlo default full, `100/10`, `1` worker | `4.103s` | `4.142s` | `+1.0%` |
-
-Those baseline deltas are mixed because the pass also strengthens provenance and runtime metadata. The cleaner engine comparison is current `streaming` versus current `classic` on the same codebase:
-
-| Case | Classic | Streaming | Delta |
-| --- | ---: | ---: | ---: |
-| Monte Carlo default light, `100/10`, `1` worker | `3.517s` | `3.318s` | `-5.7%` |
-| Monte Carlo default light, `100/10`, `2` workers | `2.753s` | `2.576s` | `-6.4%` |
-| Monte Carlo heavy light, `192/16`, `1` worker | `8.084s` | `7.196s` | `-10.9%` |
-| Monte Carlo heavy light, `192/16`, `4` workers | `3.587s` | `3.497s` | `-2.5%` |
-| Monte Carlo light, `512/32`, `1` worker | `21.951s` | `20.643s` | `-6.0%` |
-| Monte Carlo light, `512/32`, `4` workers | `11.247s` | `10.993s` | `-2.3%` |
-
-`analysis/profile_replay.py` on the current repo reports the slowest replay day as day `0`, with about:
-
-- `1.559s` in the market session
-- `0.644s` in replay-row compaction
-- `0.286s` in dashboard plus bundle write
-
-Focused Monte Carlo profiling on the tracked `250`-tick fixture now shows the main remaining cost centres as:
-
-- synthetic market generation
-- Python session stepping and execution
-- all-session path-band aggregation and dashboard construction
-- bundle writing
-
-For example, `mc_default_light_w1` on streaming records about:
-
-- `1.047s` in market generation
-- `0.053s` in trader execution
-- `0.661s` in order execution
-- `0.154s` in path metrics
-- `0.861s` in compaction, dashboard build and bundle write
-
-The main improvement in this pass is that unsampled Monte Carlo sessions no longer build full replay artefacts. That improves the one-worker practical path meaningfully, but the high-worker ceiling is still limited by Python process overhead rather than raw trader execution alone.
-
-## Rust Backend Characteristics
-
-The `--mc-backend rust` backend runs market generation and order execution in a compiled Rayon engine. Trader invocation still goes through a Python subprocess per worker via line-delimited JSON IPC (one round-trip per tick).
-
-Measured on the tracked `250`-tick fixture at `50/5` sessions, `1` worker:
-
-| Backend | Wall time | Per-session | Notes |
+| Case | Current | Peak RSS | Notes |
 | --- | ---: | ---: | --- |
-| `streaming` | `~83.8s` | `~1.68s` | No IPC overhead; direct Python loop |
-| `classic` | `~99.6s` | `~1.99s` | Full artefact materialisation |
-| `rust` | `~108.8s` | `~2.18s` | IPC overhead (~17μs/tick × 30K ticks ≈ +0.5s/session) |
+| `replay_day0_light` | `2.314s` | `195.3 MB` | practical replay loop |
+| `compare_day0_light` | `2.404s` | `178.9 MB` | practical compare loop |
+| `pack_fast` | `5.298s` | `380.3 MB` | fast research pack |
+| `pack_validation` | `17.902s` | `654.4 MB` | validation pack |
+| `mc_quick_light_w8` | `1.343s` | `364.5 MB` | quickest 8-worker MC loop |
+| `mc_default_light_w8` | `1.513s` | `381.7 MB` | recommended default MC loop |
+| `mc_heavy_light_w8` | `1.989s` | `413.7 MB` | heavier validation MC |
+| `mc_ceiling_light_w8` | `4.364s` | `602.9 MB` | higher-scale ceiling case |
 
-**Key insight:** at 1 worker, per-tick IPC overhead cancels out Rust's computational savings. The `streaming` backend wins. At 6+ workers, Rust scales via Rayon (separate Python processes, no GIL) and can match or exceed streaming wall time when the session count is large enough.
+## Phase timing examples
 
-Use `streaming` for all local 1–4 worker work. Use `rust` deliberately for batch runs at 6+ workers. The `auto` sentinel always resolves to `streaming` and never triggers a Rust compile.
+The benchmark report now breaks Monte Carlo runs into engine, reporting,
+provenance and startup or scheduling components.
 
-## Files By Mode
+Tracked examples:
 
-Replay light writes:
+- `mc_default_light_w1`
+  - reporting `0.362s`
+  - wall `1.442s`
+  - startup or scheduling `0.400s`
+  - provenance `0.112s`
+- `mc_default_light_w8`
+  - reporting `0.359s`
+  - wall `0.776s`
+  - startup or scheduling `0.378s`
+  - provenance `0.107s`
+- `mc_heavy_light_w8`
+  - reporting `0.564s`
+  - wall `1.019s`
+  - startup or scheduling `0.406s`
+  - provenance `0.111s`
 
-- `dashboard.json`
-- `manifest.json`
-- `run_summary.csv`
-- `session_summary.csv`
-- `fills.csv`
-- `behaviour_summary.csv`
+This matters because the previous bottleneck was dashboard-side path-band
+aggregation. The current report shows that bottleneck is now largely gone.
 
-Replay full additionally writes:
+## Same-code backend comparison
 
-- `orders.csv`
-- `inventory_series.csv`
-- `pnl_series.csv`
-- `fair_value_series.csv`
-- `behaviour_series.csv`
-- `order_intent.csv`
+Measured on current HEAD:
 
-Monte Carlo light writes:
+| Case | Streaming | Classic | Rust |
+| --- | ---: | ---: | ---: |
+| default light `100/10`, 1 worker | `2.204s` | `2.675s` | `3.498s` |
+| default light `100/10`, 8 workers | `1.513s` | `1.652s` | `2.129s` |
+| heavy light `192/16`, 1 worker | `3.977s` | `5.408s` | `5.772s` |
+| heavy light `192/16`, 8 workers | `1.989s` | `2.225s` | `3.119s` |
+| ceiling light `768/24`, 8 workers | `4.364s` | `7.278s` | `7.426s` |
 
-- `dashboard.json`
-- `manifest.json`
-- `run_summary.csv`
-- `session_summary.csv`
-- `fills.csv`
-- `behaviour_summary.csv`
+On the tracked fixture, `streaming` is the winner through the measured
+8-worker cases.
 
-Monte Carlo full additionally writes:
+## Cold and warm note
 
-- `orders.csv`
-- `inventory_series.csv`
-- `pnl_series.csv`
-- `fair_value_series.csv`
-- `behaviour_series.csv`
-- `order_intent.csv`
-- `sample_paths/*.json`
-- `sessions/*.json`
+The tracked default streaming case has a small warm-run effect:
 
-## Reading The Trade-off
+- cold `mc_default_light_w8`: `1.514s`
+- warm repeat: `1.490s`
 
-- Light is the correct daily default when you need exact scalar research metrics, exact fills, compact replay evidence and all-session Monte Carlo bands.
-- Full is for local forensic work where raw order rows, full sidecars or separate sample-path files are worth the extra storage.
-- Sample runs are qualitative examples in both modes. Monte Carlo path bands and final distribution metrics remain the research-grade population evidence.
-- Absolute bundle size depends on strategy activity, fill count, saved sample sessions and retained timestamps. The benchmark is best used as a relative policy check rather than a universal storage forecast.
+That is worth recording, but it is not large enough to explain the headline
+improvement. The change is real.
+
+## External reference note
+
+Chris Roberts' repo is still the strongest public narrow Monte Carlo reference,
+so it is worth checking on the same machine when feasible.
+
+Same-machine warm notes after the one-time Cargo build:
+
+- `prosperity4mcbt example_trader.py --quick`: about `15.974s`
+- `prosperity4mcbt example_trader.py --heavy`: about `148.707s`
+
+Those numbers are not directly comparable to this repo's tracked fixture. Chris's
+repo runs tutorial-round products, `10000` ticks per day and a different output
+contract. They are useful context, not proof of a cross-repo performance crown.

@@ -11,7 +11,12 @@ from prosperity_backtester.__main__ import _output_options_from_args, _perturb_f
 from prosperity_backtester.experiments import TraderSpec, run_compare, run_replay, run_sweep_from_config
 from prosperity_backtester.metadata import PRODUCTS
 from prosperity_backtester.platform import PerturbationConfig, SessionArtefacts
-from prosperity_backtester.reports import build_dashboard_payload
+from prosperity_backtester.reports import (
+    build_dashboard_payload,
+    accumulate_path_band_rows,
+    finalize_path_band_accumulator,
+    new_path_band_accumulator,
+)
 from prosperity_backtester.storage import OutputOptions, prune_old_auto_runs
 
 
@@ -203,6 +208,29 @@ def test_monte_carlo_summary_and_path_bands_ignore_sample_count():
     assert pepper_bands
     assert pepper_bands[0]["sessionCount"] == 3
     assert sample_2["monteCarlo"]["fairValueBands"]["analysisFair"] == sample_2["monteCarlo"]["pathBands"]["analysisFair"]
+
+
+def test_precomputed_path_bands_keep_all_session_method_even_when_rows_are_cleared():
+    results = [_fake_mc_session(idx, sampled=idx < 2) for idx in range(3)]
+    accumulator = new_path_band_accumulator()
+    for result in results:
+        accumulate_path_band_rows(accumulator, result.path_metrics)
+        result.path_metrics = []
+    dashboard = build_dashboard_payload(
+        run_type="monte_carlo",
+        run_name="mc",
+        trader_name="starter",
+        mode="monte_carlo",
+        fill_model={"name": "base"},
+        perturbations={},
+        monte_carlo_results=results,
+        monte_carlo_path_bands=finalize_path_band_accumulator(accumulator),
+        output_options=OutputOptions.from_profile("light"),
+    )
+
+    assert dashboard["monteCarlo"]["pathBandMethod"]["source"] == "all_sessions"
+    pepper_bands = dashboard["monteCarlo"]["pathBands"]["analysisFair"]["INTARIAN_PEPPER_ROOT"]
+    assert pepper_bands[0]["sessionCount"] == 3
 
 
 def test_full_profile_child_bundles_require_explicit_request(tmp_path):

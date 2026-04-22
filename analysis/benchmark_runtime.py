@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
+import os
 import platform
+import shutil
 import subprocess
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
+
+try:
+    import psutil
+except ImportError:  # pragma: no cover - optional analysis dependency
+    psutil = None
 
 
 def _git_text(root: Path, *args: str) -> str | None:
@@ -61,6 +69,16 @@ def _format_delta(current: float | None, baseline: float | None) -> str:
     return f"{sign}{change * 100:.1f}%"
 
 
+def _format_memory(value: object) -> str:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return "n/a"
+    if number <= 0:
+        return "n/a"
+    return f"{number / (1024 * 1024):.1f} MB"
+
+
 def _tail_lines(text: str, keep: int = 6) -> list[str]:
     return [line for line in text.splitlines() if line.strip()][-keep:]
 
@@ -76,6 +94,123 @@ def _case_output(case_name: str, output_root: Path) -> Path:
     return output_root / "cases" / case_name
 
 
+def _sample_process_tree_memory(process: subprocess.Popen[str]) -> dict[str, int | None]:
+    if psutil is None:
+        return {
+            "peak_process_rss_bytes": None,
+            "peak_tree_rss_bytes": None,
+            "peak_child_process_count": None,
+        }
+    with contextlib.suppress(psutil.Error):
+        root = psutil.Process(process.pid)
+        processes = [root, *root.children(recursive=True)]
+        process_rss = 0
+        tree_rss = 0
+        peak_children = max(0, len(processes) - 1)
+        for candidate in processes:
+            with contextlib.suppress(psutil.Error):
+                rss = int(candidate.memory_info().rss)
+                tree_rss += rss
+                if candidate.pid == process.pid:
+                    process_rss = rss
+        return {
+            "peak_process_rss_bytes": process_rss,
+            "peak_tree_rss_bytes": tree_rss,
+            "peak_child_process_count": peak_children,
+        }
+    return {
+        "peak_process_rss_bytes": None,
+        "peak_tree_rss_bytes": None,
+        "peak_child_process_count": None,
+    }
+
+
+def _kill_process_tree(process: subprocess.Popen[str]) -> None:
+    if psutil is not None:
+        with contextlib.suppress(psutil.Error):
+            root = psutil.Process(process.pid)
+            for child in root.children(recursive=True):
+                with contextlib.suppress(psutil.Error):
+                    child.kill()
+    with contextlib.suppress(OSError):
+        process.kill()
+
+
+def _run_command_with_monitoring(
+    *,
+    command: list[str],
+    repo_root: Path,
+    timeout_seconds: float | None = None,
+    sample_interval_seconds: float = 0.02,
+) -> tuple[subprocess.CompletedProcess[str], float, dict[str, int | None]]:
+    process = subprocess.Popen(
+        command,
+        cwd=repo_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    start = time.perf_counter()
+    peak_memory = {
+        "peak_process_rss_bytes": 0,
+        "peak_tree_rss_bytes": 0,
+        "peak_child_process_count": 0,
+    }
+    deadline = None if timeout_seconds is None else time.perf_counter() + timeout_seconds
+    while process.poll() is None:
+        sample = _sample_process_tree_memory(process)
+        for key in peak_memory:
+            value = sample.get(key)
+            if value is None:
+                continue
+            peak_memory[key] = max(int(peak_memory[key]), int(value))
+        if deadline is not None and time.perf_counter() >= deadline:
+            _kill_process_tree(process)
+            stdout, stderr = process.communicate()
+            raise subprocess.TimeoutExpired(command, timeout_seconds or 0.0, output=stdout, stderr=stderr)
+        time.sleep(sample_interval_seconds)
+    stdout, stderr = process.communicate()
+    elapsed = time.perf_counter() - start
+    sample = _sample_process_tree_memory(process)
+    for key in peak_memory:
+        value = sample.get(key)
+        if value is None:
+            continue
+        peak_memory[key] = max(int(peak_memory[key]), int(value))
+    completed = subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+    if completed.returncode != 0:
+        raise subprocess.CalledProcessError(completed.returncode, command, stdout, stderr)
+    return completed, elapsed, peak_memory
+
+
+def _with_output_dir(command: list[str], output_dir: Path) -> list[str]:
+    updated = list(command)
+    for index, token in enumerate(updated[:-1]):
+        if token == "--output-dir":
+            updated[index + 1] = str(output_dir)
+            return updated
+    return updated
+
+
+def _phase_seconds(phase_timings: dict[str, object], key: str) -> float | None:
+    try:
+        value = float(phase_timings.get(key) or 0.0)
+    except (TypeError, ValueError):
+        return None
+    return value
+
+
+def _mc_non_engine_overhead(elapsed: float, phase_timings: dict[str, object]) -> float | None:
+    session_wall = _phase_seconds(phase_timings, "session_execution_wall_seconds")
+    if session_wall is None:
+        return None
+    reporting_seconds = sum(
+        _phase_seconds(phase_timings, key) or 0.0
+        for key in ("sample_row_compaction_seconds", "dashboard_build_seconds", "bundle_write_seconds")
+    )
+    return max(0.0, elapsed - session_wall - reporting_seconds)
+
+
 def _run_case(
     *,
     case_name: str,
@@ -83,17 +218,32 @@ def _run_case(
     repo_root: Path,
     output_dir: Path,
     case_meta: dict[str, object],
+    warm_repeat: int = 0,
 ) -> dict[str, object]:
     output_dir.parent.mkdir(parents=True, exist_ok=True)
-    start = time.perf_counter()
-    completed = subprocess.run(
-        command,
-        cwd=repo_root,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    elapsed = time.perf_counter() - start
+    attempts = max(0, int(warm_repeat)) + 1
+    cold_elapsed = None
+    best_warm_elapsed = None
+    completed: subprocess.CompletedProcess[str] | None = None
+    elapsed = 0.0
+    peak_memory = {
+        "peak_process_rss_bytes": None,
+        "peak_tree_rss_bytes": None,
+        "peak_child_process_count": None,
+    }
+    for attempt in range(attempts):
+        run_output_dir = output_dir if attempt == attempts - 1 else output_dir.parent / f"{output_dir.name}__warmup_{attempt}"
+        completed, elapsed, peak_memory = _run_command_with_monitoring(
+            command=_with_output_dir(command, run_output_dir),
+            repo_root=repo_root,
+        )
+        if attempt == 0:
+            cold_elapsed = elapsed
+        elif best_warm_elapsed is None or elapsed < best_warm_elapsed:
+            best_warm_elapsed = elapsed
+        if run_output_dir != output_dir and run_output_dir.exists():
+            shutil.rmtree(run_output_dir, ignore_errors=True)
+    assert completed is not None
     manifest = _json_or_empty(output_dir / "manifest.json")
     bundle_stats = manifest.get("bundle_stats") if isinstance(manifest.get("bundle_stats"), dict) else {}
     provenance = manifest.get("provenance") if isinstance(manifest.get("provenance"), dict) else {}
@@ -116,6 +266,12 @@ def _run_case(
         "parallelism": runtime.get("parallelism"),
         "worker_count": runtime.get("worker_count"),
         "phase_timings_seconds": phase_timings,
+        "peak_process_rss_bytes": peak_memory.get("peak_process_rss_bytes"),
+        "peak_tree_rss_bytes": peak_memory.get("peak_tree_rss_bytes"),
+        "peak_child_process_count": peak_memory.get("peak_child_process_count"),
+        "non_engine_overhead_seconds": _mc_non_engine_overhead(elapsed, phase_timings),
+        "cold_elapsed_seconds": None if attempts <= 1 else round(float(cold_elapsed or 0.0), 3),
+        "warm_best_elapsed_seconds": None if attempts <= 1 else round(float(best_warm_elapsed or elapsed), 3),
         "throughput_sessions_per_second": throughput,
         "stdout_tail": _tail_lines(completed.stdout),
         "stderr_tail": _tail_lines(completed.stderr),
@@ -130,17 +286,32 @@ def _run_pack_case(
     repo_root: Path,
     output_dir: Path,
     case_meta: dict[str, object],
+    warm_repeat: int = 0,
 ) -> dict[str, object]:
     output_dir.parent.mkdir(parents=True, exist_ok=True)
-    start = time.perf_counter()
-    completed = subprocess.run(
-        command,
-        cwd=repo_root,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    elapsed = time.perf_counter() - start
+    attempts = max(0, int(warm_repeat)) + 1
+    cold_elapsed = None
+    best_warm_elapsed = None
+    completed: subprocess.CompletedProcess[str] | None = None
+    elapsed = 0.0
+    peak_memory = {
+        "peak_process_rss_bytes": None,
+        "peak_tree_rss_bytes": None,
+        "peak_child_process_count": None,
+    }
+    for attempt in range(attempts):
+        run_output_dir = output_dir if attempt == attempts - 1 else output_dir.parent / f"{output_dir.name}__warmup_{attempt}"
+        completed, elapsed, peak_memory = _run_command_with_monitoring(
+            command=_with_output_dir(command, run_output_dir),
+            repo_root=repo_root,
+        )
+        if attempt == 0:
+            cold_elapsed = elapsed
+        elif best_warm_elapsed is None or elapsed < best_warm_elapsed:
+            best_warm_elapsed = elapsed
+        if run_output_dir != output_dir and run_output_dir.exists():
+            shutil.rmtree(run_output_dir, ignore_errors=True)
+    assert completed is not None
     pack_summary = _json_or_empty(output_dir / "pack_summary.json")
     return {
         "case": case_name,
@@ -152,6 +323,11 @@ def _run_pack_case(
         "engine_backend": "python",
         "parallelism": "mixed",
         "worker_count": case_meta.get("worker_count"),
+        "peak_process_rss_bytes": peak_memory.get("peak_process_rss_bytes"),
+        "peak_tree_rss_bytes": peak_memory.get("peak_tree_rss_bytes"),
+        "peak_child_process_count": peak_memory.get("peak_child_process_count"),
+        "cold_elapsed_seconds": None if attempts <= 1 else round(float(cold_elapsed or 0.0), 3),
+        "warm_best_elapsed_seconds": None if attempts <= 1 else round(float(best_warm_elapsed or elapsed), 3),
         "throughput_sessions_per_second": None,
         "stdout_tail": _tail_lines(completed.stdout),
         "stderr_tail": _tail_lines(completed.stderr),
@@ -194,6 +370,8 @@ def _mc_phase_line(case: dict[str, object]) -> str | None:
     backend = case.get("monte_carlo_backend") or case.get("engine_backend") or "unknown"
     rust_wall = phase.get("rust_internal_wall_seconds")
     rust_suffix = f", rust-parallel-wall {_format_phase_seconds(rust_wall)}" if rust_wall is not None else ""
+    provenance_suffix = f", provenance {_format_phase_seconds(phase.get('provenance_capture_seconds'))}"
+    overhead_suffix = f", startup/scheduling {_format_phase_seconds(case.get('non_engine_overhead_seconds'))}"
     return (
         f"- `{case['case']}` [{backend}]: market generation {_format_phase_seconds(phase.get('market_generation_seconds'))}, "
         f"trader {_format_phase_seconds(phase.get('trader_seconds'))}, "
@@ -201,6 +379,8 @@ def _mc_phase_line(case: dict[str, object]) -> str | None:
         f"path metrics {_format_phase_seconds(phase.get('path_metrics_seconds'))}, "
         f"reporting {_format_phase_seconds(reporting_seconds)}, "
         f"wall {_format_phase_seconds(phase.get('session_execution_wall_seconds'))}"
+        f"{overhead_suffix}"
+        f"{provenance_suffix}"
         f"{rust_suffix}"
     )
 
@@ -212,10 +392,11 @@ def _render_case_row(case: dict[str, object], baseline_lookup: dict[str, dict[st
     throughput = case.get("throughput_sessions_per_second")
     throughput_text = "n/a" if throughput is None else f"{float(throughput):.2f}"
     backend = case.get("monte_carlo_backend") or case.get("engine_backend") or "n/a"
+    peak_rss_text = _format_memory(case.get("peak_tree_rss_bytes"))
     return (
         f"| `{case['case']}` | {backend} | {current_seconds:.3f}s | "
         f"{_format_seconds(baseline_seconds)} | {_format_delta(current_seconds, baseline_seconds)} | "
-        f"{throughput_text} | {int(case.get('size_bytes') or 0):,} |"
+        f"{throughput_text} | {peak_rss_text} | {int(case.get('size_bytes') or 0):,} |"
     )
 
 
@@ -234,6 +415,10 @@ def render_runtime_benchmark_markdown(report: dict[str, object], baseline_report
         f"- Git dirty: `{report['git_dirty']}`",
         f"- Python: `{report['python_executable']}`",
         f"- Platform: `{report['platform']}`",
+        f"- Logical CPUs: `{report.get('cpu_count_logical')}`",
+        f"- Physical CPUs: `{report.get('cpu_count_physical')}`",
+        f"- System memory: `{_format_memory(report.get('system_memory_bytes'))}`",
+        f"- Memory sampler: `{report.get('memory_sampler')}`",
         f"- Trader: `{report['trader']}`",
         f"- Monte Carlo trader: `{report['mc_trader']}`",
         f"- Baseline trader: `{report['baseline_trader']}`",
@@ -243,8 +428,8 @@ def render_runtime_benchmark_markdown(report: dict[str, object], baseline_report
         f"- Requested MC backend: `{report['requested_mc_backend'] or 'default'}`",
         f"- MC synthetic tick limit: `{report['mc_synthetic_tick_limit']}`",
         "",
-        "| Case | Backend | Current | Baseline | Delta | Sessions/s | Output bytes |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
+        "| Case | Backend | Current | Baseline | Delta | Sessions/s | Peak RSS | Output bytes |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for case in report["cases"]:
         lines.append(_render_case_row(case, baseline_lookup))
@@ -262,6 +447,17 @@ def render_runtime_benchmark_markdown(report: dict[str, object], baseline_report
             "",
             "Monte Carlo phase profile",
             *phase_lines,
+        ])
+    warm_lines = [
+        f"- `{case['case']}`: cold {_format_seconds(case.get('cold_elapsed_seconds'))}, warm-best {_format_seconds(case.get('warm_best_elapsed_seconds'))}"
+        for case in report["cases"]
+        if case.get("cold_elapsed_seconds") is not None and case.get("warm_best_elapsed_seconds") is not None
+    ]
+    if warm_lines:
+        lines.extend([
+            "",
+            "Cold vs warm",
+            *warm_lines,
         ])
     lines.extend([
         "",
@@ -296,6 +492,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mc-backend", default=None, choices=["auto", "classic", "streaming", "rust"], help="Optional Monte Carlo backend override for repos that support it")
     parser.add_argument("--mc-synthetic-tick-limit", type=int, default=250, help="Synthetic tick cap for Monte Carlo benchmark cases")
     parser.add_argument("--workers", nargs="*", type=int, default=[1, 2, 4], help="Worker counts for quick and default Monte Carlo cases")
+    parser.add_argument("--warm-repeat", type=int, default=0, help="Extra warm reruns per case. The final saved output is from the last run.")
     parser.add_argument("--quick-sessions", type=int, default=64)
     parser.add_argument("--quick-sample-sessions", type=int, default=8)
     parser.add_argument("--default-sessions", type=int, default=100)
@@ -329,6 +526,7 @@ def main(argv: list[str] | None = None) -> None:
     mc_trader = str(Path(args.mc_trader))
     workers = _worker_values(args.workers)
     max_worker = workers[-1]
+    warm_repeat = max(0, int(args.warm_repeat))
     baseline_report = _json_or_empty(Path(args.compare_report).resolve()) if args.compare_report else None
     mc_backend_args = _mc_backend_args(args.mc_backend)
 
@@ -357,6 +555,7 @@ def main(argv: list[str] | None = None) -> None:
         repo_root=repo_root,
         output_dir=replay_light_dir,
         case_meta={"kind": "replay", "tier": "fast", "output_profile": "light"},
+        warm_repeat=warm_repeat,
     ))
 
     replay_full_dir = _case_output("replay_day0_full", output_root)
@@ -384,6 +583,7 @@ def main(argv: list[str] | None = None) -> None:
         repo_root=repo_root,
         output_dir=replay_full_dir,
         case_meta={"kind": "replay", "tier": "forensic", "output_profile": "full"},
+        warm_repeat=warm_repeat,
     ))
 
     compare_dir = _case_output("compare_day0_light", output_root)
@@ -411,6 +611,7 @@ def main(argv: list[str] | None = None) -> None:
         repo_root=repo_root,
         output_dir=compare_dir,
         case_meta={"kind": "comparison", "tier": "fast", "output_profile": "light"},
+        warm_repeat=warm_repeat,
     ))
 
     for preset in ("fast", "validation"):
@@ -438,6 +639,7 @@ def main(argv: list[str] | None = None) -> None:
             repo_root=repo_root,
             output_dir=pack_dir,
             case_meta={"kind": "pack", "tier": preset, "workflow_tier": preset, "worker_count": max_worker},
+            warm_repeat=warm_repeat,
         ))
 
     for worker in workers:
@@ -479,6 +681,7 @@ def main(argv: list[str] | None = None) -> None:
                 sample_session_count=args.quick_sample_sessions,
                 output_profile="light",
             ),
+            warm_repeat=warm_repeat,
         ))
 
     for worker in workers:
@@ -520,6 +723,7 @@ def main(argv: list[str] | None = None) -> None:
                 sample_session_count=args.default_sample_sessions,
                 output_profile="light",
             ),
+            warm_repeat=warm_repeat,
         ))
 
     heavy_workers = sorted({1, max_worker})
@@ -562,6 +766,7 @@ def main(argv: list[str] | None = None) -> None:
                 sample_session_count=args.heavy_sample_sessions,
                 output_profile="light",
             ),
+            warm_repeat=warm_repeat,
         ))
 
     ceiling_dir = _case_output(f"mc_ceiling_light_w{max_worker}", output_root)
@@ -602,6 +807,7 @@ def main(argv: list[str] | None = None) -> None:
             sample_session_count=args.ceiling_sample_sessions,
             output_profile="light",
         ),
+        warm_repeat=warm_repeat,
     ))
 
     mc_full_dir = _case_output("mc_default_full_w1", output_root)
@@ -644,6 +850,7 @@ def main(argv: list[str] | None = None) -> None:
             sample_session_count=args.default_sample_sessions,
             output_profile="full",
         ),
+        warm_repeat=warm_repeat,
     ))
 
     mc_full_trimmed_dir = _case_output("mc_default_full_trimmed_w1", output_root)
@@ -688,6 +895,7 @@ def main(argv: list[str] | None = None) -> None:
             sample_session_count=args.default_sample_sessions,
             output_profile="full_trimmed",
         ),
+        warm_repeat=warm_repeat,
     ))
 
     report = {
@@ -697,6 +905,10 @@ def main(argv: list[str] | None = None) -> None:
         "git_dirty": bool(_git_text(repo_root, "status", "--porcelain", "--untracked-files=no")),
         "python_executable": python_executable,
         "platform": platform.platform(),
+        "cpu_count_logical": psutil.cpu_count(logical=True) if psutil is not None else os.cpu_count(),
+        "cpu_count_physical": psutil.cpu_count(logical=False) if psutil is not None else None,
+        "system_memory_bytes": None if psutil is None else int(psutil.virtual_memory().total),
+        "memory_sampler": "psutil process-tree rss" if psutil is not None else "unavailable",
         "trader": trader,
         "mc_trader": mc_trader,
         "baseline_trader": baseline_trader,

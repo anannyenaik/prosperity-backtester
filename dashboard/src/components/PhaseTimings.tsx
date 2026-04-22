@@ -27,6 +27,7 @@ const PHASE_LABELS: Array<[string, string, string?]> = [
   ['sample_row_compaction_seconds', 'Sample compaction', 'Sample-session row trimming for storage'],
   ['dashboard_build_seconds', 'Dashboard build', 'dashboard.json assembly'],
   ['bundle_write_seconds', 'Bundle write', 'On-disk file emission'],
+  ['provenance_capture_seconds', 'Provenance capture', 'Git/runtime snapshotting for dashboard and manifest trust metadata'],
   ['python_overhead_seconds', 'Python overhead', 'Loop, dispatch and unprofiled work'],
 ]
 

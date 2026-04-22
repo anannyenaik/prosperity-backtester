@@ -27,8 +27,13 @@ from .mc_backends import (
 from .platform import PerturbationConfig, SessionArtefacts, generate_synthetic_market_days, run_market_session
 from .provenance import capture_provenance
 from .reports import (
+    all_session_path_band_method,
+    accumulate_path_band_rows,
     build_dashboard_payload,
     compact_replay_rows,
+    finalize_path_band_accumulator,
+    merge_path_band_accumulators,
+    new_path_band_accumulator,
     write_manifest,
     write_mc_bundle,
     write_replay_bundle,
@@ -291,6 +296,7 @@ def _run_monte_carlo_chunk(task: Dict[str, object]) -> Dict[str, object]:
     streaming_context = prepare_streaming_simulation_context(perturbation) if backend == "streaming" else None
     results: List[SessionArtefacts] = []
     profile = new_mc_profile(backend)
+    path_band_accumulator = new_path_band_accumulator() if bool(task.get("aggregate_path_bands", False)) else None
     for session_idx in session_indices:
         trader = _instantiate_worker_trader(module, trader_spec.path)
         capture_full_output = session_idx < sample_sessions
@@ -309,6 +315,9 @@ def _run_monte_carlo_chunk(task: Dict[str, object]) -> Dict[str, object]:
                 print_trader_output=bool(task.get("print_trader_output", False)),
                 simulation_context=streaming_context,
             )
+            if path_band_accumulator is not None and result.path_metrics:
+                accumulate_path_band_rows(path_band_accumulator, result.path_metrics)
+                result.path_metrics = []
             results.append(result)
             merge_mc_profile(profile, session_profile, sampled=False, execution_backend="streaming")
             continue
@@ -334,9 +343,16 @@ def _run_monte_carlo_chunk(task: Dict[str, object]) -> Dict[str, object]:
             timing_profile=session_profile,
         )
         session_profile["market_generation_seconds"] = round(generation_seconds, 6)
+        if path_band_accumulator is not None and result.path_metrics:
+            accumulate_path_band_rows(path_band_accumulator, result.path_metrics)
+            result.path_metrics = []
         results.append(result)
         merge_mc_profile(profile, session_profile, sampled=capture_full_output, execution_backend="classic")
-    return {"results": results, "profile": finalise_mc_profile(profile)}
+    return {
+        "results": results,
+        "profile": finalise_mc_profile(profile),
+        "path_band_accumulator": path_band_accumulator,
+    }
 
 
 def _session_chunks(sessions: int, worker_count: int) -> List[List[int]]:
@@ -388,6 +404,7 @@ def _run_monte_carlo_profiled(
         worker_count = min(worker_count, sessions, os.cpu_count() or worker_count)
     profile = new_mc_profile(resolved_backend)
     precomputed_path_bands: Dict[str, Dict[str, List[Dict[str, object]]]] | None = None
+    path_band_method: Dict[str, object] | None = None
     results: List[SessionArtefacts]
     base_task = {
         "sample_sessions": sample_sessions,
@@ -402,6 +419,7 @@ def _run_monte_carlo_profiled(
         "path_bucket_count": output_options.max_mc_path_rows_per_product,
         "print_trader_output": print_trader_output,
         "monte_carlo_backend": resolved_backend,
+        "aggregate_path_bands": bool(write_bundle),
     }
     execution_started = time.perf_counter()
     if resolved_backend == "rust":
@@ -448,6 +466,7 @@ def _run_monte_carlo_profiled(
             sample_task = dict(base_task)
             sample_task["sample_sessions"] = sample_sessions
             sample_task["monte_carlo_backend"] = "classic"
+            sample_task["aggregate_path_bands"] = False
             sample_chunk_tasks = [
                 sample_task | {"session_indices": chunk}
                 for chunk in _session_chunks(sample_sessions, sample_worker_count)
@@ -515,12 +534,26 @@ def _run_monte_carlo_profiled(
                 "session_total_seconds",
             ):
                 profile[key] = float(profile.get(key, 0.0) or 0.0) + float(chunk_profile.get(key, 0.0) or 0.0)
+        if write_bundle:
+            combined_path_bands = new_path_band_accumulator()
+            for chunk_output in chunk_outputs:
+                chunk_accumulator = chunk_output.get("path_band_accumulator")
+                if isinstance(chunk_accumulator, dict):
+                    merge_path_band_accumulators(combined_path_bands, chunk_accumulator)
+            if combined_path_bands:
+                precomputed_path_bands = finalize_path_band_accumulator(combined_path_bands)
+                path_band_method = all_session_path_band_method(
+                    session_count=sessions,
+                    sessions_with_path_metrics=sessions,
+                    options=output_options,
+                )
     execution_seconds = time.perf_counter() - execution_started
     results.sort(key=lambda artefact: artefact.run_name)
     sort_seconds = time.perf_counter() - execution_started - execution_seconds
     compact_seconds = 0.0
     dashboard_seconds = 0.0
     write_seconds = 0.0
+    provenance_seconds = 0.0
     data_scope = _data_scope_context(
         round_number=round_number,
         days=days,
@@ -546,10 +579,15 @@ def _run_monte_carlo_profiled(
         phase_timings["sample_row_compaction_seconds"] = round(compact_seconds, 6)
         phase_timings["dashboard_build_seconds"] = 0.0
         phase_timings["bundle_write_seconds"] = 0.0
+        phase_timings["provenance_capture_seconds"] = 0.0
         phase_timings["session_execution_wall_seconds"] = round(execution_seconds, 6)
         if "rust_internal_wall_seconds" in profile:
             phase_timings["rust_internal_wall_seconds"] = round(float(profile["rust_internal_wall_seconds"]), 6)
         runtime_context["phase_timings_seconds"] = phase_timings
+        dashboard_provenance_started = time.perf_counter()
+        dashboard_provenance = capture_provenance(runtime_context=runtime_context)
+        provenance_seconds += time.perf_counter() - dashboard_provenance_started
+        runtime_context["phase_timings_seconds"]["provenance_capture_seconds"] = round(provenance_seconds, 6)
         dashboard_started = time.perf_counter()
         dashboard = build_dashboard_payload(
             run_type="monte_carlo",
@@ -563,13 +601,14 @@ def _run_monte_carlo_profiled(
             monte_carlo_results=results,
             monte_carlo_rows=monte_carlo_rows,
             monte_carlo_path_bands=precomputed_path_bands,
+            monte_carlo_path_band_method=path_band_method,
             dataset_reports=[],
             output_options=output_options,
             runtime_context=runtime_context,
+            provenance=dashboard_provenance,
         )
         dashboard_seconds = time.perf_counter() - dashboard_started
         runtime_context["phase_timings_seconds"]["dashboard_build_seconds"] = round(dashboard_seconds, 6)
-        dashboard["meta"]["provenance"] = capture_provenance(runtime_context=runtime_context)
         write_started = time.perf_counter()
         write_mc_bundle(
             output_dir,
@@ -586,17 +625,23 @@ def _run_monte_carlo_profiled(
         if manifest_path.is_file():
             manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
             if isinstance(manifest_payload, dict):
+                manifest_provenance_started = time.perf_counter()
+                manifest_provenance = capture_provenance(runtime_context=runtime_context, start=output_dir)
+                provenance_seconds += time.perf_counter() - manifest_provenance_started
+                runtime_context["phase_timings_seconds"]["provenance_capture_seconds"] = round(provenance_seconds, 6)
                 write_manifest(
                     output_dir,
                     manifest_payload,
                     output_options,
                     runtime_context=runtime_context,
+                    provenance=manifest_provenance,
                 )
     final_profile = dict(runtime_context.get("phase_timings_seconds") or finalise_mc_profile(profile))
     final_profile["result_sort_seconds"] = round(sort_seconds, 6)
     final_profile["sample_row_compaction_seconds"] = round(compact_seconds, 6)
     final_profile["dashboard_build_seconds"] = round(dashboard_seconds, 6)
     final_profile["bundle_write_seconds"] = round(write_seconds, 6)
+    final_profile["provenance_capture_seconds"] = round(provenance_seconds, 6)
     final_profile["session_execution_wall_seconds"] = round(execution_seconds, 6)
     if "rust_internal_wall_seconds" in profile:
         final_profile["rust_internal_wall_seconds"] = round(float(profile["rust_internal_wall_seconds"]), 6)

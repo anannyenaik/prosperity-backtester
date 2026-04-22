@@ -1,122 +1,153 @@
 # Performance
 
-How the Monte Carlo and replay hot paths are organised, what we measured, and
-what remains. The aim is honest benchmark-backed claims, not theoretical wins.
+This page answers four questions:
 
-## Backend choice
+- which Monte Carlo backend is actually recommended now
+- where the last real bottleneck was
+- what the 2026-04-22 optimisation pass changed
+- what still limits the next step up
 
-There are three Monte Carlo backends in `prosperity_backtester/mc_backends.py`:
+All claims below come from local benchmark runs on 2026-04-22. See
+[`docs/BENCHMARKS.md`](BENCHMARKS.md) for the exact commands, storage numbers,
+comparability notes and the same-machine public-reference note.
 
-| Backend | When to use | Trade-off |
+## Current backend choice
+
+There are three Monte Carlo backends in
+`prosperity_backtester/mc_backends.py`:
+
+| Backend | Use it when | Current verdict |
 | --- | --- | --- |
-| `streaming` (default) | All practical worker counts up to ~6 cores | Pure-Python tick loop, no IPC, lowest overhead per session. Recommended. |
-| `classic` | Parity checks vs the replay engine | Materialises the full per-session market dataset, then runs `run_market_session`. Slower than streaming, identical results. |
-| `rust` | Explicit `--workers ≥ 6` ceiling runs | Compiled Rust + Rayon engine. Eliminates Python overhead in the parallel section, but pays per-tick line-delimited JSON IPC to the Python trader worker. Wins only when there is enough parallel work to amortise IPC. **Never auto-selected.** |
+| `streaming` | normal research work, including the tracked 1, 2, 4 and 8 worker cases | Recommended default. Fastest on the tracked fixture through the measured 8-worker cases. |
+| `classic` | parity checks against the full replay engine | Honest fallback. Slower, but semantically closest to full replay materialisation. |
+| `rust` | explicit backend experiments when you want to test the native path | Kept available, but not recommended on the tracked fixture. Never auto-selected. |
 
-The `auto` sentinel always resolves to `streaming`. To use Rust, pass
-`--mc-backend rust` deliberately. Configurations that the Rust path cannot
-honour (access scenarios, `--print-trader-output`) raise on use rather than
-silently falling back, so timing comparisons remain honest.
+`auto` always resolves to `streaming`.
 
-## Hot-path optimisation pass (2026-04-22)
+## Tracked evidence
 
-The streaming backend dominates on 1–4 workers, so it received a focused
-optimisation pass. All wins are pure-Python and apply to **both** streaming
-and classic Monte Carlo, plus the shared replay engine that calls into
-`_execute_order_batch` and `_scaled_snapshot` via `run_market_session`.
-
-1. **`_scaled_snapshot` identity fast-path** (`prosperity_backtester/platform.py`).
-   When `spread_shift_ticks==0`, `order_book_volume_scale==1.0`,
-   `book_noise_std==0.0` and `access_volume_multiplier==1.0`, return the
-   original snapshot unchanged. This is the dominant path for default configs
-   and was the largest single win (~80 % market-generation reduction on the
-   benchmark fixture).
-2. **`_execute_order_batch` early returns**. Skip the entire body when
-   `not orders`. After the aggressive pass, also early-return when there are
-   no passive candidates — this avoids the per-tick `TradePrint` copy and the
-   passive-snapshot allocation that previously ran on every aggressive-only
-   tick.
-3. **`make_book` no-`Bot 3` fast-path** (`prosperity_backtester/simulate.py`).
-   The empirical book is built as `(inner, outer)` pairs in the correct sort
-   order. When no Bot 3 quote is inserted (the common case), skip the
-   `dict`-aggregation dedupe and the `sorted()` step.
-4. **`bisect`-backed sampler** (`_Sampler.draw`). The hand-rolled binary
-   search was replaced with `bisect.bisect_left`, which is a C builtin.
-5. **Tick-aware path generation**. `simulate_latent_fair` and
-   `sample_trade_counts` now accept an optional `tick_count` so synthetic
-   benchmark fixtures (`--synthetic-tick-limit 250`) no longer allocate full
-   10 000-element latent paths and trade-count lists per session per product.
-6. **`TradePrint` direct construction** instead of `dataclasses.asdict + **`,
-   used on the rare passive ticks that need to mutate trade quantities.
-
-### RNG ordering note
-
-Optimisation #5 changes the rng-consumption count for runs with
-`--synthetic-tick-limit < 10000`. **Full-day runs (no tick limit) consume
-identical rng draws as before**, so historical Monte Carlo summaries on
-production-sized fixtures are unchanged.
-
-For shortened benchmark fixtures (CI, `analysis/benchmark_*`) the absolute
-PnL number shifts slightly. Cross-backend parity (streaming ↔ classic) is
-preserved because both paths now thread `tick_count` through the same
-helpers.
-
-## Headline numbers (benchmark fixture, post-optimisation)
-
-`analysis/benchmark_runtime.py` on the tracked 250-tick Monte Carlo fixture
-with `examples/benchmark_trader.py`:
-
-| Case | Pre-opt 1w | Post-opt 1w | Δ | Post-opt 4w | Sessions/s 4w |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| MC quick light (64 sess) | — | `1.50s` | — | `1.29s` | 49.4 |
-| MC default light (100 sess) | `3.32s` | `2.05s` | `-38 %` | `1.66s` | 60.1 |
-| MC heavy light (192 sess) | `7.20s` | `3.67s` | `-49 %` | `2.72s` | 70.6 |
-| MC ceiling light (256 sess) | — | — | — | `3.32s` | 77.1 |
-| Replay day-0 light | `2.41s` | `2.28s` | `-5 %` | n/a | n/a |
-| Day-0 compare light | `2.57s` | `2.24s` | `-13 %` | n/a | n/a |
-| Fast pack | `5.93s` | `4.65s` | `-22 %` | n/a | n/a |
-| Validation pack | `20.36s` | `15.59s` | `-23 %` | n/a | n/a |
-
-The pre-optimisation column comes from the previous public README (commit
-`48259ec`); the post-optimisation column is the current
-`backtests/runtime_benchmark_post/benchmark_report.md`.
-
-Replay benefits less than Monte Carlo because the `_scaled_snapshot` identity
-fast-path saves more on synthetic data (which calls `_scaled_snapshot` per
-product per tick) than on historical replay (which already had cheaper
-upstream snapshot construction).
-
-## When to reach for the Rust backend
-
-Use `--mc-backend rust` when:
-
-- you are running with `--workers ≥ 6` and the per-tick IPC cost is amortised,
-- you do not need access scenarios or `--print-trader-output`,
-- you have `cargo` available (the binary is built once at first use, ~30–90 s).
-
-At lower worker counts the per-tick line-delimited JSON IPC overhead
-(`~17 µs/tick × 30 K ticks ≈ +0.5 s/session`) exceeds the Rust speed
-advantage. The streaming backend wins outright, which is why it is the
-default and why `auto` resolves to it.
-
-## Why we did not embed Python in Rust
-
-`PyO3` / `pybind11` style embedding would eliminate the per-tick JSON IPC,
-but the trader callback would still hold the GIL inside the Rust process and
-multi-worker scaling would have to fall back to sub-interpreters or
-multiprocessing — neither cleanly. The marginal win does not justify the
-install/portability cost (a `cargo` toolchain becomes mandatory, and the
-runtime stops being stdlib-only). The pure-Python streaming backend with the
-optimisations above is faster than the existing Rust subprocess design at
-1–4 workers and is competitive at higher worker counts; the Rust backend is
-preserved as the explicit ceiling tool for high-core machines.
-
-## How to reproduce
+Measured with:
 
 ```bash
-python analysis/benchmark_runtime.py --output-dir backtests/runtime_benchmark_post --workers 1 2 4
+python analysis/benchmark_runtime.py --output-dir backtests/runtime_benchmark --compare-report path/to/previous/benchmark_report.json --workers 1 2 4 8
+python analysis/benchmark_outputs.py --output-dir backtests/output_benchmark
 ```
 
-The harness records git commit, Python version, platform, per-phase timings
-and full provenance in each case manifest. Use `--compare-report` against an
-earlier `benchmark_report.json` to get a delta column for regression tracking.
+Machine metadata recorded by the harness:
+
+- Windows 10
+- Python 3.11
+- 8 physical cores, 16 logical CPUs
+- 15.6 GB system memory
+- process-tree RSS sampling via `psutil`
+
+The Monte Carlo fixture is deliberately reproducible rather than maximal:
+
+- trader: `examples/benchmark_trader.py`
+- day: `0`
+- synthetic tick cap: `250`
+- tiers: quick `64/8`, default `100/10`, heavy `192/16`, ceiling `768/24`
+
+## Current runtime
+
+Tracked Monte Carlo timings:
+
+| Case | 1 worker | 2 workers | 4 workers | 8 workers | Peak RSS at widest case |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| quick light `64/8` | `1.576s` | `1.515s` | `1.287s` | `1.343s` | `364.5 MB` |
+| default light `100/10` | `2.204s` | `1.798s` | `1.495s` | `1.513s` | `381.7 MB` |
+| heavy light `192/16` | `3.977s` | `n/a` | `n/a` | `1.989s` | `413.7 MB` |
+| ceiling light `768/24` | `n/a` | `n/a` | `n/a` | `4.364s` | `602.9 MB` |
+
+Practical loop timings from the same report:
+
+- replay day 0 light: `2.314s`
+- compare day 0 light: `2.404s`
+- fast pack: `5.298s`
+- validation pack: `17.902s`
+
+Those replay and pack paths were not the target of this pass. Treat the Monte
+Carlo win as the confirmed result, not a claim that every workflow improved.
+
+## Same-code backend comparison
+
+The cleanest backend comparison is the same codebase, same machine, same
+fixture.
+
+| Case | Streaming | Classic | Rust |
+| --- | ---: | ---: | ---: |
+| default light `100/10`, 1 worker | `2.204s` | `2.675s` | `3.498s` |
+| default light `100/10`, 8 workers | `1.513s` | `1.652s` | `2.129s` |
+| heavy light `192/16`, 1 worker | `3.977s` | `5.408s` | `5.772s` |
+| heavy light `192/16`, 8 workers | `1.989s` | `2.225s` | `3.119s` |
+| ceiling light `768/24`, 8 workers | `4.364s` | `7.278s` | `7.426s` |
+
+The ceiling row comes from direct same-machine commands at current HEAD for
+classic and rust, because the backend comparison harness run used a reduced
+ceiling session count for speed.
+
+## Bottleneck diagnosis
+
+Before the change, the main residual bottleneck was the reporting path, not the
+engine. A focused `cProfile` run on the tracked `mc_default_light_w1` case
+showed:
+
+- `reports.build_dashboard_payload`: about `1.803s` cumulative
+- `reports._aggregate_mc_path_bands`: about `1.675s` cumulative
+
+That meant unsampled Monte Carlo sessions were paying too much to rebuild
+all-session path bands after execution had already finished.
+
+After the change, the same family of cases shows a very different shape:
+
+- `mc_default_light_w1`: reporting `0.362s`, dashboard build `0.044s`
+- `mc_default_light_w8`: reporting `0.359s`, dashboard build `0.018s`
+- `mc_heavy_light_w8`: reporting `0.564s`, dashboard build `0.018s`
+
+The reporting tail is now mostly bundle write and summary assembly rather than
+path-band reconstruction.
+
+## What changed
+
+The high-EV change was narrow and deliberate:
+
+1. All-session Monte Carlo path-band rows are now accumulated during execution,
+   merged across workers, and finalised once.
+2. When a bundle is being written, unsampled sessions can drop their raw
+   `path_metrics` rows after contributing to the merged accumulator.
+3. Provenance capture is timed separately from dashboard build, so the phase
+   chart now tells the truth about where the time went.
+4. The runtime benchmark harness now records peak process RSS, peak process-tree
+   RSS, child-process count, startup or scheduling overhead, provenance timing,
+   and optional cold-vs-warm timing.
+
+## What it bought
+
+Confirmed gains against the pre-change benchmark report:
+
+- `mc_default_light_w8`: `1.720s -> 1.513s` (`-12.0%`)
+- `mc_heavy_light_w8`: `2.575s -> 1.989s` (`-22.8%`)
+- `mc_ceiling_light_w8`: `8.998s -> 4.364s` (`-51.5%`)
+- `mc_default_full_w1`: `3.008s -> 2.785s` (`-7.4%`)
+- `mc_default_full_trimmed_w1`: `2.529s -> 2.369s` (`-6.3%`)
+
+This is the key result of the pass. The repo now spends far less time turning
+Monte Carlo outputs into dashboard bundles, especially at higher worker counts.
+
+## What still limits the next frontier
+
+The next hard frontier is no longer dashboard assembly. On the tracked fixture,
+the remaining shared tail is mostly:
+
+- worker startup and scheduling overhead, about `0.38s` to `0.53s` on the 8-worker cases
+- bundle write time, about `0.41s` to `0.80s`
+- aggregate summary and compaction work around sampled sessions
+
+Cold-vs-warm skew is small on the tracked default streaming case:
+
+- cold `mc_default_light_w8`: `1.514s`
+- warm repeat: `1.490s`
+
+So the remaining ceiling work should focus on startup, scheduling, write-path
+and memory churn rather than chasing a cache artefact that is not materially
+moving the result.

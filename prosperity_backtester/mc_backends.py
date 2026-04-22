@@ -159,11 +159,10 @@ def resolve_monte_carlo_backend(
     """Resolve the backend to use for Monte Carlo simulation.
 
     The ``auto`` sentinel (default when nothing is requested) always resolves
-    to the ``streaming`` backend.  The ``rust`` backend must be requested
+    to the ``streaming`` backend. The ``rust`` backend must be requested
     explicitly via ``--mc-backend rust``; it is NOT auto-selected because the
-    per-tick IPC cost makes it slower than streaming at all practical worker
-    counts below ~8 workers.  At high worker counts (8+) the Rust engine can
-    win on wall time due to Rayon parallelism; use it deliberately there.
+    tracked benchmark fixture still favours streaming through the measured
+    8-worker cases, and the per-tick IPC cost remains substantial.
     """
     text = str(requested_backend or AUTO_MONTE_CARLO_BACKEND).strip().lower().replace("-", "_")
     if text not in {"", AUTO_MONTE_CARLO_BACKEND}:
@@ -197,7 +196,7 @@ def ensure_rust_backend_binary() -> tuple[Path, Path] | None:
     env = os.environ.copy()
     env["PATH"] = os.pathsep.join([str(rust_bin_dir), env.get("PATH", "")])
     try:
-        print(f"[prosperity-backtester] Building Rust MC engine (one-time, ~30-90s)…", flush=True)
+        print("[prosperity-backtester] Building Rust MC engine (one-time, ~30-90s)...", flush=True)
         subprocess.run(
             [str(cargo_exe), "build", "--release", "--manifest-path", str(manifest_path)],
             cwd=project_root,
