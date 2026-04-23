@@ -165,7 +165,7 @@ test('browse local server opens a fixed floating overlay instead of an in-flow p
   })
 
   await act(async () => {
-    await findButton(renderer.root, 'Browse local server').props.onClick()
+    await findButton(renderer.root, 'Browse Local Server').props.onClick()
   })
 
   const surface = renderer.root.find((node) => node.props['data-loader-surface'] === 'browser')
@@ -173,6 +173,21 @@ test('browse local server opens a fixed floating overlay instead of an in-flow p
   assert.doesNotMatch(surface.props.className, /\babsolute\b/)
   assert.match(JSON.stringify(renderer.toJSON()), /Bundle browser/)
   assert.match(JSON.stringify(renderer.toJSON()), /Available bundles/)
+})
+
+test('top quick-load actions render title-only labels for a cleaner compact header', async () => {
+  resetStore()
+
+  let renderer
+  await act(async () => {
+    renderer = create(React.createElement(ServerRunLoader))
+  })
+
+  const rendered = JSON.stringify(renderer.toJSON())
+  assert.match(rendered, /Open Latest Bundle/)
+  assert.match(rendered, /Browse Local Server/)
+  assert.doesNotMatch(rendered, /Most recent run on the server/)
+  assert.doesNotMatch(rendered, /Inspect available bundles/)
 })
 
 test('missing quick-loads show an explicit unavailable notice instead of failing silently', async (t) => {

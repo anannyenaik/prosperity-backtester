@@ -108,7 +108,7 @@ const CAPABILITY_NODES = [
 
 function LandingScreen() {
   return (
-    <div className="mx-auto grid h-full w-full max-w-[1360px] items-center gap-5 px-4 pb-5 pt-4 md:px-7 md:pb-6 md:pt-5 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.84fr)] lg:gap-8 xl:gap-10">
+    <div className="mx-auto grid h-full w-full max-w-[1360px] items-center gap-5 px-4 pb-5 pt-4 md:px-7 md:pb-6 md:pt-5 lg:grid-cols-[minmax(0,1fr)_minmax(340px,520px)] lg:gap-7 xl:grid-cols-[minmax(0,1fr)_minmax(360px,540px)] xl:gap-8">
       <section className="flex min-w-0 flex-col justify-center lg:pr-2">
         <div className="hud-label chapter-rule mb-3 text-accent">IMC PROSPERITY / RESEARCH PLATFORM</div>
         <h1 className="font-display max-w-[700px] text-[2.4rem] font-extrabold uppercase leading-[0.9] tracking-normal text-txt md:text-[3.15rem] lg:text-[2.85rem] xl:text-[3.3rem] 2xl:text-[3.55rem]">
@@ -139,7 +139,7 @@ function LandingScreen() {
         </div>
       </section>
 
-      <section className="glass-panel edge-traced edge-traced--slow flex w-full min-w-0 flex-col justify-between overflow-visible rounded-lg p-4 md:p-5 lg:max-w-[570px] lg:justify-self-end">
+      <section className="glass-panel edge-traced edge-traced--slow flex w-full min-w-0 flex-col justify-between overflow-visible rounded-lg p-4 md:p-5 lg:max-w-[540px] lg:justify-self-end xl:max-w-[560px]">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <div className="hud-label text-accent-2">Bundle intake</div>

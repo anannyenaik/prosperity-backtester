@@ -50,7 +50,7 @@ interface LoaderNotice {
 
 interface LoaderActionButtonProps {
   label: string
-  caption: string
+  caption?: string
   icon: ReactNode
   onClick: () => void
   disabled: boolean
@@ -255,8 +255,8 @@ export function ServerRunLoader() {
   const loading = loadingKey != null
 
   return (
-    <div ref={rootRef} className="relative mt-3">
-      <div className="quickload-panel edge-traced edge-traced--panel rounded-[12px] p-3.5 md:p-4">
+    <div ref={rootRef} className="relative mt-2.5 min-w-0">
+      <div className="quickload-panel edge-traced edge-traced--panel rounded-[12px] p-3 md:p-3.5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="hud-label text-accent-2">Bundle server</div>
@@ -273,10 +273,9 @@ export function ServerRunLoader() {
           </div>
         </div>
 
-        <div className="quickload-primary mt-3 grid gap-2.5 sm:grid-cols-2">
+        <div className="quickload-primary mt-2.5 grid gap-2 sm:grid-cols-2">
           <LoaderActionButton
-            label="Open latest bundle"
-            caption="Most recent run on the server"
+            label="Open Latest Bundle"
             icon={loadingKey === 'latest' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Server className="h-4 w-4" />}
             onClick={() => void loadLatestFromServer()}
             disabled={loadingKey != null}
@@ -284,8 +283,7 @@ export function ServerRunLoader() {
             indicator={<ArrowUpRight className="h-3.5 w-3.5" />}
           />
           <LoaderActionButton
-            label={browserState.open ? 'Hide browser' : 'Browse local server'}
-            caption={browserState.open ? 'Bundle browser open' : 'Inspect available bundles'}
+            label={browserState.open ? 'Hide Local Browser' : 'Browse Local Server'}
             icon={
               loadingKey === 'browse' ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
@@ -307,12 +305,12 @@ export function ServerRunLoader() {
           />
         </div>
 
-        <div className="quickload-divider mt-4 flex items-center gap-3">
+        <div className="quickload-divider mt-3.5 flex items-center gap-3">
           <span className="hud-label text-muted">Shortcuts</span>
           <span className="quickload-divider__rule" aria-hidden="true" />
         </div>
 
-        <div className="quickload-chips mt-3 grid grid-cols-2 gap-2 md:grid-cols-3">
+        <div className="quickload-chips mt-2.5 grid grid-cols-2 gap-1.5 md:grid-cols-3">
           {TYPE_BUTTONS.map(({ type, label, caption, icon }) => (
             <QuickLoadChip
               key={type}
@@ -506,6 +504,7 @@ function LoaderActionButton({
   tone = 'secondary',
   indicator,
 }: LoaderActionButtonProps) {
+  const compact = !caption
   return (
     <button
       type="button"
@@ -514,6 +513,7 @@ function LoaderActionButton({
       data-interactive="true"
       className={clsx(
         'qa-button group loader-action rounded-[11px] text-left',
+        compact && 'qa-button--compact',
         tone === 'primary' ? 'qa-button--primary' : 'qa-button--secondary',
       )}
     >
@@ -523,9 +523,9 @@ function LoaderActionButton({
         <span className="qa-button__icon" aria-hidden="true">
           {icon}
         </span>
-        <span className="qa-button__body">
+        <span className={clsx('qa-button__body', compact && 'qa-button__body--compact')}>
           <span className="qa-button__label font-display">{label}</span>
-          <span className="qa-button__caption hud-label">{caption}</span>
+          {caption ? <span className="qa-button__caption hud-label">{caption}</span> : null}
         </span>
         <span className="qa-button__meta" aria-hidden="true">
           {indicator && <span className="qa-button__indicator">{indicator}</span>}

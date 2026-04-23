@@ -143,7 +143,7 @@ export function NavBar() {
             )}
           </div>
 
-          <div className="mt-2 flex items-center gap-1 overflow-x-auto border-t border-border pt-2">
+          <div className="nav-rail mt-2 flex items-center gap-1.5 overflow-x-auto border-t border-border/85 pt-2.5">
             {TABS.map((tab) => {
               const availability = getTabAvailability(activeRun?.payload, tab.id, {
                 comparePayload: compareRun?.payload,
@@ -161,7 +161,7 @@ export function NavBar() {
                   onClick={isDisabled ? undefined : () => setActiveTab(tab.id)}
                   title={availability.supported ? availability.message : availability.title}
                   className={clsx(
-                    'nav-item group flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs',
+                    'nav-item group flex shrink-0 items-center gap-2 rounded-[10px] px-3.5 py-2.5 text-xs',
                     isActive ? 'nav-item--active text-accent' : isDisabled ? 'nav-item--disabled text-muted' : 'nav-item--idle text-muted',
                     tab.group === 'product' && !isActive && !isDisabled && 'opacity-75',
                   )}

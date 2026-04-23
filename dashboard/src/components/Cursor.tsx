@@ -65,6 +65,8 @@ export function Cursor() {
     }
 
     const updateScrollbarMode = (clientX: number, clientY: number) => {
+      targetX = clientX
+      targetY = clientY
       const scrollbars = measureViewportScrollbars(
         window.innerWidth,
         window.innerHeight,
@@ -81,7 +83,7 @@ export function Cursor() {
         scrollbarMode = true
         body.dataset.cursorState = 'idle'
         delete body.dataset.cursorPressed
-        hide()
+        show()
         return true
       }
 
@@ -111,6 +113,11 @@ export function Cursor() {
       show()
     }
     const onScroll = () => {
+      if (scrollbarMode) {
+        body.dataset.cursorState = 'idle'
+        show()
+        return
+      }
       if (body.dataset.cursorPressed !== 'true') return
       scrollbarMode = true
       body.dataset.cursorState = 'idle'
