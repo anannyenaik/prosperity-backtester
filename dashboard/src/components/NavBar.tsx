@@ -18,6 +18,7 @@ import type { TabId } from '../types'
 import { fmtDate, truncateStr } from '../lib/format'
 import { clearBootstrapQueryParams } from '../lib/bootstrap'
 import { getTabAvailability, interpretBundle } from '../lib/bundles'
+import { BrandMark } from './BrandMark'
 
 interface Tab {
   id: TabId
@@ -59,12 +60,10 @@ export function NavBar() {
 
   return (
     <nav className="fixed left-0 right-0 top-0 z-40 border-b border-border bg-bg/82 backdrop-blur-2xl">
-      <div className="mx-auto flex max-w-[1680px] items-start gap-4 px-4 py-4 md:px-7">
-        <div className="min-w-[188px] shrink-0">
+      <div className="mx-auto flex max-w-[1680px] items-start gap-4 px-4 py-3 md:px-7">
+        <div className="min-w-[196px] shrink-0">
           <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-lg border border-border-2 bg-accent/10 shadow-glow">
-              <div className="h-2.5 w-2.5 rounded-sm bg-accent shadow-glow" />
-            </div>
+            <BrandMark size={40} />
             <div>
               <div className="font-display text-sm font-extrabold uppercase tracking-[0.22em] text-txt">Prosperity Lab</div>
               <div className="hud-label mt-1 text-muted">Research platform</div>
@@ -143,7 +142,7 @@ export function NavBar() {
             )}
           </div>
 
-          <div className="mt-3 flex items-center gap-1 overflow-x-auto border-t border-border pt-3">
+          <div className="mt-2 flex items-center gap-1 overflow-x-auto border-t border-border pt-2">
             {TABS.map((tab) => {
               const isActive = activeTab === tab.id
               const availability = getTabAvailability(activeRun?.payload, tab.id, {

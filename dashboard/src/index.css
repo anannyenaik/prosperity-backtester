@@ -255,6 +255,8 @@ table {
 }
 
 .signal-button {
+  position: relative;
+  overflow: hidden;
   border: 1px solid rgba(125, 231, 255, 0.28);
   background: linear-gradient(180deg, rgba(125, 231, 255, 0.13), rgba(0, 208, 232, 0.06));
   color: var(--cyan);
@@ -267,6 +269,22 @@ table {
     box-shadow 0.35s var(--ease);
 }
 
+.signal-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.14) 48%,
+    rgba(255, 255, 255, 0.04) 56%,
+    transparent 72%
+  );
+  transform: translateX(-120%);
+  transition: transform 0.85s var(--ease);
+}
+
 .signal-button:hover {
   transform: translateY(-2px);
   border-color: rgba(125, 231, 255, 0.55);
@@ -275,7 +293,13 @@ table {
   box-shadow: 0 18px 46px rgba(125, 231, 255, 0.18), 0 0 40px rgba(0, 208, 232, 0.2);
 }
 
+.signal-button:hover::before {
+  transform: translateX(120%);
+}
+
 .subtle-button {
+  position: relative;
+  overflow: hidden;
   border: 1px solid rgba(228, 219, 201, 0.11);
   background: rgba(255, 255, 255, 0.035);
   color: rgba(228, 219, 201, 0.78);
@@ -286,11 +310,222 @@ table {
     background 0.35s var(--ease);
 }
 
+.subtle-button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 35%,
+    rgba(199, 171, 102, 0.12) 50%,
+    transparent 65%
+  );
+  transform: translateX(-120%);
+  transition: transform 0.95s var(--ease);
+}
+
 .subtle-button:hover {
   transform: translateY(-2px);
   border-color: rgba(199, 171, 102, 0.32);
   color: var(--bone);
   background: rgba(199, 171, 102, 0.06);
+}
+
+.subtle-button:hover::before {
+  transform: translateX(120%);
+}
+
+.subtle-button:disabled,
+.signal-button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.loader-action {
+  isolation: isolate;
+}
+
+.loader-action > * {
+  position: relative;
+  z-index: 1;
+}
+
+.motif-strip {
+  position: relative;
+}
+
+.motif-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(228, 219, 201, 0.09);
+  background:
+    linear-gradient(140deg, rgba(125, 231, 255, 0.06), transparent 50%),
+    rgba(255, 255, 255, 0.018);
+  transition:
+    transform 0.55s var(--ease),
+    border-color 0.45s var(--ease),
+    background 0.45s var(--ease),
+    box-shadow 0.45s var(--ease);
+}
+
+.motif-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: linear-gradient(180deg, transparent, rgba(125, 231, 255, 0.55), transparent);
+  opacity: 0.2;
+  transition: opacity 0.55s var(--ease);
+}
+
+.motif-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 40%,
+    rgba(125, 231, 255, 0.08) 55%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  pointer-events: none;
+  transition: transform 0.9s var(--ease);
+}
+
+.motif-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(125, 231, 255, 0.26);
+  background:
+    linear-gradient(140deg, rgba(125, 231, 255, 0.09), transparent 52%),
+    rgba(255, 255, 255, 0.03);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.3), 0 0 26px rgba(125, 231, 255, 0.08);
+}
+
+.motif-card:hover::before {
+  opacity: 0.7;
+}
+
+.motif-card:hover::after {
+  transform: translateX(120%);
+}
+
+.file-drop {
+  position: relative;
+}
+
+.file-drop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 38%,
+    rgba(125, 231, 255, 0.08) 50%,
+    transparent 62%
+  );
+  transform: translateX(-120%);
+  transition: transform 0.95s var(--ease);
+}
+
+.file-drop:hover::after {
+  transform: translateX(120%);
+}
+
+.brand-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  border: 1px solid rgba(125, 231, 255, 0.22);
+  background:
+    radial-gradient(circle at 30% 30%, rgba(125, 231, 255, 0.16), transparent 60%),
+    radial-gradient(circle at 70% 75%, rgba(199, 171, 102, 0.1), transparent 60%),
+    rgba(5, 10, 20, 0.6);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 20px rgba(125, 231, 255, 0.08);
+  overflow: hidden;
+  transition: box-shadow 0.6s var(--ease), border-color 0.6s var(--ease);
+}
+
+.brand-mark::after {
+  content: '';
+  position: absolute;
+  inset: -30%;
+  background: radial-gradient(circle, rgba(125, 231, 255, 0.14), transparent 55%);
+  animation: brandHalo 6.5s var(--ease) infinite;
+  pointer-events: none;
+}
+
+.brand-mark svg {
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+
+.brand-mark__ring {
+  transform-origin: 0 0;
+  transform-box: fill-box;
+  animation: brandRotate 28s linear infinite;
+}
+
+.brand-mark__ring--reverse {
+  animation-duration: 36s;
+  animation-direction: reverse;
+  opacity: 0.72;
+}
+
+.brand-mark__core {
+  transform-origin: 0 0;
+  transform-box: fill-box;
+  animation: brandPulse 3.4s ease-in-out infinite;
+}
+
+.brand-mark__dot {
+  transform-origin: 0 0;
+  transform-box: fill-box;
+  animation: brandDot 3.4s ease-in-out infinite;
+}
+
+.brand-mark__node {
+  animation: brandNode 3.4s ease-in-out infinite;
+}
+
+.brand-mark:hover {
+  border-color: rgba(125, 231, 255, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 32px rgba(125, 231, 255, 0.18);
+}
+
+@keyframes brandRotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes brandPulse {
+  0%, 100% { opacity: 0.45; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@keyframes brandDot {
+  0%, 100% { opacity: 0.75; }
+  50% { opacity: 1; }
+}
+
+@keyframes brandNode {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+@keyframes brandHalo {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.12); }
 }
 
 .chapter-rule {

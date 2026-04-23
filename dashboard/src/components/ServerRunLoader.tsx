@@ -41,6 +41,7 @@ interface LoaderActionButtonProps {
   onClick: () => void
   disabled: boolean
   tone?: 'primary' | 'secondary'
+  compact?: boolean
 }
 
 const TYPE_BUTTONS: QuickLoadButton[] = [
@@ -228,19 +229,19 @@ export function ServerRunLoader() {
   }, [availableFilters, filter])
 
   return (
-    <div ref={rootRef} className="relative mt-5">
-      <div className="rounded-[10px] border border-border bg-white/[0.025] p-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+    <div ref={rootRef} className="relative mt-3">
+      <div className="rounded-[10px] border border-border bg-white/[0.025] p-3.5">
+        <div className="flex items-baseline justify-between gap-3">
           <div>
             <div className="hud-label text-accent-2">Local bundle server</div>
-            <div className="mt-2 font-display text-sm font-semibold uppercase tracking-[0.08em] text-txt">Quick load and browse</div>
+            <div className="mt-1.5 font-display text-[0.82rem] font-semibold uppercase tracking-[0.08em] text-txt">
+              Quick load and browse
+            </div>
           </div>
-          <div className="max-w-[18rem] text-right text-[11px] leading-5 text-muted">
-            Open recent dashboard bundles without shifting the landing layout.
-          </div>
+          <div className="hud-label text-muted">{loadingKey ? 'Loading' : 'Ready'}</div>
         </div>
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <LoaderActionButton
             label="Open latest run"
             caption="Most recent bundle"
@@ -264,7 +265,7 @@ export function ServerRunLoader() {
           />
         </div>
 
-        <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-2 grid gap-2 grid-cols-2 lg:grid-cols-3">
           {TYPE_BUTTONS.map(({ type, label }) => (
             <LoaderActionButton
               key={type}
@@ -273,6 +274,7 @@ export function ServerRunLoader() {
               icon={loadingKey === `latest:${type}` ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
               onClick={() => void loadLatestFromServer(type)}
               disabled={loadingKey != null}
+              compact
             />
           ))}
         </div>
@@ -446,7 +448,15 @@ export function ServerRunLoader() {
   )
 }
 
-function LoaderActionButton({ label, caption, icon, onClick, disabled, tone = 'secondary' }: LoaderActionButtonProps) {
+function LoaderActionButton({
+  label,
+  caption,
+  icon,
+  onClick,
+  disabled,
+  tone = 'secondary',
+  compact = false,
+}: LoaderActionButtonProps) {
   return (
     <button
       type="button"
@@ -454,14 +464,22 @@ function LoaderActionButton({ label, caption, icon, onClick, disabled, tone = 's
       disabled={disabled}
       className={clsx(
         tone === 'primary' ? 'signal-button' : 'subtle-button',
-        'flex min-h-[4.4rem] w-full flex-col items-start justify-between rounded-lg px-4 py-3 text-left',
+        'loader-action flex w-full flex-col items-start justify-between rounded-lg text-left',
+        compact ? 'min-h-[3.2rem] px-3 py-2' : 'min-h-[3.9rem] px-4 py-2.5',
       )}
     >
-      <span className="inline-flex items-center gap-2 opacity-80">
+      <span className="inline-flex items-center gap-2 opacity-85">
         {icon}
         <span className="hud-label">{caption}</span>
       </span>
-      <span className="font-display text-sm font-semibold uppercase tracking-[0.08em]">{label}</span>
+      <span
+        className={clsx(
+          'font-display font-semibold uppercase tracking-[0.08em]',
+          compact ? 'text-[12px]' : 'text-[13px]',
+        )}
+      >
+        {label}
+      </span>
     </button>
   )
 }

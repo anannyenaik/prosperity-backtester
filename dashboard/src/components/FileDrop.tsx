@@ -56,7 +56,7 @@ export function FileDrop() {
       onDragLeave={onDragLeave}
       onClick={() => inputRef.current?.click()}
       className={clsx(
-        'rounded-lg border border-dashed p-7 text-center transition-all duration-500 ease-observatory',
+        'file-drop group relative flex items-center gap-3.5 overflow-hidden rounded-lg border border-dashed px-4 py-3.5 text-left transition-all duration-500 ease-observatory',
         dragging
           ? 'border-accent bg-accent/10 shadow-glow'
           : 'border-border-2 bg-white/[0.025] hover:border-accent/45 hover:bg-accent/5',
@@ -72,17 +72,19 @@ export function FileDrop() {
           if (e.target.files) parseFiles(e.target.files)
         }}
       />
-      <div className="mx-auto grid h-14 w-14 place-items-center rounded-lg border border-border bg-bg/55 text-accent">
-        {loading ? <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" /> : <Upload className="h-6 w-6" />}
+      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-border bg-bg/55 text-accent transition-colors duration-500 group-hover:border-accent/40">
+        {loading ? <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" /> : <Upload className="h-5 w-5" />}
       </div>
-      <div className="font-display mt-4 text-sm font-semibold uppercase tracking-[0.1em] text-txt">
-        {dragging ? 'Drop dashboard bundles' : 'Drop dashboard.json files'}
-      </div>
-      <div className="mt-2 text-sm leading-6 text-muted">
-        Browse or drag replay, Monte Carlo, calibration, comparison and optimisation bundles.
+      <div className="min-w-0 flex-1">
+        <div className="font-display text-[0.82rem] font-semibold uppercase tracking-[0.1em] text-txt">
+          {dragging ? 'Drop dashboard bundles' : 'Drop dashboard.json files'}
+        </div>
+        <div className="mt-1 truncate text-[12px] leading-5 text-muted">
+          Browse or drag replay, Monte Carlo, calibration, comparison bundles.
+        </div>
       </div>
       {error && (
-        <pre className="mt-4 whitespace-pre-wrap rounded-lg border border-bad/25 bg-bad/10 px-3 py-2 text-left font-mono text-xs text-bad">
+        <pre className="absolute left-0 right-0 top-full mt-2 whitespace-pre-wrap rounded-lg border border-bad/25 bg-bad/10 px-3 py-2 text-left font-mono text-[11px] text-bad">
           {error}
         </pre>
       )}
