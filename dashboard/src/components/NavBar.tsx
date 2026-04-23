@@ -30,8 +30,6 @@ interface Tab {
 
 const TABS: Tab[] = [
   { id: 'overview', label: 'Overview', code: '00', icon: <Activity className="h-3.5 w-3.5" /> },
-  { id: 'alpha', label: 'Alpha Lab', code: 'AL', icon: <FlaskConical className="h-3.5 w-3.5" /> },
-  { id: 'round2', label: 'Round 2', code: 'R2', icon: <Target className="h-3.5 w-3.5" /> },
   { id: 'replay', label: 'Replay', code: '01', icon: <BarChart2 className="h-3.5 w-3.5" /> },
   { id: 'montecarlo', label: 'Monte Carlo', code: '02', icon: <Sliders className="h-3.5 w-3.5" /> },
   { id: 'calibration', label: 'Calibration', code: '03', icon: <Target className="h-3.5 w-3.5" /> },
@@ -40,6 +38,8 @@ const TABS: Tab[] = [
   { id: 'inspect', label: 'Inspect', code: '06', icon: <Radar className="h-3.5 w-3.5" /> },
   { id: 'osmium', label: 'Osmium', code: 'OS', icon: <Circle className="h-3.5 w-3.5" />, group: 'product' },
   { id: 'pepper', label: 'Pepper', code: 'PR', icon: <Leaf className="h-3.5 w-3.5" />, group: 'product' },
+  { id: 'alpha', label: 'Alpha Lab', code: 'AL', icon: <FlaskConical className="h-3.5 w-3.5" /> },
+  { id: 'round2', label: 'Round 2', code: 'R2', icon: <Target className="h-3.5 w-3.5" /> },
 ]
 
 export function NavBar() {
@@ -145,27 +145,31 @@ export function NavBar() {
 
           <div className="mt-2 flex items-center gap-1 overflow-x-auto border-t border-border pt-2">
             {TABS.map((tab) => {
-              const isActive = activeTab === tab.id
               const availability = getTabAvailability(activeRun?.payload, tab.id, {
                 comparePayload: compareRun?.payload,
                 sameCompareRun: Boolean(activeRun && compareRun && activeRun.id === compareRun.id),
               })
+              const isDisabled = !availability.supported
+              const isActive = activeTab === tab.id && !isDisabled
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  type="button"
+                  disabled={isDisabled}
+                  aria-disabled={isDisabled || undefined}
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={isDisabled ? undefined : () => setActiveTab(tab.id)}
                   title={availability.supported ? availability.message : availability.title}
                   className={clsx(
                     'nav-item group flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs',
-                    isActive ? 'nav-item--active text-accent' : 'nav-item--idle text-muted',
-                    !availability.supported && !isActive && 'opacity-45',
-                    tab.group === 'product' && !isActive && 'opacity-75',
+                    isActive ? 'nav-item--active text-accent' : isDisabled ? 'nav-item--disabled text-muted' : 'nav-item--idle text-muted',
+                    tab.group === 'product' && !isActive && !isDisabled && 'opacity-75',
                   )}
                 >
                   <span className={clsx('nav-item__code hud-label', isActive ? 'text-accent-2' : 'text-steel')}>{tab.code}</span>
                   <span className="nav-item__icon">{tab.icon}</span>
                   <span className="nav-item__label font-display font-semibold uppercase tracking-[0.08em]">{tab.label}</span>
-                  {!availability.supported && runs.length > 0 && (
+                  {isDisabled && runs.length > 0 && (
                     <span className="nav-item__dot h-1.5 w-1.5 rounded-full bg-warn/80" aria-hidden="true" />
                   )}
                 </button>

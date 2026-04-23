@@ -1076,6 +1076,32 @@ table {
   color: #f4efe4;
 }
 
+.nav-item--disabled {
+  border-color: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.016);
+  color: rgba(183, 191, 201, 0.46);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  filter: saturate(0.3);
+}
+
+.nav-item--disabled::after {
+  opacity: 0;
+}
+
+.nav-item--disabled .nav-item__code {
+  color: rgba(120, 132, 146, 0.62);
+}
+
+.nav-item--disabled .nav-item__icon,
+.nav-item--disabled .nav-item__label {
+  color: rgba(183, 191, 201, 0.46);
+  transform: none;
+}
+
+.nav-item--disabled .nav-item__dot {
+  background: rgba(120, 132, 146, 0.62);
+}
+
 .nav-item--active {
   border-color: rgba(125, 231, 255, 0.32);
   background:
