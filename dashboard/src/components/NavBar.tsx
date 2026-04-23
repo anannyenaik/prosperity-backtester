@@ -16,6 +16,7 @@ import type React from 'react'
 import { useStore } from '../store'
 import type { TabId } from '../types'
 import { fmtDate, truncateStr } from '../lib/format'
+import { clearBootstrapQueryParams } from '../lib/bootstrap'
 import { getTabAvailability, interpretBundle } from '../lib/bundles'
 
 interface Tab {
@@ -80,11 +81,10 @@ export function NavBar() {
                 const isActive = run.id === activeRunId
                 const isCompare = run.id === compareRunId
                 return (
-                  <button
+                  <div
                     key={run.id}
-                    onClick={() => setActiveRun(run.id)}
                     className={clsx(
-                      'group inline-flex max-w-[260px] items-center gap-2 rounded-lg border px-3 py-2 text-left transition-all duration-500 ease-observatory',
+                      'group flex max-w-[280px] items-center gap-1 rounded-lg border pr-1 transition-all duration-500 ease-observatory',
                       isActive
                         ? 'border-accent/40 bg-accent/12 text-accent shadow-glow'
                         : isCompare
@@ -92,21 +92,34 @@ export function NavBar() {
                           : 'border-border bg-white/[0.025] text-muted hover:border-border-2 hover:text-txt',
                     )}
                   >
-                    <span className="hud-label rounded bg-white/[0.04] px-1.5 py-1">{isActive ? 'A' : isCompare ? 'B' : run.payload.type?.slice(0, 2) ?? '--'}</span>
-                    <span className="min-w-0">
-                      <span className="block truncate font-display text-xs font-semibold uppercase tracking-[0.08em]">
-                        {truncateStr(run.name, 26)}
+                    <button
+                      type="button"
+                      onClick={() => setActiveRun(run.id)}
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-[inherit] px-3 py-2 text-left"
+                    >
+                      <span className="hud-label rounded bg-white/[0.04] px-1.5 py-1">{isActive ? 'A' : isCompare ? 'B' : run.payload.type?.slice(0, 2) ?? '--'}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-display text-xs font-semibold uppercase tracking-[0.08em]">
+                          {truncateStr(run.name, 26)}
+                        </span>
+                        <span className="hud-label mt-0.5 block text-muted">{run.payload.type ?? 'unknown'}</span>
                       </span>
-                      <span className="hud-label mt-0.5 block text-muted">{run.payload.type ?? 'unknown'}</span>
-                    </span>
-                    <X
-                      className="h-3.5 w-3.5 opacity-35 transition-opacity hover:opacity-100"
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Close ${run.name}`}
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-current opacity-70 transition-colors hover:bg-white/[0.06] hover:text-txt hover:opacity-100"
                       onClick={(e) => {
                         e.stopPropagation()
+                        if (runs.length === 1) {
+                          clearBootstrapQueryParams()
+                        }
                         removeRun(run.id)
                       }}
-                    />
-                  </button>
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 )
               })
             )}

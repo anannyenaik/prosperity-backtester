@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { AlertTriangle, RefreshCw, Server, X } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useStore, type ServerRunMeta } from '../store'
@@ -15,7 +24,7 @@ interface QuickLoadButton {
 
 interface BrowserState {
   open: boolean
-  status: 'list' | 'empty' | 'error'
+  status: 'list' | 'empty' | 'error' | 'load_error'
   message: string | null
 }
 
@@ -23,6 +32,15 @@ interface LoaderNotice {
   variant: 'unavailable' | 'error'
   title: string
   message: string
+}
+
+interface LoaderActionButtonProps {
+  label: string
+  caption: string
+  icon: ReactNode
+  onClick: () => void
+  disabled: boolean
+  tone?: 'primary' | 'secondary'
 }
 
 const TYPE_BUTTONS: QuickLoadButton[] = [
@@ -55,8 +73,18 @@ const RUN_TYPE_MAP: Record<string, Exclude<RunFilter, 'all'>> = {
   round2_scenarios: 'round2_scenarios',
 }
 
+const DEFAULT_LAYER_STYLE: CSSProperties = {
+  left: '16px',
+  top: '208px',
+  width: 'min(40rem, calc(100vw - 2rem))',
+  maxHeight: 'min(34rem, calc(100vh - 14rem))',
+}
+
+const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
+
 export function ServerRunLoader() {
   const { serverRuns, setServerRuns, loadRun } = useStore()
+  const rootRef = useRef<HTMLDivElement>(null)
   const [loadingKey, setLoadingKey] = useState<string | null>(null)
   const [browserState, setBrowserState] = useState<BrowserState>({
     open: false,
@@ -65,6 +93,8 @@ export function ServerRunLoader() {
   })
   const [notice, setNotice] = useState<LoaderNotice | null>(null)
   const [filter, setFilter] = useState<RunFilter>('all')
+
+  const layerStyle = useAnchoredLayerStyle(rootRef, browserState.open || notice != null)
 
   useEffect(() => {
     if (!browserState.open || typeof window === 'undefined') return
@@ -122,6 +152,15 @@ export function ServerRunLoader() {
   async function loadFromServer(run: ServerRunMeta) {
     const res = await fetch(`/api/run/${encodeURIComponent(run.path)}`)
     if (!res.ok) {
+      if (browserState.open) {
+        setNotice(null)
+        setBrowserState({
+          open: true,
+          status: 'load_error',
+          message: `The server could not open ${run.name}. Try again or choose another bundle.`,
+        })
+        return
+      }
       setNotice({
         variant: 'error',
         title: 'Bundle load failed',
@@ -137,6 +176,7 @@ export function ServerRunLoader() {
 
   async function openBrowser() {
     await runWithLoading('browse', async () => {
+      setFilter('all')
       await fetchRuns({ openBrowser: true })
     })
   }
@@ -181,45 +221,61 @@ export function ServerRunLoader() {
     return Array.from(types)
   }, [serverRuns])
 
+  useEffect(() => {
+    if (!availableFilters.includes(filter)) {
+      setFilter('all')
+    }
+  }, [availableFilters, filter])
+
   return (
-    <div className="relative mt-4">
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => void loadLatestFromServer()}
-          disabled={loadingKey != null}
-          className="subtle-button inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
-        >
-          {loadingKey === 'latest' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
-          Open latest run
-        </button>
-        {TYPE_BUTTONS.map(({ type, label }) => (
-          <button
-            key={type}
-            type="button"
-            onClick={() => void loadLatestFromServer(type)}
+    <div ref={rootRef} className="relative mt-5">
+      <div className="rounded-[10px] border border-border bg-white/[0.025] p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="hud-label text-accent-2">Local bundle server</div>
+            <div className="mt-2 font-display text-sm font-semibold uppercase tracking-[0.08em] text-txt">Quick load and browse</div>
+          </div>
+          <div className="max-w-[18rem] text-right text-[11px] leading-5 text-muted">
+            Open recent dashboard bundles without shifting the landing layout.
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <LoaderActionButton
+            label="Open latest run"
+            caption="Most recent bundle"
+            icon={loadingKey === 'latest' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
+            onClick={() => void loadLatestFromServer()}
             disabled={loadingKey != null}
-            className="subtle-button inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
-          >
-            {loadingKey === `latest:${type}` ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
-            {label}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={() => {
-            if (browserState.open) {
-              setBrowserState((current) => ({ ...current, open: false }))
-              return
-            }
-            void openBrowser()
-          }}
-          disabled={loadingKey != null}
-          className="subtle-button inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
-        >
-          {loadingKey === 'browse' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : browserState.open ? <X className="h-3.5 w-3.5" /> : <Server className="h-3.5 w-3.5" />}
-          {browserState.open ? 'Hide browser' : 'Browse local server'}
-        </button>
+            tone="primary"
+          />
+          <LoaderActionButton
+            label={browserState.open ? 'Hide browser' : 'Browse local server'}
+            caption={browserState.open ? 'Bundle browser open' : 'Inspect available bundles'}
+            icon={loadingKey === 'browse' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : browserState.open ? <X className="h-3.5 w-3.5" /> : <Server className="h-3.5 w-3.5" />}
+            onClick={() => {
+              if (browserState.open) {
+                setBrowserState((current) => ({ ...current, open: false }))
+                return
+              }
+              void openBrowser()
+            }}
+            disabled={loadingKey != null}
+          />
+        </div>
+
+        <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {TYPE_BUTTONS.map(({ type, label }) => (
+            <LoaderActionButton
+              key={type}
+              label={label}
+              caption={quickLoadCaption(type)}
+              icon={loadingKey === `latest:${type}` ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
+              onClick={() => void loadLatestFromServer(type)}
+              disabled={loadingKey != null}
+            />
+          ))}
+        </div>
       </div>
 
       {browserState.open && (
@@ -228,25 +284,34 @@ export function ServerRunLoader() {
             type="button"
             aria-label="Close bundle browser"
             onClick={() => setBrowserState((current) => ({ ...current, open: false }))}
-            className="fixed inset-0 z-20 cursor-default bg-transparent"
+            className="fixed inset-0 z-40 cursor-default bg-bg/12 backdrop-blur-[1px]"
           />
-          <div className="absolute left-0 right-0 top-full z-30 mt-3 pointer-events-none">
-            <div className="pointer-events-auto glass-panel flex max-h-[calc(100vh-14rem)] flex-col overflow-hidden rounded-lg border-border-2 shadow-card">
-              <div className="flex items-start justify-between gap-4 border-b border-border bg-white/[0.03] px-4 py-3">
+          <div
+            data-loader-surface="browser"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Bundle browser"
+            className="loader-surface fixed z-50"
+            style={layerStyle}
+          >
+            <div className="loader-surface-body flex min-h-0 flex-col">
+              <div className="flex items-start justify-between gap-4 border-b border-border bg-white/[0.03] px-4 py-4">
                 <div>
                   <div className="hud-label text-accent-2">Bundle browser</div>
-                  <div className="mt-2 text-sm text-muted">
+                  <div className="mt-2 text-sm text-txt-soft">
                     {browserState.status === 'list'
                       ? `Available bundles (${visibleRuns.length} shown of ${serverRuns.length})`
                       : browserState.status === 'empty'
                         ? 'No dashboard bundles found'
-                        : 'Local bundle server unavailable'}
+                        : browserState.status === 'load_error'
+                          ? 'Bundle load failed'
+                          : 'Local bundle server unavailable'}
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => setBrowserState((current) => ({ ...current, open: false }))}
-                  className="subtle-button inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs"
+                  className="subtle-button inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
                 >
                   <X className="h-3.5 w-3.5" />
                   Close
@@ -310,13 +375,13 @@ export function ServerRunLoader() {
               )}
 
               {browserState.status === 'empty' && (
-                <div className="px-4 py-4 text-sm leading-6 text-muted">
+                <div className="px-4 py-5 text-sm leading-6 text-txt-soft">
                   No dashboard bundles were found under the served directory.
                 </div>
               )}
 
-              {browserState.status === 'error' && (
-                <div className="px-4 py-4 text-sm leading-6 text-muted">
+              {(browserState.status === 'error' || browserState.status === 'load_error') && (
+                <div className="px-4 py-5 text-sm leading-6 text-txt-soft">
                   {browserState.message}
                 </div>
               )}
@@ -326,42 +391,39 @@ export function ServerRunLoader() {
       )}
 
       {notice && (
-        <div className="absolute left-0 right-0 top-full z-30 mt-3 pointer-events-none">
-          <div
-            role="status"
-            aria-live="polite"
-            className={clsx(
-              'pointer-events-auto rounded-lg border px-4 py-3 shadow-card backdrop-blur-2xl',
-              notice.variant === 'unavailable'
-                ? 'border-warn/30 bg-surface-2/92'
-                : 'border-bad/30 bg-surface-2/92',
-            )}
-          >
-            <div className="flex items-start gap-3">
+        <div
+          data-loader-surface="notice"
+          role="status"
+          aria-live="polite"
+          className="loader-surface fixed z-50"
+          style={layerStyle}
+        >
+          <div className="loader-surface-body px-5 py-4">
+            <div className="flex items-start gap-4">
               <div
                 className={clsx(
-                  'mt-0.5 rounded-full border p-1.5',
+                  'mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-full border shadow-[0_0_24px_rgba(0,0,0,0.18)]',
                   notice.variant === 'unavailable'
-                    ? 'border-warn/30 bg-warn/10 text-warn'
-                    : 'border-bad/30 bg-bad/10 text-bad',
+                    ? 'border-warn/35 bg-warn/10 text-warn'
+                    : 'border-bad/35 bg-bad/10 text-bad',
                 )}
               >
-                <AlertTriangle className="h-3.5 w-3.5" />
+                <AlertTriangle className="h-4 w-4" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="hud-label text-accent-2">
                   {notice.variant === 'unavailable' ? 'Quick load unavailable' : 'Quick load error'}
                 </div>
-                <div className="mt-1 font-display text-sm font-semibold uppercase tracking-[0.08em] text-txt">
+                <div className="mt-2 font-display text-base font-semibold uppercase tracking-[0.08em] text-txt">
                   {notice.title}
                 </div>
-                <div className="mt-1 text-sm leading-6 text-muted">{notice.message}</div>
+                <div className="mt-2 max-w-[34rem] text-sm leading-6 text-txt-soft">{notice.message}</div>
                 {notice.variant === 'unavailable' && (
                   <button
                     type="button"
                     disabled={loadingKey != null}
                     onClick={() => void openBrowser()}
-                    className="subtle-button mt-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+                    className="signal-button mt-4 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
                   >
                     {loadingKey === 'browse' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
                     Browse available bundles
@@ -384,6 +446,88 @@ export function ServerRunLoader() {
   )
 }
 
+function LoaderActionButton({ label, caption, icon, onClick, disabled, tone = 'secondary' }: LoaderActionButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={clsx(
+        tone === 'primary' ? 'signal-button' : 'subtle-button',
+        'flex min-h-[4.4rem] w-full flex-col items-start justify-between rounded-lg px-4 py-3 text-left',
+      )}
+    >
+      <span className="inline-flex items-center gap-2 opacity-80">
+        {icon}
+        <span className="hud-label">{caption}</span>
+      </span>
+      <span className="font-display text-sm font-semibold uppercase tracking-[0.08em]">{label}</span>
+    </button>
+  )
+}
+
+function useAnchoredLayerStyle(anchorRef: RefObject<HTMLElement>, active: boolean): CSSProperties {
+  const [style, setStyle] = useState<CSSProperties>(DEFAULT_LAYER_STYLE)
+
+  useIsomorphicLayoutEffect(() => {
+    if (!active || typeof window === 'undefined') return
+
+    let frameId = 0
+    const update = () => {
+      frameId = 0
+      const rect = anchorRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      const viewportGap = 16
+      const width = Math.min(Math.max(rect.width, 320), window.innerWidth - viewportGap * 2)
+      const maxLeft = Math.max(viewportGap, window.innerWidth - width - viewportGap)
+      const left = clamp(rect.left, viewportGap, maxLeft)
+      const top = Math.max(viewportGap, rect.bottom + 14)
+      const maxHeight = Math.max(240, window.innerHeight - top - viewportGap)
+
+      setStyle({
+        left: `${left}px`,
+        top: `${top}px`,
+        width: `${width}px`,
+        maxHeight: `${maxHeight}px`,
+      })
+    }
+
+    const scheduleUpdate = () => {
+      if (frameId !== 0) return
+      frameId = window.requestAnimationFrame(update)
+    }
+
+    scheduleUpdate()
+    window.addEventListener('resize', scheduleUpdate)
+    window.addEventListener('scroll', scheduleUpdate, true)
+
+    const anchor = anchorRef.current
+    const observer =
+      typeof ResizeObserver !== 'undefined' && anchor
+        ? new ResizeObserver(scheduleUpdate)
+        : null
+    if (observer && anchor) {
+      observer.observe(anchor)
+    }
+
+    return () => {
+      if (frameId !== 0) {
+        window.cancelAnimationFrame(frameId)
+      }
+      window.removeEventListener('resize', scheduleUpdate)
+      window.removeEventListener('scroll', scheduleUpdate, true)
+      observer?.disconnect()
+    }
+  }, [active, anchorRef])
+
+  return style
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max)
+}
+
 function normaliseRunType(value: string | null | undefined): RunFilter {
   const key = (value ?? 'unknown').toLowerCase()
   return RUN_TYPE_MAP[key] ?? 'all'
@@ -398,6 +542,17 @@ function filterLabel(value: RunFilter) {
     calibration: 'Calibration',
     optimization: 'Optimise',
     round2_scenarios: 'Round 2',
+  }[value]
+}
+
+function quickLoadCaption(value: QuickLoadKind): string {
+  return {
+    replay: 'Historical bundle',
+    monte_carlo: 'Synthetic paths',
+    comparison: 'Multi-trader view',
+    calibration: 'Model fit sweep',
+    optimization: 'Variant ranking',
+    round2_scenarios: 'Access scenarios',
   }[value]
 }
 

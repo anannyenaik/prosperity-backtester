@@ -11,10 +11,20 @@ const { act, create } = TestRenderer
 
 const testDir = path.dirname(fileURLToPath(import.meta.url))
 const dashboardRoot = path.resolve(testDir, '..')
-const compiledModule = path.join(dashboardRoot, `.tmp-server-run-loader-${process.pid}-${Date.now()}.mjs`)
+const stamp = `${process.pid}-${Date.now()}`
+const bridgeModule = path.join(dashboardRoot, `.tmp-server-run-loader-entry-${stamp}.mjs`)
+const compiledModule = path.join(dashboardRoot, `.tmp-server-run-loader-${stamp}.mjs`)
+
+fs.writeFileSync(
+  bridgeModule,
+  [
+    "export { ServerRunLoader } from './src/components/ServerRunLoader.tsx'",
+    "export { useStore } from './src/store.ts'",
+  ].join('\n'),
+)
 
 await build({
-  entryPoints: [path.join(dashboardRoot, 'src', 'components', 'ServerRunLoader.tsx')],
+  entryPoints: [bridgeModule],
   bundle: true,
   format: 'esm',
   platform: 'node',
@@ -23,11 +33,25 @@ await build({
   logLevel: 'silent',
 })
 
-const { ServerRunLoader } = await import(pathToFileURL(compiledModule).href)
+const { ServerRunLoader, useStore } = await import(pathToFileURL(compiledModule).href)
 
 after(() => {
+  fs.rmSync(bridgeModule, { force: true })
   fs.rmSync(compiledModule, { force: true })
 })
+
+function resetStore() {
+  useStore.setState({
+    runs: [],
+    activeRunId: null,
+    compareRunId: null,
+    activeTab: 'overview',
+    activeProduct: 'ASH_COATED_OSMIUM',
+    sampleRunName: null,
+    timeWindow: 'all',
+    serverRuns: [],
+  })
+}
 
 function mockFetch(routes) {
   const originalFetch = globalThis.fetch
@@ -110,12 +134,17 @@ function textOfNode(node) {
 }
 
 function findButton(root, label) {
-  const match = root.findAll((node) => node.type === 'button' && textOfNode(node).includes(label))[0]
+  const match = root.findAll(
+    (node) =>
+      node.type === 'button' &&
+      (textOfNode(node).includes(label) || node.props['aria-label'] === label),
+  )[0]
   assert.ok(match, `Expected to find button with label containing "${label}"`)
   return match
 }
 
-test('browse local server opens a floating overlay instead of an in-flow panel', async (t) => {
+test('browse local server opens a fixed floating overlay instead of an in-flow panel', async (t) => {
+  resetStore()
   const fetchMock = mockFetch({
     '/api/runs': {
       json: [
@@ -139,18 +168,15 @@ test('browse local server opens a floating overlay instead of an in-flow panel',
     await findButton(renderer.root, 'Browse local server').props.onClick()
   })
 
-  const floatingRoots = renderer.root.findAll(
-    (node) =>
-      typeof node.props.className === 'string' &&
-      node.props.className.includes('absolute left-0 right-0 top-full z-30 mt-3 pointer-events-none'),
-  )
-
-  assert.equal(floatingRoots.length, 1)
+  const surface = renderer.root.find((node) => node.props['data-loader-surface'] === 'browser')
+  assert.match(surface.props.className, /\bfixed\b/)
+  assert.doesNotMatch(surface.props.className, /\babsolute\b/)
   assert.match(JSON.stringify(renderer.toJSON()), /Bundle browser/)
   assert.match(JSON.stringify(renderer.toJSON()), /Available bundles/)
 })
 
 test('missing quick-loads show an explicit unavailable notice instead of failing silently', async (t) => {
+  resetStore()
   const fetchMock = mockFetch({
     '/api/runs': {
       json: [
@@ -178,10 +204,40 @@ test('missing quick-loads show an explicit unavailable notice instead of failing
   assert.match(rendered, /Quick load unavailable/)
   assert.match(rendered, /Monte Carlo bundle unavailable/)
   assert.match(rendered, /No monte carlo bundle is currently available on the local server\./i)
+  assert.match(rendered, /Browse available bundles/)
   assert.doesNotMatch(rendered, /Available bundles/)
 })
 
+test('unavailable notices can be dismissed cleanly', async (t) => {
+  resetStore()
+  const fetchMock = mockFetch({
+    '/api/runs': {
+      json: [runMeta()],
+    },
+  })
+  t.after(() => fetchMock.restore())
+
+  let renderer
+  await act(async () => {
+    renderer = create(React.createElement(ServerRunLoader))
+  })
+
+  await act(async () => {
+    await findButton(renderer.root, 'Latest compare').props.onClick()
+  })
+
+  assert.equal(renderer.root.findAll((node) => node.props['data-loader-surface'] === 'notice').length, 1)
+
+  await act(async () => {
+    findButton(renderer.root, 'Dismiss quick load notice').props.onClick()
+  })
+
+  assert.equal(renderer.root.findAll((node) => node.props['data-loader-surface'] === 'notice').length, 0)
+  assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /Quick load unavailable/)
+})
+
 test('matching quick-loads still fetch and load the selected bundle', async (t) => {
+  resetStore()
   const compareRun = runMeta({
     path: 'backtests/2026-04-23_20-05-00_compare/dashboard.json',
     name: '2026-04-23 compare',

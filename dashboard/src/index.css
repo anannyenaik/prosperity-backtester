@@ -204,6 +204,48 @@ table {
   opacity: 0.28;
 }
 
+.loader-surface {
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: 10px;
+  border: 1px solid rgba(125, 231, 255, 0.16);
+  background:
+    radial-gradient(circle at top right, rgba(125, 231, 255, 0.16), transparent 36%),
+    radial-gradient(circle at bottom left, rgba(199, 171, 102, 0.12), transparent 32%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.018)),
+    rgba(5, 10, 20, 0.97);
+  box-shadow:
+    0 30px 120px rgba(0, 0, 0, 0.52),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(24px);
+}
+
+.loader-surface::before,
+.loader-surface::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.loader-surface::before {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 18%),
+    linear-gradient(90deg, transparent, rgba(125, 231, 255, 0.04), transparent);
+}
+
+.loader-surface::after {
+  inset: 1px;
+  border: 1px solid rgba(228, 219, 201, 0.045);
+  border-radius: 9px;
+}
+
+.loader-surface-body {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+}
+
 .hud-label {
   font-family: 'DM Mono', ui-monospace, monospace;
   font-size: 0.66rem;

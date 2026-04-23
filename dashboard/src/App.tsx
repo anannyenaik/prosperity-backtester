@@ -16,6 +16,7 @@ import { OsmiumDive } from './views/OsmiumDive'
 import { PepperDive } from './views/PepperDive'
 import { Inspect } from './views/Inspect'
 import type { DashboardPayload, TabId } from './types'
+import { clearBootstrapQueryParams, normaliseBootstrapRunType, readBootstrapRequest } from './lib/bootstrap'
 
 const VIEWS: Record<TabId, React.ComponentType> = {
   overview: Overview,
@@ -36,11 +37,16 @@ export function App() {
   const View = VIEWS[activeTab] ?? Overview
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const requestedRun = params.get('run')
-    const loadLatest = params.get('latest') === '1'
-    const latestType = normaliseLatestType(params.get('latestType'))
-    if (runs.length > 0 || (!requestedRun && !loadLatest && !latestType)) return
+    if (typeof window === 'undefined') return
+
+    const bootstrapRequest = readBootstrapRequest(window.location.search)
+    if (runs.length > 0) {
+      if (bootstrapRequest) {
+        clearBootstrapQueryParams()
+      }
+      return
+    }
+    if (!bootstrapRequest) return
 
     let cancelled = false
     startTransition(() => {
@@ -51,14 +57,15 @@ export function App() {
           const serverRuns = (await runsRes.json()) as ServerRunMeta[]
           if (cancelled) return
           setServerRuns(serverRuns)
-          const targetRun = requestedRun
-            ? serverRuns.find((run) => run.path === requestedRun)
-            : serverRuns.find((run) => normaliseLatestType(run.type) === latestType) ?? serverRuns[0]
+          const targetRun = bootstrapRequest.requestedRun
+            ? serverRuns.find((run) => run.path === bootstrapRequest.requestedRun)
+            : serverRuns.find((run) => normaliseBootstrapRunType(run.type) === bootstrapRequest.latestType) ?? serverRuns[0]
           if (!targetRun) return
           const runRes = await fetch(`/api/run/${encodeURIComponent(targetRun.path)}`)
           if (!runRes.ok) return
           const payload = (await runRes.json()) as DashboardPayload
           if (!cancelled) {
+            clearBootstrapQueryParams()
             loadRun(payload, targetRun.name)
           }
         } catch {
@@ -87,30 +94,6 @@ export function App() {
       </main>
     </div>
   )
-}
-
-function normaliseLatestType(value: string | null): string | null {
-  if (!value) return null
-  return {
-    replay: 'replay',
-    mc: 'monte_carlo',
-    montecarlo: 'monte_carlo',
-    'monte-carlo': 'monte_carlo',
-    monte_carlo: 'monte_carlo',
-    compare: 'comparison',
-    comparison: 'comparison',
-    calibrate: 'calibration',
-    calibration: 'calibration',
-    optimize: 'optimization',
-    optimise: 'optimization',
-    optimization: 'optimization',
-    optimisation: 'optimization',
-    round2: 'round2_scenarios',
-    'round2-scenarios': 'round2_scenarios',
-    round2_scenarios: 'round2_scenarios',
-    'scenario-compare': 'scenario_compare',
-    scenario_compare: 'scenario_compare',
-  }[value.toLowerCase()] ?? null
 }
 
 function LandingScreen() {
