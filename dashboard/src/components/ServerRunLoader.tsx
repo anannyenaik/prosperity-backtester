@@ -8,7 +8,20 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
-import { AlertTriangle, RefreshCw, Server, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  Boxes,
+  FlaskConical,
+  GitCompare,
+  History,
+  RefreshCw,
+  Search,
+  Server,
+  Sliders,
+  Target,
+  X,
+} from 'lucide-react'
 import { clsx } from 'clsx'
 import { useStore, type ServerRunMeta } from '../store'
 import type { DashboardPayload } from '../types'
@@ -42,15 +55,27 @@ interface LoaderActionButtonProps {
   disabled: boolean
   tone?: 'primary' | 'secondary'
   compact?: boolean
+  indicator?: ReactNode
+  keyLabel?: string
 }
 
-const TYPE_BUTTONS: QuickLoadButton[] = [
-  { type: 'replay', label: 'Latest replay' },
-  { type: 'monte_carlo', label: 'Latest MC' },
-  { type: 'comparison', label: 'Latest compare' },
-  { type: 'calibration', label: 'Latest calibration' },
-  { type: 'optimization', label: 'Latest optimise' },
-  { type: 'round2_scenarios', label: 'Latest Round 2' },
+interface QuickLoadChipProps {
+  label: string
+  caption: string
+  icon: ReactNode
+  code: string
+  onClick: () => void
+  disabled: boolean
+  loading: boolean
+}
+
+const TYPE_BUTTONS: Array<QuickLoadButton & { code: string; caption: string; icon: ReactNode }> = [
+  { type: 'replay', label: 'Replay', code: '01', caption: 'Historical', icon: <History className="h-3.5 w-3.5" /> },
+  { type: 'monte_carlo', label: 'Monte Carlo', code: '02', caption: 'Synthetic paths', icon: <Sliders className="h-3.5 w-3.5" /> },
+  { type: 'calibration', label: 'Calibration', code: '03', caption: 'Model fit', icon: <Target className="h-3.5 w-3.5" /> },
+  { type: 'comparison', label: 'Comparison', code: '04', caption: 'Multi-trader', icon: <GitCompare className="h-3.5 w-3.5" /> },
+  { type: 'optimization', label: 'Optimise', code: '05', caption: 'Variant rank', icon: <FlaskConical className="h-3.5 w-3.5" /> },
+  { type: 'round2_scenarios', label: 'Round 2', code: 'R2', caption: 'Scenarios', icon: <Boxes className="h-3.5 w-3.5" /> },
 ]
 
 const RUN_TYPE_MAP: Record<string, Exclude<RunFilter, 'all'>> = {
@@ -228,9 +253,11 @@ export function ServerRunLoader() {
     }
   }, [availableFilters, filter])
 
+  const loading = loadingKey != null
+
   return (
     <div ref={rootRef} className="relative mt-3">
-      <div className="rounded-[10px] border border-border bg-white/[0.025] p-3.5">
+      <div className="quickload-panel edge-traced rounded-[12px] p-4 md:p-[18px]">
         <div className="flex items-baseline justify-between gap-3">
           <div>
             <div className="hud-label text-accent-2">Local bundle server</div>
@@ -238,22 +265,36 @@ export function ServerRunLoader() {
               Quick load and browse
             </div>
           </div>
-          <div className="hud-label text-muted">{loadingKey ? 'Loading' : 'Ready'}</div>
+          <div className="quickload-status hud-label">
+            <span className={clsx('quickload-status__dot', loading && 'is-loading')} aria-hidden="true" />
+            {loading ? 'Loading' : 'Ready'}
+          </div>
         </div>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className="quickload-primary mt-3 grid gap-3 sm:grid-cols-2">
           <LoaderActionButton
             label="Open latest run"
             caption="Most recent bundle"
-            icon={loadingKey === 'latest' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
+            keyLabel="PRIMARY"
+            icon={loadingKey === 'latest' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Server className="h-4 w-4" />}
             onClick={() => void loadLatestFromServer()}
             disabled={loadingKey != null}
             tone="primary"
+            indicator={<ArrowUpRight className="h-3.5 w-3.5" />}
           />
           <LoaderActionButton
             label={browserState.open ? 'Hide browser' : 'Browse local server'}
             caption={browserState.open ? 'Bundle browser open' : 'Inspect available bundles'}
-            icon={loadingKey === 'browse' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : browserState.open ? <X className="h-3.5 w-3.5" /> : <Server className="h-3.5 w-3.5" />}
+            keyLabel="BROWSE"
+            icon={
+              loadingKey === 'browse' ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : browserState.open ? (
+                <X className="h-4 w-4" />
+              ) : (
+                <Search className="h-4 w-4" />
+              )
+            }
             onClick={() => {
               if (browserState.open) {
                 setBrowserState((current) => ({ ...current, open: false }))
@@ -262,19 +303,27 @@ export function ServerRunLoader() {
               void openBrowser()
             }}
             disabled={loadingKey != null}
+            indicator={<ArrowUpRight className="h-3.5 w-3.5" />}
           />
         </div>
 
-        <div className="mt-2 grid gap-2 grid-cols-2 lg:grid-cols-3">
-          {TYPE_BUTTONS.map(({ type, label }) => (
-            <LoaderActionButton
+        <div className="quickload-divider mt-4 flex items-center gap-3">
+          <span className="hud-label text-muted">Bundle shortcuts</span>
+          <span className="quickload-divider__rule" aria-hidden="true" />
+          <span className="hud-label text-steel">{TYPE_BUTTONS.length}</span>
+        </div>
+
+        <div className="quickload-chips mt-3 grid gap-2 grid-cols-2 md:grid-cols-3">
+          {TYPE_BUTTONS.map(({ type, label, code, caption, icon }) => (
+            <QuickLoadChip
               key={type}
               label={label}
-              caption={quickLoadCaption(type)}
-              icon={loadingKey === `latest:${type}` ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
+              caption={caption}
+              code={code}
+              icon={icon}
               onClick={() => void loadLatestFromServer(type)}
               disabled={loadingKey != null}
-              compact
+              loading={loadingKey === `latest:${type}`}
             />
           ))}
         </div>
@@ -313,6 +362,7 @@ export function ServerRunLoader() {
                 <button
                   type="button"
                   onClick={() => setBrowserState((current) => ({ ...current, open: false }))}
+                  data-cursor="close"
                   className="subtle-button inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -435,6 +485,7 @@ export function ServerRunLoader() {
               <button
                 type="button"
                 onClick={() => setNotice(null)}
+                data-cursor="close"
                 className="subtle-button inline-flex items-center justify-center rounded-lg p-2 text-xs"
                 aria-label="Dismiss quick load notice"
               >
@@ -456,29 +507,60 @@ function LoaderActionButton({
   disabled,
   tone = 'secondary',
   compact = false,
+  indicator,
+  keyLabel,
 }: LoaderActionButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      data-interactive="true"
       className={clsx(
-        tone === 'primary' ? 'signal-button' : 'subtle-button',
-        'loader-action flex w-full flex-col items-start justify-between rounded-lg text-left',
-        compact ? 'min-h-[3.2rem] px-3 py-2' : 'min-h-[3.9rem] px-4 py-2.5',
+        'qa-button group loader-action rounded-[11px] text-left',
+        tone === 'primary' ? 'qa-button--primary' : 'qa-button--secondary',
+        compact ? 'qa-button--compact' : 'qa-button--expanded',
       )}
     >
-      <span className="inline-flex items-center gap-2 opacity-85">
-        {icon}
-        <span className="hud-label">{caption}</span>
+      <span className="qa-button__sheen" aria-hidden="true" />
+      <span className="qa-button__edge" aria-hidden="true" />
+      <span className="qa-button__content">
+        <span className="qa-button__icon" aria-hidden="true">
+          {icon}
+        </span>
+        <span className="qa-button__body">
+          <span className="qa-button__label font-display">{label}</span>
+          <span className="qa-button__caption hud-label">{caption}</span>
+        </span>
+        <span className="qa-button__meta" aria-hidden="true">
+          {keyLabel && <span className="qa-button__key hud-label">{keyLabel}</span>}
+          {indicator && <span className="qa-button__indicator">{indicator}</span>}
+        </span>
       </span>
-      <span
-        className={clsx(
-          'font-display font-semibold uppercase tracking-[0.08em]',
-          compact ? 'text-[12px]' : 'text-[13px]',
-        )}
-      >
-        {label}
+    </button>
+  )
+}
+
+function QuickLoadChip({ label, caption, icon, code, onClick, disabled, loading }: QuickLoadChipProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      data-interactive="true"
+      aria-label={`Load latest ${label} bundle`}
+      className={clsx('qa-chip group', loading && 'is-loading')}
+    >
+      <span className="qa-chip__glow" aria-hidden="true" />
+      <span className="qa-chip__content">
+        <span className="qa-chip__top">
+          <span className="qa-chip__icon">
+            {loading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : icon}
+          </span>
+          <span className="qa-chip__code hud-label">{code}</span>
+        </span>
+        <span className="qa-chip__label font-display">{label}</span>
+        <span className="qa-chip__caption hud-label">{caption}</span>
       </span>
     </button>
   )

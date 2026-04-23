@@ -4,6 +4,7 @@ import { useStore, type ServerRunMeta } from './store'
 import { NavBar } from './components/NavBar'
 import { FileDrop } from './components/FileDrop'
 import { ServerRunLoader } from './components/ServerRunLoader'
+import { Cursor } from './components/Cursor'
 import { Overview } from './views/Overview'
 import { AlphaLab } from './views/AlphaLab'
 import { Round2 } from './views/Round2'
@@ -81,6 +82,7 @@ export function App() {
 
   return (
     <div className="min-h-screen text-txt">
+      <Cursor />
       <div className="app-atmosphere" aria-hidden="true" />
       <NavBar />
       <main className="relative z-10 min-h-screen pt-[116px]">
@@ -137,7 +139,7 @@ function LandingScreen() {
         </div>
       </section>
 
-      <section className="glass-panel flex w-full flex-col justify-between overflow-visible rounded-lg p-4 md:p-5 lg:max-w-[590px] lg:justify-self-end lg:self-stretch">
+      <section className="glass-panel edge-traced edge-traced--slow flex w-full flex-col justify-between overflow-visible rounded-lg p-4 md:p-5 lg:max-w-[590px] lg:justify-self-end lg:self-stretch">
         <div className="mb-3 flex items-start justify-between gap-4 border-b border-border pb-3">
           <div>
             <div className="hud-label text-accent-2">Bundle intake</div>

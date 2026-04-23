@@ -55,6 +55,15 @@ export function FileDrop() {
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onClick={() => inputRef.current?.click()}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          inputRef.current?.click()
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      data-interactive="true"
       className={clsx(
         'file-drop group relative flex items-center gap-3.5 overflow-hidden rounded-lg border border-dashed px-4 py-3.5 text-left transition-all duration-500 ease-observatory',
         dragging

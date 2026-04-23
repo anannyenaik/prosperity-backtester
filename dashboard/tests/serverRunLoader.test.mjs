@@ -197,7 +197,7 @@ test('missing quick-loads show an explicit unavailable notice instead of failing
   })
 
   await act(async () => {
-    await findButton(renderer.root, 'Latest MC').props.onClick()
+    await findButton(renderer.root, 'Load latest Monte Carlo bundle').props.onClick()
   })
 
   const rendered = JSON.stringify(renderer.toJSON())
@@ -223,7 +223,7 @@ test('unavailable notices can be dismissed cleanly', async (t) => {
   })
 
   await act(async () => {
-    await findButton(renderer.root, 'Latest compare').props.onClick()
+    await findButton(renderer.root, 'Load latest Comparison bundle').props.onClick()
   })
 
   assert.equal(renderer.root.findAll((node) => node.props['data-loader-surface'] === 'notice').length, 1)
@@ -259,7 +259,7 @@ test('matching quick-loads still fetch and load the selected bundle', async (t) 
   })
 
   await act(async () => {
-    await findButton(renderer.root, 'Latest compare').props.onClick()
+    await findButton(renderer.root, 'Load latest Comparison bundle').props.onClick()
   })
 
   assert.deepEqual(fetchMock.calls, [

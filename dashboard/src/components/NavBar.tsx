@@ -107,6 +107,7 @@ export function NavBar() {
                     <button
                       type="button"
                       aria-label={`Close ${run.name}`}
+                      data-cursor="close"
                       className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-current opacity-70 transition-colors hover:bg-white/[0.06] hover:text-txt hover:opacity-100"
                       onClick={(e) => {
                         e.stopPropagation()
