@@ -141,8 +141,8 @@ Core:
 
 - `prosperity_backtester/`
 - `data/`
-- `strategies/trader.py`
-- `strategies/starter.py`
+- `strategies/r2_algo_v2.py`
+- `strategies/r2_algo_v2_optimised.py`
 - `tests/`
 
 Optional:
@@ -153,6 +153,11 @@ Optional:
 - `configs/`
 - `examples/`
 - `live_exports/`
+
+Legacy examples:
+
+- `strategies/trader.py`
+- `strategies/starter.py`
 
 Experimental:
 

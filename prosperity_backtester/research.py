@@ -73,6 +73,13 @@ def default_fill_mode_for_round(round_number: int) -> str:
     return "base" if int(round_number) == 2 else "empirical_baseline"
 
 
+def _resolve_preset_days(round_number: int, days: Sequence[int]) -> tuple[int, ...]:
+    resolved = tuple(int(day) for day in days)
+    if int(round_number) == 2 and resolved == (-2, -1, 0):
+        return (-1, 0, 1)
+    return resolved
+
+
 def get_research_pack_preset(name: str) -> ResearchPackPreset:
     try:
         return RESEARCH_PACK_PRESETS[str(name).strip().lower()]
@@ -304,6 +311,9 @@ def run_research_pack(
         access_scenario=access_scenario,
         print_trader_output=False,
     )
+    replay_days = _resolve_preset_days(round_number, preset.replay_days)
+    compare_days = _resolve_preset_days(round_number, preset.compare_days)
+    mc_days = _resolve_preset_days(round_number, preset.mc_days)
 
     replay_dir = output_root / "replay"
     compare_dir = output_root / "compare"
@@ -311,7 +321,7 @@ def run_research_pack(
 
     replay = run_replay(
         trader_spec=trader_spec,
-        days=preset.replay_days,
+        days=replay_days,
         data_dir=data_dir,
         fill_model_name=fill_model_name,
         perturbation=perturbation,
@@ -323,7 +333,7 @@ def run_research_pack(
     )
     comparison_rows = run_compare(
         trader_specs=[trader_spec, baseline_spec],
-        days=preset.compare_days,
+        days=compare_days,
         data_dir=data_dir,
         fill_model_name=fill_model_name,
         perturbation=perturbation,
@@ -337,7 +347,7 @@ def run_research_pack(
         trader_spec=trader_spec,
         sessions=preset.mc_sessions,
         sample_sessions=preset.mc_sample_sessions,
-        days=preset.mc_days,
+        days=mc_days,
         fill_model_name=fill_model_name,
         perturbation=_mc_perturbation(perturbation, preset.mc_synthetic_tick_limit),
         output_dir=monte_carlo_dir,
@@ -352,8 +362,12 @@ def run_research_pack(
     mc_summary = summarise_monte_carlo_sessions(list(mc_results))
     finals = [float(result.summary["final_pnl"]) for result in mc_results]
     comparison_best = comparison_rows[0] if comparison_rows else {}
+    preset_summary = asdict(preset)
+    preset_summary["replay_days"] = list(replay_days)
+    preset_summary["compare_days"] = list(compare_days)
+    preset_summary["mc_days"] = list(mc_days)
     summary = {
-        "preset": asdict(preset),
+        "preset": preset_summary,
         "round": int(round_number),
         "data_dir": str(data_dir),
         "fill_model": fill_model_name,

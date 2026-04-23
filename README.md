@@ -1,17 +1,13 @@
 # Prosperity Backtester
 
-Result: this repository is a submission-ready Prosperity research toolkit for deterministic replay, Monte Carlo robustness checks, live-export calibration, Round 2 access scenario analysis, and local dashboard review.
+Result: this repository is now centred on the Round 2 submitted baseline and the final optimised candidate.
 
-It covers two public products:
+The submission-facing strategy pair is:
 
-- `ASH_COATED_OSMIUM`
-- `INTARIAN_PEPPER_ROOT`
+- `strategies/r2_algo_v2.py`: frozen submitted baseline
+- `strategies/r2_algo_v2_optimised.py`: improved local candidate
 
-The submission surface is intentionally small:
-
-- core runtime: `prosperity_backtester/`, `data/`, `strategies/`, `tests/`
-- optional reviewer tooling: `dashboard/`, `analysis/`, `configs/`, `examples/`, `live_exports/`
-- experimental or compatibility-only areas: `rust_mc_engine/`, `r1bt/`, `legacy_dashboard/`
+`strategies/trader.py` and `strategies/starter.py` remain only as older Round 1 fixtures. They are not the main review path.
 
 ## Quick Start
 
@@ -22,13 +18,13 @@ python -m pip install -e ".[dev]"
 python -m pytest -q
 ```
 
-Install the extra analysis dependencies only if you want the optional research or benchmark helpers:
+Install the extra analysis dependencies only if you want the optional research helpers:
 
 ```bash
 python -m pip install -e ".[dev,analysis]"
 ```
 
-The review dashboard is a separate optional React app:
+The React dashboard is optional:
 
 ```bash
 npm ci --prefix dashboard
@@ -36,115 +32,105 @@ npm test --prefix dashboard
 npm run build --prefix dashboard
 ```
 
-`python -m prosperity_backtester serve` uses the React build when `dashboard/dist/` exists. If you skip the build, it falls back to `legacy_dashboard/dashboard.html`.
+`python -m prosperity_backtester serve` uses the React build when `dashboard/dist/` exists. Otherwise it falls back to `legacy_dashboard/dashboard.html`.
 
 ## Reviewer Path
 
-Inspect the input data:
+Inspect the tracked Round 2 data:
 
 ```bash
-python -m prosperity_backtester inspect --data-dir data/round1 --days -2 -1 0 --json
 python -m prosperity_backtester inspect --round 2 --data-dir data/round2 --days -1 0 1 --json
 ```
 
-Run the main replay workflow:
+Run the direct submitted-versus-optimised compare:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --data data/round1 --fill-mode empirical_baseline
+python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --merge-pnl
 ```
 
-Compare a working strategy against the baseline:
+Run the checked-in access and MAF suite:
 
 ```bash
-python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --names current starter --data data/round1 --fill-mode empirical_baseline --merge-pnl
+python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_research.json
 ```
 
-Run a quick robustness check:
-
-```bash
-python -m prosperity_backtester monte-carlo strategies/trader.py --days 0 --fill-mode empirical_baseline --noise-profile fitted --quick
-```
-
-Open the latest output bundle:
-
-```bash
-python -m prosperity_backtester serve --latest
-```
-
-## Repository Layout
-
-| Path | Status | Purpose |
-| --- | --- | --- |
-| `analysis/` | Optional | Research-pack, profiling, calibration, validation, and benchmark helpers. |
-| `backtests/` | Generated output root | Default location for auto-named run bundles. Kept empty in git on purpose. |
-| `configs/` | Optional | Example JSON configs for sweep, optimisation, scenario, and Round 2 runs. |
-| `dashboard/` | Optional | React review UI source and dashboard adapter tests. Build locally when needed. |
-| `data/` | Core | Round 1 and Round 2 CSV fixtures used by tests and examples. |
-| `docs/` | Core | Submission-facing documentation. |
-| `examples/` | Optional | Example trader fixtures, including a small benchmark trader and a tracked live-export trader. |
-| `legacy_dashboard/` | Legacy | Static HTML fallback used only when no React build is present. |
-| `live_exports/` | Optional | Tracked live-export fixture data for calibration tests and examples. |
-| `prosperity_backtester/` | Core | Main Python package. CLI, engine, reporting, storage, and server all live here. |
-| `r1bt/` | Legacy | Compatibility wrapper for older imports and `python -m r1bt`. |
-| `rust_mc_engine/` | Experimental | Optional Rust Monte Carlo backend. Not the default path. |
-| `strategies/` | Core examples | Baseline, working, and Round 2 strategy files. |
-| `tests/` | Core | Python regression tests for runtime, outputs, adapters, and analysis helpers. |
-
-Important top-level files:
-
-| File | Purpose |
-| --- | --- |
-| `pyproject.toml` | Packaging, extras, console scripts, and setuptools package discovery. |
-| `.gitignore` | Ignores local environments, build outputs, caches, and generated runs. |
-| `LICENSE` | Repository licence terms. |
-| `README.md` | Submission overview and reviewer path. |
-
-For the detailed file and module map, see [docs/REPOSITORY_GUIDE.md](docs/REPOSITORY_GUIDE.md).
-
-## Core Commands
-
-Replay defaults to day `0` and the light output profile:
-
-```bash
-python -m prosperity_backtester replay strategies/trader.py --data data/round1 --fill-mode empirical_baseline
-```
-
-Compare multiple traders under one replay assumption:
-
-```bash
-python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --names current starter --data data/round1 --fill-mode empirical_baseline --merge-pnl
-```
-
-Run Monte Carlo directly:
-
-```bash
-python -m prosperity_backtester monte-carlo strategies/trader.py --days 0 --fill-mode empirical_baseline --noise-profile fitted --sessions 256 --sample-sessions 16 --workers 4
-```
-
-Use the preset research tiers:
-
-```bash
-python analysis/research_pack.py fast --trader strategies/trader.py --baseline strategies/starter.py
-python analysis/research_pack.py validation --trader strategies/trader.py --baseline strategies/starter.py
-python analysis/research_pack.py forensic --trader strategies/trader.py --baseline strategies/starter.py
-```
-
-Run calibration against the tracked live export:
-
-```bash
-python -m prosperity_backtester calibrate examples/trader_round1_v9.py --name live_v9 --data-dir data/round1 --days 0 --live-export live_exports/259168/259168.json --quick
-```
-
-Run calibrated scenario comparison:
+Run the checked-in conservative stress suite:
 
 ```bash
 python -m prosperity_backtester scenario-compare configs/research_scenarios.json
 ```
 
-Run Round 2 access scenarios:
+Run the checked-in pairwise Monte Carlo confirmation:
+
+```bash
+python -m prosperity_backtester round2-scenarios configs/round2_pairwise_mc.json
+```
+
+Open the latest bundle:
+
+```bash
+python -m prosperity_backtester serve --latest
+```
+
+## Submission Surface
+
+The repo is intentionally small at the top level:
+
+- `strategies/`: submitted and optimised Round 2 scripts, plus legacy Round 1 fixtures
+- `data/`: tracked Round 1 and Round 2 public CSV fixtures
+- `prosperity_backtester/`: replay, Monte Carlo, reporting, storage, and server code
+- `configs/`: checked-in comparison packs for access, stress, and Monte Carlo review
+- `docs/`: reviewer-facing workflow and architecture notes
+- `tests/`: regression tests for runtime, outputs, and helper scripts
+
+Optional tooling:
+
+- `analysis/`: helper wrappers and benchmark scripts
+- `dashboard/`: React review UI
+- `live_exports/`: tracked live-export fixture for optional historical calibration
+
+Compatibility or experimental areas:
+
+- `legacy_dashboard/`
+- `r1bt/`
+- `rust_mc_engine/`
+
+## Core Commands
+
+Replay the submitted baseline:
+
+```bash
+python -m prosperity_backtester replay strategies/r2_algo_v2.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base
+```
+
+Replay the optimised candidate:
+
+```bash
+python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base
+```
+
+Run the quick decision grid:
 
 ```bash
 python -m prosperity_backtester round2-scenarios configs/round2_scenarios.json
+```
+
+Run the broad replay suite:
+
+```bash
+python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_research.json
+```
+
+Run the no-access stress suite:
+
+```bash
+python -m prosperity_backtester scenario-compare configs/research_scenarios.json
+```
+
+Run the pairwise Monte Carlo access check:
+
+```bash
+python -m prosperity_backtester round2-scenarios configs/round2_pairwise_mc.json
 ```
 
 Prune old auto-generated output directories:
@@ -153,45 +139,18 @@ Prune old auto-generated output directories:
 python -m prosperity_backtester clean --keep 30
 ```
 
-## Status Guide
+## Notes
 
-Core:
-
-- `prosperity_backtester.__main__`
-- `prosperity_backtester.experiments`
-- `prosperity_backtester.platform`
-- `prosperity_backtester.dataset`
-- `prosperity_backtester.reports`
-- `prosperity_backtester.storage`
-- `prosperity_backtester.server`
-
-Optional:
-
-- `analysis/research_pack.py`
-- `analysis/profile_replay.py`
-- `dashboard/`
-- `configs/`
-- `live_exports/`
-
-Experimental:
-
-- `rust_mc_engine/`
-- Rust support inside `prosperity_backtester.mc_backends`
-- benchmark and architecture bake-off helpers in `analysis/`
-
-Legacy or compatibility-only:
-
-- `r1bt/`
-- `legacy_dashboard/`
-- `prosperity_backtester.replay`
-- `prosperity_backtester.dashboard`
+- The strongest local Round 2 evidence lives in `compare`, `round2-scenarios`, and `scenario-compare`.
+- `analysis/research_pack.py` and `analysis/profile_replay.py` now default to the Round 2 submitted-versus-optimised pair.
+- The live-export calibration flow remains available, but it is an optional historical side path rather than the main Round 2 decision workflow.
 
 ## Documentation
 
-- [docs/REPOSITORY_GUIDE.md](docs/REPOSITORY_GUIDE.md): top-level folders, important files, and module map
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): system layers and runtime flow
-- [docs/WORKFLOWS.md](docs/WORKFLOWS.md): practical commands and review loops
-- [docs/OUTPUTS.md](docs/OUTPUTS.md): bundle structure, output profiles, and retention
+- [docs/WORKFLOWS.md](docs/WORKFLOWS.md): main review loops and checked-in configs
+- [docs/ROUND2.md](docs/ROUND2.md): Round 2 access and MAF workflow
+- [docs/OUTPUTS.md](docs/OUTPUTS.md): bundle structure and output profiles
 - [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md): exact behaviour versus local modelling assumptions
-- [docs/ROUND2.md](docs/ROUND2.md): Round 2 access workflow
-- [docs/CALIBRATED_RESEARCH.md](docs/CALIBRATED_RESEARCH.md): live-export calibration workflow
+- [docs/REPOSITORY_GUIDE.md](docs/REPOSITORY_GUIDE.md): file and module map
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): runtime layers and bundle contract
+- [docs/CALIBRATED_RESEARCH.md](docs/CALIBRATED_RESEARCH.md): optional live-export calibration workflow

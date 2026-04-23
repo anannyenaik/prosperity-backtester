@@ -1,34 +1,37 @@
 # Workflows
 
-Result: the normal path is small. Inspect the data, run replay, compare against a baseline, run a quick Monte Carlo check, then serve the latest bundle.
-
-Replay and comparison default to day `0` and the light output profile so the common review loop stays fast.
+Result: the normal review path is now submitted versus optimised on Round 2, followed by access scenarios, conservative stress, and pairwise Monte Carlo confirmation.
 
 ## Standard Review Loop
 
-Inspect the tracked datasets:
+Inspect the tracked Round 2 data:
 
 ```bash
-python -m prosperity_backtester inspect --data-dir data/round1 --days -2 -1 0 --json
 python -m prosperity_backtester inspect --round 2 --data-dir data/round2 --days -1 0 1 --json
 ```
 
-Replay one trader:
+Run the direct compare:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline
+python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --merge-pnl
 ```
 
-Compare against the baseline strategy:
+Run the broad access and MAF suite:
 
 ```bash
-python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --names current starter --data data/round1 --fill-mode empirical_baseline --merge-pnl
+python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_research.json
 ```
 
-Run a quick robustness pass:
+Run the checked-in conservative stress suite:
 
 ```bash
-python -m prosperity_backtester monte-carlo strategies/trader.py --name current --days 0 --fill-mode empirical_baseline --noise-profile fitted --quick
+python -m prosperity_backtester scenario-compare configs/research_scenarios.json
+```
+
+Run the checked-in pairwise Monte Carlo confirmation:
+
+```bash
+python -m prosperity_backtester round2-scenarios configs/round2_pairwise_mc.json
 ```
 
 Serve the latest bundle:
@@ -37,100 +40,82 @@ Serve the latest bundle:
 python -m prosperity_backtester serve --latest
 ```
 
+## Fast Checks
+
+Replay only the optimised candidate:
+
+```bash
+python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base
+```
+
+Run the smaller checked-in decision grid:
+
+```bash
+python -m prosperity_backtester round2-scenarios configs/round2_scenarios.json
+```
+
 ## Trust Checks
 
 Useful replay-side checks when a result looks too good:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --match-trades worse
-python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --match-trades none
-python -m prosperity_backtester replay strategies/trader.py --name current --data data/round1 --fill-mode empirical_baseline --limit INTARIAN_PEPPER_ROOT:40 --print
+python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --match-trades worse
+python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --match-trades none
+python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --limit INTARIAN_PEPPER_ROOT:40 --print
 ```
 
-## Research Packs
+Useful access-side checks:
 
-The optional `analysis/research_pack.py` wrapper exposes three presets.
+```bash
+python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --with-extra-access --access-mode deterministic --maf-bid 1000 --access-quality 0.75 --access-passive-multiplier 1.12 --access-missed-reduction 0.02 --merge-pnl
+python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --with-extra-access --access-mode stochastic --maf-bid 1000 --access-quality 0.8 --access-probability 0.65 --access-passive-multiplier 1.15 --access-missed-reduction 0.02 --merge-pnl
+```
+
+## Research Helpers
+
+The optional `analysis/research_pack.py` wrapper now defaults to the Round 2 submitted-versus-optimised pair.
 
 Fast:
 
 ```bash
-python analysis/research_pack.py fast --trader strategies/trader.py --baseline strategies/starter.py
+python analysis/research_pack.py fast
 ```
 
 Validation:
 
 ```bash
-python analysis/research_pack.py validation --trader strategies/trader.py --baseline strategies/starter.py
+python analysis/research_pack.py validation
 ```
 
 Forensic:
 
 ```bash
-python analysis/research_pack.py forensic --trader strategies/trader.py --baseline strategies/starter.py
+python analysis/research_pack.py forensic
 ```
 
 Use:
 
-- `fast` for routine branch work
-- `validation` for stronger checks across a broader scope
-- `forensic` only when you explicitly want full-output evidence
+- `fast` for a quick smoke check
+- `validation` for the normal multi-day confirmation pass
+- `forensic` only when you want full-output evidence
 
 ## Replay Profiling
 
 When replay speed looks wrong, profile the phases directly:
 
 ```bash
-python analysis/profile_replay.py strategies/trader.py --compare-trader strategies/starter.py --data-dir data/round1 --fill-mode empirical_baseline
+python analysis/profile_replay.py strategies/r2_algo_v2_optimised.py --compare-trader strategies/r2_algo_v2.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base
 ```
 
-## Calibration
+## Optional Calibration
 
-Use calibration when live-export evidence exists:
+Live-export calibration remains available as a historical side workflow:
 
 ```bash
 python -m prosperity_backtester calibrate examples/trader_round1_v9.py --name live_v9 --data-dir data/round1 --days 0 --live-export live_exports/259168/259168.json --quick
 ```
 
-See [docs/CALIBRATED_RESEARCH.md](CALIBRATED_RESEARCH.md) for the full flow.
-
-## Scenario Comparison
-
-Use the checked-in calibrated scenario grid when one replay assumption is not enough:
-
-```bash
-python -m prosperity_backtester scenario-compare configs/research_scenarios.json
-```
-
-Review:
-
-- `scenario_results.csv`
-- `scenario_winners.csv`
-- `robustness_ranking.csv`
-- `scenario_pairwise_mc.csv`
-
-## Parameter Search
-
-Replay-only sweep:
-
-```bash
-python -m prosperity_backtester sweep configs/pepper_sweep.json
-```
-
-Replay plus Monte Carlo optimisation:
-
-```bash
-python -m prosperity_backtester optimize configs/pepper_optimize_quick.json
-```
-
-## Round 2
-
-Use Round 2 scenarios for MAF and extra-access decisions:
-
-```bash
-python -m prosperity_backtester round2-scenarios configs/round2_scenarios.json
-```
-
-See [docs/ROUND2.md](ROUND2.md) for the Round 2-specific details.
+See [docs/CALIBRATED_RESEARCH.md](CALIBRATED_RESEARCH.md) for details.
 
 ## Dashboard Review
 
@@ -149,7 +134,7 @@ python -m prosperity_backtester serve --port 5555
 python -m prosperity_backtester serve --dir backtests --port 5555
 python -m prosperity_backtester serve --latest
 python -m prosperity_backtester serve --latest-type replay
-python -m prosperity_backtester serve --latest-type monte-carlo
+python -m prosperity_backtester serve --latest-type round2-scenarios
 ```
 
 If the React build is absent, `serve` falls back to `legacy_dashboard/dashboard.html`.
@@ -161,7 +146,7 @@ Auto-generated runs under `backtests/` keep the newest `30` timestamped director
 Adjust retention per command:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --keep-runs 10
+python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --keep-runs 10
 ```
 
 Prune explicitly:

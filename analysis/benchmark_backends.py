@@ -42,26 +42,26 @@ DEFAULT_CASES = {
         "sample_sessions": 16,
         "workers": 8,
     },
-    "main_default_w8": {
-        "trader": "strategies/trader.py",
+    "submitted_default_w8": {
+        "trader": "strategies/r2_algo_v2.py",
         "sessions": 100,
         "sample_sessions": 10,
         "workers": 8,
     },
-    "main_heavy_w8": {
-        "trader": "strategies/trader.py",
+    "submitted_heavy_w8": {
+        "trader": "strategies/r2_algo_v2.py",
         "sessions": 192,
         "sample_sessions": 16,
         "workers": 8,
     },
-    "r2_stateful_default_w8": {
-        "trader": "strategies/prosperity_r2_340934_plus_offset110.py",
+    "optimised_default_w8": {
+        "trader": "strategies/r2_algo_v2_optimised.py",
         "sessions": 100,
         "sample_sessions": 10,
         "workers": 8,
     },
-    "r2_stateful_heavy_w8": {
-        "trader": "strategies/prosperity_r2_340934_plus_offset110.py",
+    "optimised_heavy_w8": {
+        "trader": "strategies/r2_algo_v2_optimised.py",
         "sessions": 192,
         "sample_sessions": 16,
         "workers": 8,

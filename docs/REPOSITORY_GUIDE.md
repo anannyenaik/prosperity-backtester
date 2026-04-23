@@ -131,15 +131,16 @@ These scripts are kept because they are tested and reusable, but they are not re
 
 | Path | Status | Role |
 | --- | --- | --- |
-| `strategies/trader.py` | Core example | Main Round 1 working trader used by the default replay and research examples. |
-| `strategies/starter.py` | Core example | Baseline market-making reference used in comparisons and research packs. |
-| `strategies/prosperity_r2_340934_plus_offset110.py` | Optional | Round 2 working strategy snapshot. |
-| `strategies/r2_algo_v2.py` | Optional | Round 2 working strategy snapshot. |
+| `strategies/r2_algo_v2.py` | Core | Frozen Round 2 submitted baseline. |
+| `strategies/r2_algo_v2_optimised.py` | Core | Round 2 optimised candidate used by the main comparison workflows. |
+| `strategies/trader.py` | Legacy example | Older Round 1 working trader retained for compatibility and historical examples. |
+| `strategies/starter.py` | Legacy example | Older Round 1 baseline retained for compatibility and tests. |
 | `examples/trader_round1_v9.py` | Optional | Tracked trader fixture used for live-export calibration examples. |
 | `examples/benchmark_trader.py` | Optional | Small deterministic trader used by benchmark and worker-pool tests. |
-| `configs/research_scenarios.json` | Optional | Calibrated scenario-comparison config. |
-| `configs/round2_scenarios.json` | Optional | Small Round 2 decision-grid config. |
-| `configs/round2_all_in_one_research.json` | Optional | Larger Round 2 comparison config across multiple traders and MAF values. |
+| `configs/research_scenarios.json` | Optional | Checked-in Round 2 conservative stress suite. |
+| `configs/round2_scenarios.json` | Optional | Smaller Round 2 submitted-versus-optimised decision grid. |
+| `configs/round2_all_in_one_research.json` | Optional | Broad Round 2 replay suite across access assumptions and MAF values. |
+| `configs/round2_pairwise_mc.json` | Optional | Representative Round 2 pairwise Monte Carlo confirmation suite. |
 | `configs/pepper_sweep.json` | Optional | Small replay-only parameter sweep example. |
 | `configs/pepper_optimize.json` | Optional | Replay plus Monte Carlo optimisation example. |
 | `configs/pepper_optimize_quick.json` | Optional | Smaller optimisation example for quick checks. |

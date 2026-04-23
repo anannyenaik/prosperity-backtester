@@ -1,8 +1,8 @@
 # Calibrated Research
 
-Result: calibration is for choosing useful local assumptions, not for proving exact website replication.
+Result: calibration is an optional historical side workflow for choosing useful local assumptions when a live export exists.
 
-Use this workflow when live-export evidence exists and the ranking between strategies is sensitive to fill quality, slippage, or execution assumptions.
+It is not the main Round 2 submitted-versus-optimised decision path.
 
 ## When To Use It
 
@@ -10,8 +10,8 @@ Calibration is most useful when:
 
 - a live export exists for a known trader version
 - replay looks obviously too optimistic or too pessimistic
-- two candidate strategies are close
-- inventory timing or passive-fill quality is driving the decision
+- two candidate strategies are close under the same historical fixture
+- fill quality, slippage, or execution assumptions appear to drive the result
 
 ## Derive An Empirical Fill Profile
 
@@ -53,28 +53,26 @@ Lower is better. It is still a local modelling choice.
 
 ## Replay Under Calibrated Assumptions
 
-Once you have a sensible baseline, replay the active strategy under the same assumptions:
+Once you have a sensible baseline, replay the tracked historical trader under the same assumptions:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --data-dir data/round1 --days 0 --fill-mode empirical_baseline --noise-profile fitted
+python -m prosperity_backtester replay examples/trader_round1_v9.py --data-dir data/round1 --days 0 --fill-mode empirical_baseline --noise-profile fitted
 ```
 
 Useful trust checks:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --data-dir data/round1 --days 0 --fill-mode empirical_baseline --slippage-multiplier 0
-python -m prosperity_backtester replay strategies/trader.py --data-dir data/round1 --days 0 --fill-mode slippage_stress --slippage-multiplier 1.5
+python -m prosperity_backtester replay examples/trader_round1_v9.py --data-dir data/round1 --days 0 --fill-mode empirical_baseline --slippage-multiplier 0
+python -m prosperity_backtester replay examples/trader_round1_v9.py --data-dir data/round1 --days 0 --fill-mode slippage_stress --slippage-multiplier 1.5
 ```
 
 ## Scenario Comparison
 
-Use the checked-in scenario grid when you want a calibrated ranking rather than one replay assumption:
+Use the checked-in Round 2 stress grid when you want a broader robustness ranking:
 
 ```bash
 python -m prosperity_backtester scenario-compare configs/research_scenarios.json
 ```
-
-The default grid includes baseline, stressed, crash, spread/depth, and slippage variants.
 
 Review:
 
@@ -88,7 +86,7 @@ Review:
 For a leading strategy, run a longer robustness pass:
 
 ```bash
-python -m prosperity_backtester monte-carlo strategies/trader.py --fill-mode empirical_baseline --noise-profile fitted --sessions 512 --sample-sessions 32 --workers 4
+python -m prosperity_backtester monte-carlo strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --fill-mode base --noise-profile fitted --sessions 512 --sample-sessions 32 --workers 4
 ```
 
 Read the result with this split in mind:

@@ -1,5 +1,5 @@
 {
-  "name": "round2_quick_decision_grid",
+  "name": "round2_pairwise_mc",
   "round": 2,
   "data_dir": "data/round2",
   "days": [-1, 0, 1],
@@ -22,15 +22,6 @@
       "mode": "none"
     },
     {
-      "name": "access_low_quality",
-      "enabled": true,
-      "contract_won": true,
-      "mode": "deterministic",
-      "access_quality": 0.4,
-      "passive_fill_rate_multiplier": 1.05,
-      "missed_fill_reduction": 0.01
-    },
-    {
       "name": "access_base",
       "enabled": true,
       "contract_won": true,
@@ -50,9 +41,9 @@
       "missed_fill_reduction": 0.02
     }
   ],
-  "maf_values": [0, 1000, 2000],
-  "mc_sessions": 0,
-  "mc_sample_sessions": 0,
+  "maf_values": [1000],
+  "mc_sessions": 64,
+  "mc_sample_sessions": 6,
   "mc_seed": 20260418,
-  "mc_workers": 1
+  "mc_workers": 2
 }

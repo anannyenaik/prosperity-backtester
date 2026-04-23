@@ -1,16 +1,16 @@
 {
-  "name": "round2_all_in_one_research",
+  "name": "round2_submitted_vs_optimised_all_in_one",
   "round": 2,
   "data_dir": "data/round2",
   "days": [-1, 0, 1],
   "fill_model": "base",
   "traders": [
     {
-      "name": "plus_offset110",
-      "path": "strategies/prosperity_r2_340934_plus_offset110.py"
+      "name": "optimised",
+      "path": "strategies/r2_algo_v2_optimised.py"
     },
     {
-      "name": "r2_algo_v2",
+      "name": "submitted",
       "path": "strategies/r2_algo_v2.py"
     }
   ],

@@ -24,10 +24,10 @@ def _timestamped_dir(root: Path, label: str) -> Path:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Profile replay slowdown by day with step timings")
-    parser.add_argument("trader", nargs="?", default="strategies/trader.py", help="Trader python file")
-    parser.add_argument("--compare-trader", default="strategies/starter.py", help="Optional comparison trader for the slowest day")
-    parser.add_argument("--days", nargs="*", default=["-2", "-1", "0"], help="Day list to profile, default -2 -1 0")
-    parser.add_argument("--round", type=int, default=1, choices=[1, 2], help="Competition round mode")
+    parser.add_argument("trader", nargs="?", default="strategies/r2_algo_v2_optimised.py", help="Trader python file")
+    parser.add_argument("--compare-trader", default="strategies/r2_algo_v2.py", help="Optional comparison trader for the slowest day")
+    parser.add_argument("--days", nargs="*", default=["-1", "0", "1"], help="Day list to profile, default -1 0 1")
+    parser.add_argument("--round", type=int, default=2, choices=[1, 2], help="Competition round mode")
     parser.add_argument("--data-dir", default=None, help="Directory containing CSVs")
     parser.add_argument("--fill-mode", default=None, help="Fill model override")
     parser.add_argument("--output-dir", default=None, help="Output directory. Default is backtests/<timestamp>_profile_replay_<trader>")

@@ -1,10 +1,17 @@
 # Round 2
 
-Result: Round 2 support is a scenario-analysis workflow for Market Access Fee decisions and extra-access assumptions. It is intentionally local and decision-focused, not a claim about exact hidden website mechanics.
+Result: the Round 2 workflow is now built around one fixed submitted baseline and one optimised candidate.
+
+Submission-facing scripts:
+
+- `strategies/r2_algo_v2.py`: frozen submitted baseline
+- `strategies/r2_algo_v2_optimised.py`: improved candidate
+
+Round 2 outputs remain local decision evidence. They are not a claim about exact hidden website mechanics.
 
 ## Inputs
 
-Round 2 uses the same public CSV shape as Round 1:
+Round 2 uses the public CSV files:
 
 ```text
 prices_round_2_day_<day>.csv
@@ -24,7 +31,7 @@ Products:
 
 ## Access Scenario Model
 
-`prosperity_backtester.round2.AccessScenario` captures the local assumption.
+`prosperity_backtester.round2.AccessScenario` captures the local access assumption.
 
 Important fields:
 
@@ -41,44 +48,58 @@ Important fields:
 - `missed_fill_reduction`
 - `trade_volume_share`
 
-These fields control how much extra access is assumed and how useful that access is locally.
+These values control how much extra access is assumed and how useful that access is locally.
 
-## Core Commands
+## Main Commands
 
 Inspect Round 2 data:
 
 ```bash
-python -m prosperity_backtester inspect --round 2 --data-dir data/round2 --days 0 --json
+python -m prosperity_backtester inspect --round 2 --data-dir data/round2 --days -1 0 1 --json
 ```
 
-Replay with no extra access:
+Replay the submitted baseline:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --round 2 --data-dir data/round2 --days 0 --fill-mode base
+python -m prosperity_backtester replay strategies/r2_algo_v2.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base
 ```
 
-Replay with deterministic extra access:
+Replay the optimised candidate:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --round 2 --data-dir data/round2 --days 0 --fill-mode base --with-extra-access --access-mode deterministic --maf-bid 750 --access-quality 0.75 --access-passive-multiplier 1.12 --access-missed-reduction 0.02
+python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base
 ```
 
-Compare scripts under one access assumption:
+Compare the two directly:
 
 ```bash
-python -m prosperity_backtester compare strategies/trader.py examples/trader_round1_v9.py --names current candidate --round 2 --data-dir data/round2 --days 0 --with-extra-access --access-mode stochastic --access-quality 0.8 --access-probability 0.65 --maf-bid 1000
+python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --merge-pnl
 ```
 
-Run the checked-in Round 2 scenario grid:
+## Checked-In Review Packs
+
+Quick decision grid:
 
 ```bash
 python -m prosperity_backtester round2-scenarios configs/round2_scenarios.json
 ```
 
-Run the broader all-in-one config:
+Broad access and MAF replay suite:
 
 ```bash
-python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_research.json --output-dir backtests/round2_all_in_one_research_bundle
+python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_research.json
+```
+
+Conservative no-access stress suite:
+
+```bash
+python -m prosperity_backtester scenario-compare configs/research_scenarios.json
+```
+
+Representative access pairwise Monte Carlo confirmation:
+
+```bash
+python -m prosperity_backtester round2-scenarios configs/round2_pairwise_mc.json
 ```
 
 ## Output Files
@@ -92,17 +113,28 @@ Round 2 scenario bundles write:
 - `dashboard.json`
 - `manifest.json`
 
+Scenario-compare stress bundles write:
+
+- `scenario_results.csv`
+- `scenario_winners.csv`
+- `robustness_ranking.csv`
+- `scenario_pairwise_mc.csv`
+- `dashboard.json`
+- `manifest.json`
+
 ## How To Read The Results
 
 Focus on:
 
-- `final_pnl`: net result after MAF when the contract is won
-- `gross_pnl_before_maf`: result before the fee
-- `marginal_access_pnl_before_maf`: value added by access versus the no-access baseline
-- `break_even_maf_vs_no_access`: local fee ceiling suggested by the model
-- `ranking_changed_vs_no_access`: whether the access assumption changed the winner
+- `final_pnl`: net result after MAF where relevant
+- `gross_pnl_before_maf`: result before the fee deduction
+- `marginal_access_pnl_before_maf`: local value added by access versus the no-access baseline
+- `break_even_maf_vs_no_access`: local fee ceiling implied by the model
+- `gap_to_second`: how much room the winner had in a given scenario
+- `mc_mean_diff_a_minus_b`: pairwise Monte Carlo mean edge where MC is enabled
+- `mc_p05_diff`: downside version of the same pairwise edge
 
-If Monte Carlo is enabled, use the pairwise rows to see whether the replay ranking survives stochastic variation.
+Use the replay grid for breadth and the pairwise Monte Carlo rows for stability. One without the other is not enough.
 
 ## Limits
 

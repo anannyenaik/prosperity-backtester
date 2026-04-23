@@ -24,7 +24,6 @@ OSMIUM_PARAMS = {
     "position_limit": 70,
     "one_sided_offset": 100,
     "wall_clip_threshold": 12,
-    "neutral_take_edge": 1,
     # Local uplift knobs for OSMIUM only.
     "strong_take_levels": 2,
     "neutral_take_levels": 2,
@@ -196,7 +195,6 @@ class Trader:
         pos_limit = p["position_limit"]
         one_sided_offset = p["one_sided_offset"]
         wall_clip_threshold = p["wall_clip_threshold"]
-        neutral_take_edge = p["neutral_take_edge"]
         strong_take_levels = p["strong_take_levels"]
         neutral_take_levels = p["neutral_take_levels"]
         recycle_position = p["recycle_position"]
@@ -303,19 +301,20 @@ class Trader:
                 self._append_order(orders, product, quote_bid, buy_cap)
 
         else:
-            buy_take_threshold = wall_mid - neutral_take_edge
-            sell_take_threshold = wall_mid + neutral_take_edge
+            buy_take_threshold = None
+            sell_take_threshold = None
             if pos <= -recycle_position:
                 buy_take_threshold = wall_mid
             elif pos >= recycle_position:
                 sell_take_threshold = wall_mid
-
-            buy_cap, _ = self._take_from_asks(
-                orders, product, book["asks"], buy_cap, buy_take_threshold, neutral_take_levels
-            )
-            sell_cap, _ = self._take_from_bids(
-                orders, product, book["bids"], sell_cap, sell_take_threshold, neutral_take_levels
-            )
+            if buy_take_threshold is not None:
+                buy_cap, _ = self._take_from_asks(
+                    orders, product, book["asks"], buy_cap, buy_take_threshold, neutral_take_levels
+                )
+            if sell_take_threshold is not None:
+                sell_cap, _ = self._take_from_bids(
+                    orders, product, book["bids"], sell_cap, sell_take_threshold, neutral_take_levels
+                )
 
             quote_bid = best_bid + 1 if best_bid is not None and best_bid < wall_mid else sensible_buy
             quote_ask = best_ask - 1 if best_ask is not None and best_ask > wall_mid else sensible_sell

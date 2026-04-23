@@ -22,7 +22,7 @@ The dashboard server uses `manifest.json` and `run_registry.jsonl` first so larg
 | `monte_carlo` | Distribution and path-band robustness checks | `run_summary.csv`, `session_summary.csv`, `fills.csv`, `behaviour_summary.csv` |
 | `calibration` | Replay-versus-live calibration grid | `calibration_grid.csv`, `empirical_profile/` |
 | `optimization` | Variant ranking by replay plus Monte Carlo score | `optimization.csv` |
-| `scenario_compare` | Ranking under calibrated stress scenarios | `scenario_results.csv`, `scenario_winners.csv`, `robustness_ranking.csv`, `scenario_pairwise_mc.csv` |
+| `scenario_compare` | Ranking under conservative stress scenarios | `scenario_results.csv`, `scenario_winners.csv`, `robustness_ranking.csv`, `scenario_pairwise_mc.csv` |
 | `round2_scenarios` | Ranking under MAF and extra-access assumptions | `round2_scenarios.csv`, `round2_winners.csv`, `round2_pairwise_mc.csv`, `round2_maf_sensitivity.csv` |
 
 ## Light Versus Full Output
@@ -53,14 +53,14 @@ Light mode omits by default:
 Use `--output-profile full` when you explicitly want debug-heavy evidence:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --days 0 --output-profile full
-python -m prosperity_backtester monte-carlo strategies/trader.py --sessions 128 --sample-sessions 8 --output-profile full
+python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --output-profile full
+python -m prosperity_backtester monte-carlo strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --sessions 128 --sample-sessions 8 --output-profile full
 ```
 
 Full mode can still be trimmed:
 
 ```bash
-python -m prosperity_backtester monte-carlo strategies/trader.py --sessions 128 --sample-sessions 8 --output-profile full --no-orders --no-sample-path-files --no-session-manifests
+python -m prosperity_backtester monte-carlo strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --sessions 128 --sample-sessions 8 --output-profile full --no-orders --no-sample-path-files --no-session-manifests
 ```
 
 ## Optional Heavy Extras
@@ -85,7 +85,7 @@ Aggregate workflows such as comparison, optimisation, scenario comparison, and R
 Enable them deliberately:
 
 ```bash
-python -m prosperity_backtester compare strategies/trader.py strategies/starter.py --output-profile full --save-child-bundles
+python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --output-profile full --save-child-bundles
 ```
 
 ## Compact Storage Notes
@@ -120,7 +120,7 @@ When a workflow uses the default auto-named output path under `backtests/`, the 
 Change the retention count:
 
 ```bash
-python -m prosperity_backtester replay strategies/trader.py --keep-runs 10
+python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --keep-runs 10
 ```
 
 Prune explicitly:

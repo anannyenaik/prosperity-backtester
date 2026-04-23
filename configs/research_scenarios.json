@@ -1,25 +1,25 @@
 {
-  "name": "calibrated_research_grid",
-  "round": 1,
-  "data_dir": "data/round1",
-  "days": [-2, -1, 0],
-  "fill_model": "empirical_baseline",
-  "trader": "strategies/trader.py",
-  "variants": [
+  "name": "round2_stress_suite",
+  "round": 2,
+  "data_dir": "data/round2",
+  "days": [-1, 0, 1],
+  "fill_model": "base",
+  "traders": [
     {
-      "name": "current"
+      "name": "optimised",
+      "path": "strategies/r2_algo_v2_optimised.py"
     },
     {
-      "name": "starter_reference",
-      "path": "strategies/starter.py"
+      "name": "submitted",
+      "path": "strategies/r2_algo_v2.py"
     }
   ],
   "scenarios": [
     {
       "name": "baseline",
-      "fill_model": "empirical_baseline",
+      "fill_model": "base",
       "noise_profile": "fitted",
-      "description": "Empirical fill baseline with fitted latent Monte Carlo noise.",
+      "description": "Base Round 2 replay assumptions with fitted latent Monte Carlo noise.",
       "tags": ["baseline", "calibrated"]
     },
     {
@@ -90,7 +90,7 @@
       "tags": ["fills"]
     }
   ],
-  "mc_sessions": 64,
+  "mc_sessions": 32,
   "mc_sample_sessions": 4,
   "mc_seed": 20260418,
   "mc_workers": 1

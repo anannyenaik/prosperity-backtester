@@ -100,7 +100,7 @@ def _serialise_orders(orders: dict[str, list[Any]] | None) -> dict[str, list[dic
 def main(argv: list[str] | None = None) -> int:
     argv = list(argv or sys.argv[1:])
     if len(argv) not in {1, 2}:
-        print(json.dumps({"error": "usage: rust_strategy_worker.py <trader.py> [overrides.json]"}), flush=True)
+        print(json.dumps({"error": "usage: rust_strategy_worker.py <trader_file.py> [overrides.json]"}), flush=True)
         return 1
 
     trader_path = Path(argv[0]).resolve()

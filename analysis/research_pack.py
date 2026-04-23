@@ -24,9 +24,9 @@ def _timestamped_dir(root: Path, label: str) -> Path:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the fast, validation or forensic research pack")
     parser.add_argument("preset", choices=["fast", "validation", "forensic"])
-    parser.add_argument("--trader", default="strategies/trader.py", help="Trader python file")
-    parser.add_argument("--baseline", default="strategies/starter.py", help="Baseline trader for the compare bundle")
-    parser.add_argument("--round", type=int, default=1, choices=[1, 2], help="Competition round mode")
+    parser.add_argument("--trader", default="strategies/r2_algo_v2_optimised.py", help="Trader python file")
+    parser.add_argument("--baseline", default="strategies/r2_algo_v2.py", help="Baseline trader for the compare bundle")
+    parser.add_argument("--round", type=int, default=2, choices=[1, 2], help="Competition round mode")
     parser.add_argument("--data-dir", default=None, help="Directory containing CSVs")
     parser.add_argument("--fill-mode", default=None, help="Fill model override")
     parser.add_argument("--mc-workers", type=int, default=1, help="Parallel worker processes for Monte Carlo sessions")
