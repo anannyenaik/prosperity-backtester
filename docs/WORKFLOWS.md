@@ -29,9 +29,9 @@ python analysis/research_pack.py fast --trader strategies/trader.py --baseline s
 
 Measured on 2026-04-22 on this machine:
 
-- default day-0 replay: about `2.26s`
-- default day-0 compare: about `2.22s`
-- fast pack: about `5.07s`
+- default day-0 replay: about `2.57s`
+- default day-0 compare: about `2.03s`
+- fast pack: about `5.30s`
 
 Useful trust checks during the fast loop:
 
@@ -57,7 +57,7 @@ This gives:
 
 Measured on 2026-04-22 on this machine:
 
-- validation pack: about `16.24s`
+- validation pack: about `17.78s`
 
 ## Heavy forensic loop
 
@@ -91,9 +91,9 @@ The helper benchmarks each requested day separately and reports:
 
 The current slowest replay day is still day `0`, with about:
 
-- `1.421s` in the market session
-- `0.522s` in replay-row compaction
-- `0.276s` in bundle write work
+- `1.410s` in the market session
+- `0.729s` in replay-row compaction
+- `1.059s` in bundle write work
 
 ## Monte Carlo
 
@@ -110,15 +110,15 @@ preview-capped examples for qualitative inspection only in light mode.
 
 Measured on 2026-04-22 on the tracked `250`-tick fixture:
 
-- quick light, `64/8`, `1` worker: about `1.39s`
-- quick light, `64/8`, `4` workers: about `1.09s`
-- quick light, `64/8`, `8` workers: about `1.09s`
-- default light, `100/10`, `1` worker: about `1.97s`
-- default light, `100/10`, `4` workers: about `1.20s`
-- default light, `100/10`, `8` workers: about `1.18s`
-- heavy light, `192/16`, `1` worker: about `3.47s`
-- heavy light, `192/16`, `8` workers: about `1.53s`
-- ceiling light, `768/24`, `8` workers: about `3.31s`
+- quick light, `64/8`, `1` worker: about `1.40s`
+- quick light, `64/8`, `4` workers: about `1.14s`
+- quick light, `64/8`, `8` workers: about `1.28s`
+- default light, `100/10`, `1` worker: about `1.94s`
+- default light, `100/10`, `4` workers: about `1.32s`
+- default light, `100/10`, `8` workers: about `1.32s`
+- heavy light, `192/16`, `1` worker: about `3.36s`
+- heavy light, `192/16`, `8` workers: about `1.83s`
+- ceiling light, `768/24`, `8` workers: about `3.37s`
 
 Backend guidance is now simple:
 
@@ -126,8 +126,9 @@ Backend guidance is now simple:
 - use `classic` when you want a parity fallback against full replay materialisation
 - use `rust` only for explicit backend experiments
 
-On the tracked fixture, `streaming` beats both `classic` and `rust` through the
-measured 8-worker cases.
+On the fresh realistic-trader rerun in
+`backtests/_final_backend_current_local`, `streaming` won `5` of the `7`
+measured cells, `classic` won `2`, and `rust` won none.
 
 ## Sweep
 

@@ -209,18 +209,19 @@ That recommendation is based on five measured facts from this pass:
   the ceiling-RSS gap did not
 - fresh current-local ceiling probes put the global RSS peak in execution-phase
   process-tree RSS rather than parent-only reporting RSS
-- realistic-trader backend rankings are still mixed between `streaming` and
-  `classic`, while `rust` stayed slower in every rerun
+- the fresh realistic-trader backend rerun kept `streaming` ahead overall,
+  `classic` alive as a real fallback, and `rust` behind in every cell
 - the refreshed architecture bake-off kept MessagePack attractive at the
-  contract boundary, but made shared memory weaker rather than stronger
+  contract boundary, while shared memory showed only a small transport-only win
+  rather than a compelling end-to-end case
 
 ## Alternatives Considered
 
 | Option | What it could win | What killed it in this pass | Verdict |
 | --- | --- | --- | --- |
 | Keep the current streaming-first Python architecture | Best end-to-end balance of throughput, install simplicity, trader compatibility and workflow breadth | Nothing killed it. It still leads overall on the audited evidence. | Keep and refine |
-| Add lower-copy shared-memory worker transport | Could cut worker payload duplication and some scheduling overhead | The fresh bake-off regressed instead of improving: `0.590s` pickled transport versus `0.622s` shared memory on the real current payload. | Rejected for now |
-| Add optional binary serialisation or sidecars while keeping JSON canonical | Could reduce retained bytes and serialisation cost without breaking the dashboard contract | MessagePack was materially smaller and faster on the real payload, but it still does not solve the remaining ceiling-RSS problem. A default JSON-plus-sidecar write would also increase retained bytes. | Still alive, but not landing now |
+| Add lower-copy shared-memory worker transport | Could cut worker payload duplication and some scheduling overhead | The fresh bake-off improved the transport microbenchmark to `0.599s` versus `0.718s`, but that is still only a `1.199x` transport-only result with no end-to-end runtime or RSS proof. | Keep experimental only |
+| Add optional binary serialisation or sidecars while keeping JSON canonical | Could reduce retained bytes and serialisation cost without breaking the dashboard contract | MessagePack was materially smaller and faster on the real payload, but it still does not solve the remaining execution RSS problem. A default JSON-plus-sidecar write would also increase retained bytes. | Still alive, but not landing now |
 | Make Rust the default backend | Could improve ceiling throughput if native compute dominated | Same-code reruns kept `rust` slower than both `streaming` and `classic` on every realistic case, while also adding Cargo and subprocess complexity. | Keep explicit only |
 | Targeted C, C++ or Rust acceleration for one kernel | Could help if one pure compute kernel dominated | Current hot spots are still mixed Python control flow, trader boundary calls, execution logic, reporting and write overhead. No isolated kernel was shown to justify crossing the native boundary yet. | Not justified now |
 | Cython or Numba | Could speed up numeric loops with lower toolchain burden than C++ | The hot path is still stateful order execution and trader interaction, not a clean vector or numeric kernel. | Not justified now |
@@ -237,8 +238,8 @@ The best architecture from here is:
 - do not land optional binary sidecars yet
 - only revisit binary sidecars if retained bytes or load-time matter more than
   ceiling RSS
-- defer shared-memory transport unless later profiling shows a materially
-  stronger worker-payload-copying bottleneck
+- defer shared-memory transport unless an end-to-end rerun shows materially
+  more than the current `1.199x` transport-only gain
 
 That is a stronger answer than "native code is not needed". The reason is not
 taste. The reason is that the measured bottlenecks are still a mixed system
@@ -250,6 +251,8 @@ dominate.
 The remaining frontier is now narrower:
 
 - lower execution-phase tree RSS in wide-worker Monte Carlo
+- lower the parent-side chunk receive and merge transient that still adds about
+  `37 MB` around the ceiling peak
 - lower retained bytes in sampled preview series and exact fill retention
 - lower parent-side sampled-row compaction growth without pretending that it is
   the global peak

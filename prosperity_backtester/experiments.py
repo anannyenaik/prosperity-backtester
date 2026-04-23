@@ -3,7 +3,9 @@ from __future__ import annotations
 import concurrent.futures
 import ctypes
 import json
+import multiprocessing
 import os
+import pickle
 import random
 import statistics
 import threading
@@ -57,6 +59,24 @@ class TraderSpec:
 DEFAULT_DATA_DIR = Path(__file__).parent.parent / "data" / "round1"
 DEFAULT_ROUND2_DATA_DIR = Path(__file__).parent.parent / "data" / "round2"
 DEFAULT_EXPORT_DIR = Path(__file__).parent.parent / "live_exports"
+
+_MC_DIAGNOSTICS_PATH_ENV = "PROSPERITY_MC_DIAGNOSTICS_PATH"
+_MC_PROFILE_INT_KEYS = (
+    "session_count",
+    "sampled_session_count",
+    "classic_session_count",
+    "streaming_session_count",
+    "rust_session_count",
+)
+_MC_PROFILE_FLOAT_KEYS = (
+    "market_generation_seconds",
+    "state_build_seconds",
+    "trader_seconds",
+    "execution_seconds",
+    "path_metrics_seconds",
+    "postprocess_seconds",
+    "session_total_seconds",
+)
 
 
 class _ProcessMemoryCounters(ctypes.Structure):
@@ -151,6 +171,75 @@ def _measure_phase_rss(run) -> tuple[object, Dict[str, object]]:
         "rss_delta_bytes": None if rss_before is None or rss_after is None else int(rss_after) - int(rss_before),
         "rss_peak_bytes": rss_peak,
     }
+
+
+def _mc_diagnostics_path() -> Path | None:
+    path_text = os.environ.get(_MC_DIAGNOSTICS_PATH_ENV)
+    if not path_text:
+        return None
+    if multiprocessing.current_process().name != "MainProcess":
+        return None
+    return Path(path_text)
+
+
+def _mc_diagnostics_enabled() -> bool:
+    return bool(os.environ.get(_MC_DIAGNOSTICS_PATH_ENV))
+
+
+def _diagnostic_pickle_size_bytes(value: object) -> int | None:
+    if not _mc_diagnostics_enabled():
+        return None
+    try:
+        return len(pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL))
+    except Exception:
+        return None
+
+
+def _record_mc_diagnostic(event: str, **payload: object) -> None:
+    path = _mc_diagnostics_path()
+    if path is None:
+        return
+    row = {
+        "event": event,
+        "perf_counter_seconds": round(time.perf_counter(), 6),
+        "pid": os.getpid(),
+        **payload,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, sort_keys=True) + "\n")
+
+
+def _merge_mc_chunk_profile(profile: Dict[str, object], chunk_profile: Mapping[str, object]) -> None:
+    for key in _MC_PROFILE_INT_KEYS:
+        profile[key] = int(profile.get(key, 0) or 0) + int(chunk_profile.get(key, 0) or 0)
+    for key in _MC_PROFILE_FLOAT_KEYS:
+        profile[key] = float(profile.get(key, 0.0) or 0.0) + float(chunk_profile.get(key, 0.0) or 0.0)
+
+
+def _sampled_result_count(results: Sequence[SessionArtefacts]) -> int:
+    return sum(1 for result in results if result.inventory_series)
+
+
+def _record_chunk_output_diagnostic(
+    chunk_output: Mapping[str, object],
+    *,
+    chunk_index: int,
+    accumulated_result_count: int,
+) -> None:
+    diagnostics = chunk_output.get("diagnostics")
+    diagnostics_payload = diagnostics if isinstance(diagnostics, Mapping) else {}
+    chunk_results_raw = chunk_output.get("results")
+    chunk_results = list(chunk_results_raw) if isinstance(chunk_results_raw, list) else []
+    _record_mc_diagnostic(
+        "chunk_output_received",
+        chunk_index=int(chunk_index),
+        chunk_result_count=len(chunk_results),
+        chunk_sampled_result_count=_sampled_result_count(chunk_results),
+        accumulated_result_count=int(accumulated_result_count),
+        chunk_payload_pickle_bytes=diagnostics_payload.get("chunk_payload_pickle_bytes"),
+        chunk_path_band_accumulator_pickle_bytes=diagnostics_payload.get("path_band_accumulator_pickle_bytes"),
+    )
 
 
 def _load_json_config(config_path: Path) -> Dict[str, object]:
@@ -440,23 +529,34 @@ def _run_monte_carlo_chunk(task: Dict[str, object]) -> Dict[str, object]:
             result.path_metrics = []
         results.append(result)
         merge_mc_profile(profile, session_profile, sampled=capture_full_output, execution_backend="classic")
-    return {
+    payload = {
         "results": results,
         "profile": finalise_mc_profile(profile),
         "path_band_accumulator": path_band_accumulator,
     }
+    if _mc_diagnostics_enabled():
+        payload["diagnostics"] = {
+            "chunk_payload_pickle_bytes": _diagnostic_pickle_size_bytes(payload),
+            "path_band_accumulator_pickle_bytes": _diagnostic_pickle_size_bytes(path_band_accumulator),
+        }
+    return payload
+
+
+def _group_session_indices(session_indices: Sequence[int], worker_count: int) -> List[List[int]]:
+    indices = [int(session_idx) for session_idx in session_indices]
+    if not indices:
+        return []
+    if worker_count <= 1:
+        return [indices]
+    chunk_count = min(len(indices), max(worker_count, worker_count * 2))
+    groups: List[List[int]] = [[] for _ in range(chunk_count)]
+    for offset, session_idx in enumerate(indices):
+        groups[offset % chunk_count].append(session_idx)
+    return [group for group in groups if group]
 
 
 def _session_chunks(sessions: int, worker_count: int) -> List[List[int]]:
-    if sessions < 1:
-        return []
-    if worker_count <= 1:
-        return [list(range(sessions))]
-    chunk_count = min(sessions, max(worker_count, worker_count * 2))
-    groups: List[List[int]] = [[] for _ in range(chunk_count)]
-    for session_idx in range(sessions):
-        groups[session_idx % chunk_count].append(session_idx)
-    return [group for group in groups if group]
+    return _group_session_indices(range(sessions), worker_count)
 
 
 def _run_monte_carlo_profiled(
@@ -514,6 +614,15 @@ def _run_monte_carlo_profiled(
         "aggregate_path_bands": bool(write_bundle),
     }
     execution_started = time.perf_counter()
+    diagnostics_enabled = _mc_diagnostics_enabled()
+    _record_mc_diagnostic(
+        "execution_started",
+        backend=resolved_backend,
+        worker_count=worker_count,
+        session_count=sessions,
+        sample_session_count=sample_sessions,
+        write_bundle=bool(write_bundle),
+    )
     if resolved_backend == "rust":
         rust_run = run_rust_backend(
             trader_name=trader_spec.name,
@@ -563,75 +672,72 @@ def _run_monte_carlo_profiled(
                 sample_task | {"session_indices": chunk}
                 for chunk in _session_chunks(sample_sessions, sample_worker_count)
             ]
+            sample_chunk_outputs: List[Dict[str, object]] = []
             if sample_worker_count == 1:
-                sample_outputs = [_run_monte_carlo_chunk(task) for task in sample_chunk_tasks]
+                for chunk_index, task in enumerate(sample_chunk_tasks):
+                    chunk_output = _run_monte_carlo_chunk(task)
+                    sample_chunk_outputs.append(chunk_output)
+                    if diagnostics_enabled:
+                        accumulated = sum(len(output.get("results") or []) for output in sample_chunk_outputs)
+                        _record_chunk_output_diagnostic(chunk_output, chunk_index=chunk_index, accumulated_result_count=accumulated)
             else:
                 with concurrent.futures.ProcessPoolExecutor(max_workers=sample_worker_count) as executor:
-                    sample_outputs = list(executor.map(_run_monte_carlo_chunk, sample_chunk_tasks))
+                    for chunk_index, chunk_output in enumerate(executor.map(_run_monte_carlo_chunk, sample_chunk_tasks)):
+                        sample_chunk_outputs.append(chunk_output)
+                        if diagnostics_enabled:
+                            accumulated = sum(len(output.get("results") or []) for output in sample_chunk_outputs)
+                            _record_chunk_output_diagnostic(chunk_output, chunk_index=chunk_index, accumulated_result_count=accumulated)
             sampled_results = [
                 result
-                for chunk_output in sample_outputs
-                for result in chunk_output["results"]
+                for chunk_output in sample_chunk_outputs
+                for result in chunk_output.get("results", [])
             ]
-            for chunk_output in sample_outputs:
-                chunk_profile = chunk_output["profile"]
-                profile["sampled_session_count"] = sample_sessions
-                profile["classic_session_count"] = int(profile.get("classic_session_count", 0) or 0) + int(chunk_profile.get("classic_session_count", 0) or 0)
-                for key in (
-                    "market_generation_seconds",
-                    "state_build_seconds",
-                    "trader_seconds",
-                    "execution_seconds",
-                    "path_metrics_seconds",
-                    "postprocess_seconds",
-                    "session_total_seconds",
-                ):
-                    profile[key] = float(profile.get(key, 0.0) or 0.0) + float(chunk_profile.get(key, 0.0) or 0.0)
+            for chunk_output in sample_chunk_outputs:
+                chunk_profile = chunk_output.get("profile")
+                if isinstance(chunk_profile, Mapping):
+                    profile["classic_session_count"] = int(profile.get("classic_session_count", 0) or 0) + int(chunk_profile.get("classic_session_count", 0) or 0)
+                    for key in _MC_PROFILE_FLOAT_KEYS:
+                        profile[key] = float(profile.get(key, 0.0) or 0.0) + float(chunk_profile.get(key, 0.0) or 0.0)
+            profile["sampled_session_count"] = sample_sessions
             by_name = {result.run_name: result for result in results}
             for result in sampled_results:
                 by_name[result.run_name] = result
             results = list(by_name.values())
     else:
+        combined_path_bands = new_path_band_accumulator() if write_bundle else None
         chunk_tasks = [
             base_task | {"session_indices": chunk}
             for chunk in _session_chunks(sessions, worker_count)
         ]
         if worker_count == 1:
-            chunk_outputs = [_run_monte_carlo_chunk(task) for task in chunk_tasks]
+            chunk_outputs = []
+            for chunk_index, task in enumerate(chunk_tasks):
+                chunk_output = _run_monte_carlo_chunk(task)
+                chunk_outputs.append(chunk_output)
+                if diagnostics_enabled:
+                    accumulated = sum(len(output.get("results") or []) for output in chunk_outputs)
+                    _record_chunk_output_diagnostic(chunk_output, chunk_index=chunk_index, accumulated_result_count=accumulated)
         else:
             with concurrent.futures.ProcessPoolExecutor(max_workers=worker_count) as executor:
-                chunk_outputs = list(executor.map(_run_monte_carlo_chunk, chunk_tasks))
+                chunk_outputs = []
+                for chunk_index, chunk_output in enumerate(executor.map(_run_monte_carlo_chunk, chunk_tasks)):
+                    chunk_outputs.append(chunk_output)
+                    if diagnostics_enabled:
+                        accumulated = sum(len(output.get("results") or []) for output in chunk_outputs)
+                        _record_chunk_output_diagnostic(chunk_output, chunk_index=chunk_index, accumulated_result_count=accumulated)
         results = [
             result
             for chunk_output in chunk_outputs
-            for result in chunk_output["results"]
+            for result in chunk_output.get("results", [])
         ]
         for chunk_output in chunk_outputs:
-            chunk_profile = chunk_output["profile"]
-            for key in (
-                "session_count",
-                "sampled_session_count",
-                "classic_session_count",
-                "streaming_session_count",
-                "rust_session_count",
-            ):
-                profile[key] = int(profile.get(key, 0) or 0) + int(chunk_profile.get(key, 0) or 0)
-            for key in (
-                "market_generation_seconds",
-                "state_build_seconds",
-                "trader_seconds",
-                "execution_seconds",
-                "path_metrics_seconds",
-                "postprocess_seconds",
-                "session_total_seconds",
-            ):
-                profile[key] = float(profile.get(key, 0.0) or 0.0) + float(chunk_profile.get(key, 0.0) or 0.0)
+            chunk_profile = chunk_output.get("profile")
+            if isinstance(chunk_profile, Mapping):
+                _merge_mc_chunk_profile(profile, chunk_profile)
+            chunk_accumulator = chunk_output.get("path_band_accumulator")
+            if combined_path_bands is not None and isinstance(chunk_accumulator, dict):
+                merge_path_band_accumulators(combined_path_bands, chunk_accumulator)
         if write_bundle:
-            combined_path_bands = new_path_band_accumulator()
-            for chunk_output in chunk_outputs:
-                chunk_accumulator = chunk_output.get("path_band_accumulator")
-                if isinstance(chunk_accumulator, dict):
-                    merge_path_band_accumulators(combined_path_bands, chunk_accumulator)
             if combined_path_bands:
                 precomputed_path_bands = finalize_path_band_accumulator(combined_path_bands)
                 path_band_method = all_session_path_band_method(
@@ -641,6 +747,11 @@ def _run_monte_carlo_profiled(
                 )
     execution_seconds = time.perf_counter() - execution_started
     results.sort(key=lambda artefact: artefact.run_name)
+    _record_mc_diagnostic(
+        "execution_finished",
+        result_count=len(results),
+        sampled_result_count=_sampled_result_count(results),
+    )
     sort_seconds = time.perf_counter() - execution_started - execution_seconds
     compact_seconds = 0.0
     dashboard_seconds = 0.0
@@ -662,6 +773,12 @@ def _run_monte_carlo_profiled(
         phase_rss: Dict[str, object] = {
             "before_reporting_rss_bytes": _current_process_rss_bytes(),
         }
+        _record_mc_diagnostic(
+            "reporting_started",
+            before_reporting_rss_bytes=phase_rss["before_reporting_rss_bytes"],
+            result_count=len(results),
+            sampled_result_count=_sampled_result_count(results),
+        )
 
         def build_compact_rows() -> Dict[str, Dict[str, List[Dict[str, object]]]]:
             return {
@@ -670,11 +787,16 @@ def _run_monte_carlo_profiled(
                 if result.inventory_series
             }
 
+        _record_mc_diagnostic("sample_row_compaction_started")
         monte_carlo_rows_raw, compact_rss = _measure_phase_rss(build_compact_rows)
         assert isinstance(monte_carlo_rows_raw, dict)
         monte_carlo_rows = monte_carlo_rows_raw
         compact_seconds = float(compact_rss["elapsed_seconds"])
         phase_rss["sample_row_compaction"] = compact_rss
+        _record_mc_diagnostic(
+            "sample_row_compaction_finished",
+            rss_peak_bytes=compact_rss.get("rss_peak_bytes"),
+        )
         phase_timings = finalise_mc_profile(profile)
         phase_timings["result_sort_seconds"] = round(sort_seconds, 6)
         phase_timings["sample_row_compaction_seconds"] = round(compact_seconds, 6)
@@ -711,12 +833,17 @@ def _run_monte_carlo_profiled(
                 provenance=dashboard_provenance,
             )
 
+        _record_mc_diagnostic("dashboard_build_started")
         dashboard_raw, dashboard_rss = _measure_phase_rss(build_dashboard)
         assert isinstance(dashboard_raw, dict)
         dashboard = dashboard_raw
         dashboard_seconds = float(dashboard_rss["elapsed_seconds"])
         phase_rss["dashboard_build"] = dashboard_rss
         runtime_context["phase_timings_seconds"]["dashboard_build_seconds"] = round(dashboard_seconds, 6)
+        _record_mc_diagnostic(
+            "dashboard_build_finished",
+            rss_peak_bytes=dashboard_rss.get("rss_peak_bytes"),
+        )
 
         def write_bundle() -> None:
             write_mc_bundle(
@@ -729,10 +856,15 @@ def _run_monte_carlo_profiled(
                 runtime_context=runtime_context,
             )
 
+        _record_mc_diagnostic("bundle_write_started")
         _unused_write_result, write_rss = _measure_phase_rss(write_bundle)
         write_seconds = float(write_rss["elapsed_seconds"])
         phase_rss["bundle_write"] = write_rss
         runtime_context["phase_timings_seconds"]["bundle_write_seconds"] = round(write_seconds, 6)
+        _record_mc_diagnostic(
+            "bundle_write_finished",
+            rss_peak_bytes=write_rss.get("rss_peak_bytes"),
+        )
         manifest_path = output_dir / "manifest.json"
         if manifest_path.is_file():
             manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -751,9 +883,18 @@ def _run_monte_carlo_profiled(
                         provenance=manifest_provenance,
                     )
 
+                _record_mc_diagnostic("manifest_refresh_started")
                 _unused_manifest_result, manifest_rss = _measure_phase_rss(refresh_manifest)
                 phase_rss["manifest_refresh"] = manifest_rss
+                _record_mc_diagnostic(
+                    "manifest_refresh_finished",
+                    rss_peak_bytes=manifest_rss.get("rss_peak_bytes"),
+                )
         phase_rss["after_reporting_rss_bytes"] = _current_process_rss_bytes()
+        _record_mc_diagnostic(
+            "reporting_finished",
+            after_reporting_rss_bytes=phase_rss["after_reporting_rss_bytes"],
+        )
     final_profile = dict(runtime_context.get("phase_timings_seconds") or finalise_mc_profile(profile))
     final_profile["result_sort_seconds"] = round(sort_seconds, 6)
     final_profile["sample_row_compaction_seconds"] = round(compact_seconds, 6)

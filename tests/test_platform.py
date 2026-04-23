@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data" / "round1"
 LIVE_EXPORT = ROOT / "live_exports" / "259168" / "259168.json"
 TRADER_V9 = ROOT / "examples" / "trader_round1_v9.py"
+BENCHMARK_TRADER = ROOT / "examples" / "benchmark_trader.py"
 STARTER = ROOT / "strategies" / "starter.py"
 MAIN_TRADER = ROOT / "strategies" / "trader.py"
 
@@ -155,6 +156,28 @@ def test_compare_and_monte_carlo(tmp_path):
     assert bundle_write_rss is None or bundle_write_rss >= 0
     assert not (tmp_path / "mc" / "sample_paths").exists()
     assert not (tmp_path / "mc" / "behaviour_series.csv").exists()
+
+
+def test_multi_worker_monte_carlo_keeps_sample_runs(tmp_path):
+    mc = run_monte_carlo(
+        trader_spec=TraderSpec(name="benchmark", path=BENCHMARK_TRADER),
+        sessions=4,
+        sample_sessions=2,
+        days=(0,),
+        fill_model_name="base",
+        perturbation=PerturbationConfig(synthetic_tick_limit=32),
+        output_dir=tmp_path / "mc_workers",
+        base_seed=20260422,
+        run_name="mc_workers",
+        workers=2,
+    )
+    assert len(mc) == 4
+    dashboard = normalise_dashboard_payload(json.loads((tmp_path / "mc_workers" / "dashboard.json").read_text(encoding="utf-8")))
+    assert dashboard["monteCarlo"]["summary"]["session_count"] == 4
+    assert len(dashboard["monteCarlo"]["sampleRuns"]) == 2
+    runtime = dashboard["meta"]["provenance"]["runtime"]
+    assert runtime["worker_count"] == 2
+    assert runtime["parallelism"] == "process_pool"
 
 
 def test_full_output_profile_writes_debug_artifacts(tmp_path):

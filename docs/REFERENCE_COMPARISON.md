@@ -1,22 +1,19 @@
 # Reference Comparison
 
 Current result: on the matched same-machine Chris Roberts no-op benchmark, this
-repo now wins runtime, retained bytes and file count, but still loses
-ceiling-case RSS.
+repo wins runtime, retained bytes and file count, but still loses ceiling-case
+RSS.
 
 This page records what the 2026-04-22 local audit could actually prove against
 the reference repos that were available in this session.
 
-## Scope and visibility note
+## Scope note
 
 The strongest fresh external proof in this pass is the same-machine Chris
 Roberts rerun from `analysis/benchmark_chris_reference.py`.
 
-This repo's GitHub remote was visible locally, but public visibility was not
-verified in-session. If this repo is private, the proof surface here is an
-internal audit rather than a public leaderboard claim. The wording below is
-therefore intentionally about locally audited evidence, not internet-wide
-closure.
+The wording below is intentionally about locally audited evidence, not a public
+internet-wide leaderboard claim.
 
 ## Short conclusion
 
@@ -47,27 +44,27 @@ The fresh same-machine rerun used:
 
 The exact command is tracked in
 [`docs/BENCHMARK_SUMMARY.json`](BENCHMARK_SUMMARY.json) and in
-`backtests/_final_local_reference/reference_benchmark.json`.
+`backtests/_final_reference_current_local/reference_benchmark.json`.
 
 ### Runtime result
 
 This repo won every measured runtime cell:
 
-- default `100/10`: `4.43x` to `14.18x` faster
-- ceiling `1000/100`: `10.69x` to `17.67x` faster
+- default `100/10`: `4.18x` to `18.09x` faster
+- ceiling `1000/100`: `10.27x` to `15.76x` faster
 
 Representative cells:
 
 | Case | Workers | This repo | Chris Roberts | Speed-up |
 | --- | ---: | ---: | ---: | ---: |
-| default `100/10` | `1` | `2.759s` | `39.127s` | `14.18x` |
-| default `100/10` | `8` | `2.228s` | `9.878s` | `4.43x` |
-| ceiling `1000/100` | `1` | `20.732s` | `366.363s` | `17.67x` |
-| ceiling `1000/100` | `8` | `7.688s` | `82.169s` | `10.69x` |
+| default `100/10` | `1` | `1.321s` | `23.892s` | `18.09x` |
+| default `100/10` | `8` | `1.477s` | `6.170s` | `4.18x` |
+| ceiling `1000/100` | `1` | `15.242s` | `240.145s` | `15.76x` |
+| ceiling `1000/100` | `8` | `5.152s` | `52.892s` | `10.27x` |
 
 ### Memory and retained-output result
 
-The all-axis story is still mixed, but materially better than before.
+The all-axis story is still mixed.
 
 What this repo did better:
 
@@ -84,9 +81,9 @@ Representative ceiling rows:
 
 | Workers | This repo RSS | Chris RSS | This repo bytes | Chris bytes |
 | ---: | ---: | ---: | ---: | ---: |
-| `1` | `338.6 MB` | `142.5 MB` | `6.87 MB` | `9.69 MB` |
-| `4` | `424.2 MB` | `248.9 MB` | `6.87 MB` | `9.69 MB` |
-| `8` | `558.8 MB` | `388.2 MB` | `6.87 MB` | `9.69 MB` |
+| `1` | `328.7 MB` | `142.8 MB` | `6.87 MB` | `9.69 MB` |
+| `4` | `454.4 MB` | `252.8 MB` | `6.87 MB` | `9.69 MB` |
+| `8` | `559.3 MB` | `389.4 MB` | `6.87 MB` | `9.69 MB` |
 
 That means the retained-byte gap did close on this matched comparison. The
 remaining hard gap is ceiling RSS.
@@ -102,7 +99,7 @@ It does not prove:
   contracts
 - a universal memory-efficiency crown beyond the matched same-machine test
 
-It does prove that, under the matched no-op benchmark used here, the repo now
+It does prove that, under the matched no-op benchmark used here, the repo
 beats the Chris Roberts clone on the output-size axis as well as runtime.
 
 ### Workflow and platform result

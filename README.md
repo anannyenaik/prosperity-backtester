@@ -144,58 +144,63 @@ python analysis/profile_replay.py strategies/trader.py --compare-trader strategi
 
 The proof split is now explicit.
 
-The least-contended same-code throughput baseline for this dirty worktree is
-still the earlier local runtime suite in
-`backtests/_baseline_runtime/benchmark_report.json` and the full `1/2/4/8`
-table in `backtests/_final_runtime_current/benchmark_report.json`. The later
-exact current-code rerun in `backtests/_final_local_runtime/benchmark_report.json`
-reproduced the same bytes and RSS shape, but the machine was clearly contended
-and wall-clock times roughly doubled together across the whole suite.
+Fresh current-local headline artefacts from this dirty worktree are:
 
-Historical same-code baseline on this machine:
+- `backtests/_final_output_current_local`
+- `backtests/_final_runtime_current_local`
+- `backtests/_final_attribution_current_local`
+- `backtests/_final_rss_frontier_current_local_v2`
+- `backtests/_final_backend_current_local`
+- `backtests/_final_reference_current_local`
+- `backtests/_final_architecture_current_local`
 
-- default day-0 replay: about `2.03s`
-- default day-0 compare: about `2.02s`
-- fast pack: about `4.40s`
-- validation pack: about `15.14s`
+Earlier `_audit_*` and `_final_runtime_after_*` outputs remain useful
+exploration artefacts from this pass, but they are not the headline proof. This
+clone does not retain a separate clean exact-same-worktree historical
+throughput baseline for the final diagnostics-only state, so the timings below
+are fresh current-local results with a dirty-worktree caveat.
 
-Tracked `250`-tick Monte Carlo throughput table from the least-contended full
-same-code run:
+Current local branch-loop timings from
+`backtests/_final_runtime_current_local/benchmark_report.json`:
+
+- default day-0 replay: about `2.57s`
+- default day-0 compare: about `2.03s`
+- fast pack: about `5.30s`
+- validation pack: about `17.78s`
+
+Tracked `250`-tick Monte Carlo throughput table from the fresh current-local
+runtime rerun:
 
 | Case | 1 worker | 2 workers | 4 workers | 8 workers |
 | --- | ---: | ---: | ---: | ---: |
-| MC quick light (64 sess) | `1.509s` | `1.660s` | `1.126s` | `1.244s` |
-| MC default light (100 sess) | `1.907s` | `1.816s` | `1.328s` | `1.321s` |
-| MC heavy light (192 sess) | `3.679s` | `n/a` | `n/a` | `1.828s` |
-| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `3.089s` |
+| MC quick light (64 sess) | `1.402s` | `1.370s` | `1.138s` | `1.282s` |
+| MC default light (100 sess) | `1.936s` | `1.564s` | `1.320s` | `1.321s` |
+| MC heavy light (192 sess) | `3.362s` | `n/a` | `n/a` | `1.830s` |
+| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `3.370s` |
 
-The latest high-value Monte Carlo win is retained-output compaction rather than
-a broad runtime rewrite. Against the earlier clean 2026-04-22 audit baseline,
-the tracked light bundles now keep:
+Current retained-output sizes from
+`backtests/_final_output_current_local/benchmark_report.json`:
 
-- `mc_default_light_w8`: `5.75 MB -> 2.90 MB` with runtime `1.370s -> 1.321s`
-- `mc_ceiling_light_w8`: `13.45 MB -> 6.65 MB` with runtime `3.061s -> 3.089s`
+- replay light: `1.36 MB`, `6` files
+- replay full: `1.99 MB`, `12` files
+- Monte Carlo light: `819.9 KB`, `6` files
+- Monte Carlo full: `5.16 MB`, `18` files
 
-That is a real retained-byte win with mixed runtime movement. Fresh
-current-local ceiling probes now make the remaining gap sharper: the true peak
-is still execution-phase process-tree RSS, not parent-only reporting RSS or
-dashboard assembly.
+Fresh current-local ceiling probes now make the remaining gap precise rather
+than fuzzy. The sharp remaining blocker is still execution-phase process-tree
+RSS, not parent-only reporting RSS or dashboard assembly. The
+`analysis/rss_frontier.py` probe recorded a `415.3 MB` tree peak on
+`mc_ceiling_light_w8`, with `8` workers alive, about `277.7 MB` of live worker
+RSS at the peak, about `37 MB` of parent execution transient, and a lower
+reporting peak of `274.3 MB`.
 
-The default streaming Monte Carlo backend remains the recommended choice. It
-avoids building full replay artefacts for unsampled sessions while still
-computing exact all-session distribution metrics and path bands. Use
-`--mc-backend classic` for parity checks. The compiled `rust` backend remains
-available for explicit backend experiments, but same-code realistic-trader
-rankings are now strategy-sensitive rather than one-sided.
-
-Realistic trader checks with `examples/trader_round1_v9.py`,
-`strategies/trader.py` and
-`strategies/prosperity_r2_340934_plus_offset110.py` still keep `streaming` as
-the best default overall, but `classic` wins several realistic cells:
-`live_v9_heavy_w8`, `main_heavy_w8`, and both measured Round 2 stateful
-`8`-worker cases. `streaming` still won the lighter `live_v9` cases and the
-fresh `main_default_w8` rerun. Rust stayed slower in every realistic-trader
-case that was rerun in this pass.
+The default streaming Monte Carlo backend remains the recommended choice. Use
+`--mc-backend classic` for parity checks and realistic cells where it still
+wins. The compiled `rust` backend remains available for explicit backend
+experiments only. On the fresh realistic-trader rerun in
+`backtests/_final_backend_current_local`, `streaming` won `5` of the `7`
+measured cells, `classic` won `main_default_w8` and
+`r2_stateful_heavy_w8`, and `rust` won none.
 
 Forensic work is still deliberate full-profile work and should be treated as a minute-scale task rather than part of the normal branch loop.
 
@@ -211,9 +216,10 @@ explicit experiment rather than a recommendation. Chris Roberts' repo remains
 the strongest narrow tutorial-round Monte Carlo reference, but this repo is
 the stronger end-to-end research platform on the locally available evidence.
 On the fresh same-machine shared no-op trader benchmark in
-`backtests/_final_local_reference`, with matched `250`-tick sessions, matched
+`backtests/_final_reference_current_local`, with matched `250`-tick sessions, matched
 `100/10` and `1000/100` session or sample tiers, and matched `1`, `2`, `4`,
-and `8` worker settings, this repo was `4.43x` to `17.67x` faster end-to-end,
+and `8` worker settings, this repo was `4.18x` to `18.09x` faster on the
+default cases and `10.27x` to `15.76x` faster on the ceiling cases,
 wrote fewer retained bytes in every measured cell, and used far fewer files
 (`5` versus `50` or `410`). On the smaller `100/10` cases it also used less
 RSS, but Chris still kept the lighter RSS on the `1000/100` ceiling cases.
@@ -384,6 +390,20 @@ This writes:
 
 - `bundle_attribution.json`
 - `bundle_attribution.md`
+
+## Execution RSS Frontier
+
+Probe the wide-worker Monte Carlo ceiling RSS with process-tree sampling and
+machine-readable chunk diagnostics:
+
+```bash
+python analysis/rss_frontier.py --output-dir backtests/rss_frontier --baseline-report backtests/runtime_benchmark/benchmark_report.json
+```
+
+This writes:
+
+- `rss_frontier_report.json`
+- `rss_frontier_report.md`
 
 ## Backend Benchmark
 
