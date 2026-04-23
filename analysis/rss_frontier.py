@@ -239,6 +239,23 @@ def _latest_chunk_before(sample_time: float, events: list[dict[str, Any]]) -> di
     return max(candidates, key=lambda row: float(row["perf_counter_seconds"]))
 
 
+def _peak_sample_for_phases(
+    samples: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+    *,
+    phases: set[str],
+    key: str,
+) -> dict[str, Any] | None:
+    matching = [
+        sample
+        for sample in samples
+        if _classify_phase(float(sample["sample_time_seconds"]), events) in phases
+    ]
+    if not matching:
+        return None
+    return max(matching, key=lambda row: int(row[key]))
+
+
 def _render_markdown(report: dict[str, Any]) -> str:
     peak = report["process_tree"]["tree_peak"]
     parent_peak = report["process_tree"]["parent_peak"]
@@ -252,9 +269,11 @@ def _render_markdown(report: dict[str, Any]) -> str:
         f"- Tree peak: `{_format_bytes(peak['tree_rss_bytes'])}` at `{peak['sample_time_seconds']:.3f}s`",
         f"- Parent peak: `{_format_bytes(parent_peak['root_rss_bytes'])}` at `{parent_peak['sample_time_seconds']:.3f}s`",
         f"- Peak phase: `{report['diagnostics']['tree_peak_phase']}`",
+        f"- Parent RSS at tree peak: `{_format_bytes(exec_summary['parent_rss_at_tree_peak_bytes'])}`",
+        f"- Parent pre-reporting retained RSS: `{_format_bytes(exec_summary['before_reporting_rss_bytes'])}`",
         f"- Workers alive at tree peak: `{exec_summary['worker_count_at_tree_peak']}`",
         f"- Worker RSS at tree peak: `{_format_bytes(exec_summary['worker_rss_min_at_tree_peak_bytes'])}` to `{_format_bytes(exec_summary['worker_rss_max_at_tree_peak_bytes'])}`",
-        f"- Reporting peak: `{_format_bytes(exec_summary['reporting_peak_bytes'])}`",
+        f"- Reporting peak: `{_format_bytes(exec_summary['reporting_peak_bytes'])}` during `{report['diagnostics'].get('reporting_parent_peak_phase') or report['diagnostics']['parent_peak_phase']}`",
         "",
         "## Drivers",
         "",
@@ -365,6 +384,18 @@ def main(argv: list[str] | None = None) -> None:
     parent_peak = max(samples, key=lambda row: int(row["root_rss_bytes"]))
     tree_peak_phase = _classify_phase(float(tree_peak["sample_time_seconds"]), diagnostics)
     parent_peak_phase = _classify_phase(float(parent_peak["sample_time_seconds"]), diagnostics)
+    pre_reporting_parent_peak = _peak_sample_for_phases(
+        samples,
+        diagnostics,
+        phases={"execution", "post_execution_pre_reporting"},
+        key="root_rss_bytes",
+    )
+    reporting_parent_peak = _peak_sample_for_phases(
+        samples,
+        diagnostics,
+        phases={"sample_row_compaction", "dashboard_build", "bundle_write", "manifest_refresh"},
+        key="root_rss_bytes",
+    )
     latest_chunk = _latest_chunk_before(float(tree_peak["sample_time_seconds"]), diagnostics)
     worker_rss = [int(value) for value in tree_peak.get("child_rss_bytes", [])]
     worker_total = sum(worker_rss)
@@ -385,9 +416,13 @@ def main(argv: list[str] | None = None) -> None:
     worker_lifecycle = _worker_lifecycle(samples)
 
     tree_peak_parent = int(tree_peak["root_rss_bytes"])
-    parent_transient = None
-    if before_reporting is not None:
-        parent_transient = max(0, int(parent_peak["root_rss_bytes"]) - int(before_reporting))
+    pre_reporting_parent_peak_bytes = None if pre_reporting_parent_peak is None else int(pre_reporting_parent_peak["root_rss_bytes"])
+    reporting_parent_peak_bytes = None if reporting_parent_peak is None else int(reporting_parent_peak["root_rss_bytes"])
+    reporting_parent_peak_phase = (
+        None
+        if reporting_parent_peak is None
+        else _classify_phase(float(reporting_parent_peak["sample_time_seconds"]), diagnostics)
+    )
     reporting_transient = None
     if before_reporting is not None and reporting_peak:
         reporting_transient = max(0, int(reporting_peak) - int(before_reporting))
@@ -444,6 +479,12 @@ def main(argv: list[str] | None = None) -> None:
             "events": diagnostics,
             "tree_peak_phase": tree_peak_phase,
             "parent_peak_phase": parent_peak_phase,
+            "pre_reporting_parent_peak_phase": (
+                None
+                if pre_reporting_parent_peak is None
+                else _classify_phase(float(pre_reporting_parent_peak["sample_time_seconds"]), diagnostics)
+            ),
+            "reporting_parent_peak_phase": reporting_parent_peak_phase,
             "latest_chunk_before_tree_peak": latest_chunk,
         },
         "reporting_phase_rss_bytes": phase_rss,
@@ -456,9 +497,10 @@ def main(argv: list[str] | None = None) -> None:
             "worker_rss_max_at_tree_peak_bytes": max(worker_rss) if worker_rss else None,
             "worker_rss_mean_at_tree_peak_bytes": None if not worker_rss else round(statistics.mean(worker_rss), 2),
             "parent_peak_bytes": int(parent_peak["root_rss_bytes"]),
+            "parent_peak_before_reporting_bytes": pre_reporting_parent_peak_bytes,
+            "parent_peak_during_reporting_bytes": reporting_parent_peak_bytes,
             "before_reporting_rss_bytes": before_reporting,
             "reporting_peak_bytes": reporting_peak or None,
-            "parent_transient_before_reporting_bytes": parent_transient,
             "reporting_transient_before_reporting_bytes": reporting_transient,
             "global_peak_persistent_after_reporting": (
                 before_reporting is not None
@@ -476,19 +518,21 @@ def main(argv: list[str] | None = None) -> None:
                 ),
             },
             {
-                "name": "parent_execution_transient",
-                "bytes": parent_transient or 0,
+                "name": "parent_root_at_tree_peak",
+                "bytes": tree_peak_parent,
                 "why": (
-                    "Parent RSS peaked above the measured pre-reporting baseline while execution was still active, "
-                    "which points to chunk-result receive and merge pressure rather than retained dashboard state."
+                    "Parent root RSS at the exact global tree peak. "
+                    "This is the parent share that coexisted with the live workers and combines with them "
+                    "to form the tree peak."
                 ),
             },
             {
                 "name": "reporting_write_path",
                 "bytes": reporting_transient or 0,
                 "why": (
-                    "The reporting path still adds measurable parent RSS, but it stays below the global tree peak "
-                    "on this probe."
+                    "The parent later peaks during "
+                    f"{reporting_parent_peak_phase or parent_peak_phase}, after workers exit. "
+                    "This is real write-path pressure, but it does not set the global tree peak."
                 ),
             },
         ],

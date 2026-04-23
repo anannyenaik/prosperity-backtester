@@ -201,27 +201,31 @@ one-off report format.
 The best current architecture remains the existing streaming-first Python
 design, not a broad rewrite.
 
-That recommendation is based on five measured facts from this pass:
+That recommendation is based on five measured facts from the clean current
+review root plus the corrected `rss_frontier*` reruns captured immediately
+after the RSS attribution wording fix:
 
 - the repo kept a strong same-machine runtime lead over the local Chris Roberts
-  reference
-- the retained-byte gap on the matched shared no-op comparison closed, while
-  the ceiling-RSS gap did not
-- fresh current-local ceiling probes put the global RSS peak in execution-phase
-  process-tree RSS rather than parent-only reporting RSS
+  reference and also kept the retained-byte and retained-file lead on the
+  matched no-op comparison
+- the remaining hard external gap is ceiling RSS, not throughput or retained
+  bytes
+- fresh `5 ms` RSS-frontier reruns put the global tree peak in execution-phase
+  process-tree RSS at `418 MB` to `423 MB`, with `8` live workers contributing
+  `283 MB` to `290 MB` and the parent contributing `128 MB` to `138 MB` at the
+  exact peak
+- later parent-only peaks do still happen in `bundle_write`, but they occur
+  after workers exit and therefore do not set the global tree peak
 - the fresh realistic-trader backend rerun kept the two Python backends alive,
-  with `classic` winning `4` of `7` measured cells, `streaming` winning `3`,
+  with `streaming` winning `4` of `7` measured cells, `classic` winning `3`,
   and `rust` behind in every cell
-- the refreshed architecture bake-off kept MessagePack attractive at the
-  contract boundary, while shared memory showed only a small transport-only win
-  rather than a compelling end-to-end case
 
 ## Alternatives Considered
 
 | Option | What it could win | What killed it in this pass | Verdict |
 | --- | --- | --- | --- |
-| Keep the current streaming-first Python architecture | Best end-to-end balance of throughput, install simplicity, trader compatibility and workflow breadth | Nothing killed the overall design, but the backend choice inside it is now more mixed than the earlier proof text claimed. | Keep and refine |
-| Add lower-copy shared-memory worker transport | Could cut worker payload duplication and some scheduling overhead | The fresh bake-off improved the transport microbenchmark to `0.583s` versus `0.631s`, but that is still only a `1.081x` transport-only result with no end-to-end runtime or RSS proof. | Keep experimental only |
+| Keep the current streaming-first Python architecture | Best end-to-end balance of throughput, install simplicity, trader compatibility and workflow breadth | Nothing killed the overall design. The clean rerun actually strengthened the default-backend case, with `streaming` edging `classic` `4` wins to `3`. | Keep and refine |
+| Add lower-copy shared-memory worker transport | Could cut worker payload duplication and some scheduling overhead | The fresh bake-off improved the transport microbenchmark to `0.351s` versus `0.440s`, but that is still only a `1.253x` transport-only result with no end-to-end runtime or RSS proof. | Keep experimental only |
 | Add optional binary serialisation or sidecars while keeping JSON canonical | Could reduce retained bytes and serialisation cost without breaking the dashboard contract | MessagePack was materially smaller and faster on the real payload, but it still does not solve the remaining execution RSS problem. A default JSON-plus-sidecar write would also increase retained bytes. | Still alive, but not landing now |
 | Make Rust the default backend | Could improve ceiling throughput if native compute dominated | Same-code reruns kept `rust` slower than both `streaming` and `classic` on every realistic case, while also adding Cargo and subprocess complexity. | Keep explicit only |
 | Targeted C, C++ or Rust acceleration for one kernel | Could help if one pure compute kernel dominated | Current hot spots are still mixed Python control flow, trader boundary calls, execution logic, reporting and write overhead. No isolated kernel was shown to justify crossing the native boundary yet. | Not justified now |
@@ -240,7 +244,7 @@ The best architecture from here is:
 - only revisit binary sidecars if retained bytes or load-time matter more than
   ceiling RSS
 - defer shared-memory transport unless an end-to-end rerun shows materially
-  more than the current `1.081x` transport-only gain
+  more than the current `1.253x` transport-only gain
 
 That is a stronger answer than "native code is not needed". The reason is not
 taste. The reason is that the measured bottlenecks are still a mixed system
@@ -251,39 +255,30 @@ dominate.
 
 The remaining frontier is narrower than it looks:
 
-- live worker processes dominate the tree peak (`~267 MB` = `8 x ~33-35 MB`
-  Python interpreter plus imports on Windows spawn, essentially a floor for
-  this architecture)
-- parent-side sampled-row compaction growth is still `~44 MB`, but is not the
-  global peak
+- live worker processes dominate the tree peak at about `283 MB` to `290 MB`
+  on the clean `mc_ceiling_light_w8` reruns
+- the parent still contributes a real `128 MB` to `138 MB` at that same
+  moment, so the global peak is not purely "worker floor" either
+- later parent-only peaks rise to `270 MB` to `317 MB` in `bundle_write`, but
+  those happen after workers exit and therefore do not drive the global tree
+  peak
 - retained bytes are already led by sampled preview series and exact fill
   retention and are tracked in `docs/BENCHMARKS.md`
 
-The obvious-looking parent-side streaming chunk-merge was attempted in this
-pass and measured to worsen the global tree peak, not improve it. The previous
-deferred-merge design was already optimal for tree peak:
-
-- deferred merge design (current): parent holds pickled chunks in memory
-  during execution, processes them after workers exit. Parent RSS at tree
-  peak: `~135 MB`. Global tree peak: `404 MB` to `424 MB` across reruns.
-- streaming merge (tried, reverted): parent merges path bands, extracts
-  results and merges profile as each chunk arrives. This shifts the
-  allocation into the execution window where workers are still alive. Parent
-  RSS at tree peak: `~191 MB`. Global tree peak: `458 MB` on both reruns.
-
-The reason is that global tree peak happens near the end of execution, when
-all workers are still paying their `~33-35 MB` floor. Moving parent-side
-allocation earlier makes the parent heavier at that exact moment, even though
-it lowers the parent's own isolated peak later.
-
 That leaves the remaining ceiling-RSS gap as an architectural cost of
 `spawn`-based multiprocessing on Windows plus Python interpreter overhead per
-worker. Materially lowering it would require either:
+worker, with a smaller but still real parent contribution at the exact global
+peak.
+
+Materially lowering it would require either:
 
 - a single-process native engine with thread-level parallelism that does not
-  pay a per-tick Python/native IPC cost (the current Rust engine pays that
-  cost and still loses to the Python backends on realistic cases), or
-- a fork-first design that is not portable to Windows.
+  pay a per-tick Python/native IPC cost, or
+- a fork-first design that is not portable to Windows
+
+The current Rust engine does not satisfy the first condition. It still loses to
+both Python backends on realistic cases because the hot path is not a single
+isolated compute kernel.
 
 If retained bytes or bundle load time become the next dominant user problem,
 optional binary sidecars remain the strongest still-alive architecture option.

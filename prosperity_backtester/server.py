@@ -10,11 +10,25 @@ from pathlib import Path
 _DASHBOARD_DIST = Path(__file__).parent.parent / "dashboard" / "dist"
 _DASHBOARD_HTML = Path(__file__).parent.parent / "legacy_dashboard" / "dashboard.html"
 _IGNORED_DIRS = {"node_modules", ".git", ".pytest_cache", "__pycache__", "dist"}
+_HIDDEN_BUNDLE_SEGMENTS = {
+    "_benchmark_fixture",
+    "case_output",
+    "chris_repo",
+    "current_repo",
+    "direct_cli_checks",
+}
 
 
 def _is_hidden_bundle_path(path: Path) -> bool:
-    parent_name = path.parent.name.lower()
-    return parent_name.startswith("_warmup_") or "__warmup_" in parent_name
+    bundle_parts = [part.lower() for part in path.parts[:-1]]
+    if any(part.startswith("_warmup_") or "__warmup_" in part for part in bundle_parts):
+        return True
+    if any(part in _HIDDEN_BUNDLE_SEGMENTS for part in bundle_parts):
+        return True
+    for index, part in enumerate(bundle_parts):
+        if part == "cases" and "backend" in bundle_parts[:index]:
+            return True
+    return False
 
 
 def _provenance_metadata(manifest: dict) -> dict:

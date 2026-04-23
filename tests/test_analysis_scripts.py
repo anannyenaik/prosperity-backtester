@@ -115,3 +115,65 @@ def test_benchmark_runtime_selects_effective_root_process_when_venv_launcher_wra
     )
 
     assert selected is main
+
+
+def test_rss_frontier_peak_sample_for_phases_ignores_later_reporting_peak():
+    from analysis.rss_frontier import _peak_sample_for_phases
+
+    samples = [
+        {
+            "sample_time_seconds": 1.0,
+            "root_rss_bytes": 100,
+            "tree_rss_bytes": 150,
+            "child_process_count": 1,
+            "child_rss_bytes": [50],
+        },
+        {
+            "sample_time_seconds": 2.0,
+            "root_rss_bytes": 130,
+            "tree_rss_bytes": 210,
+            "child_process_count": 2,
+            "child_rss_bytes": [40, 40],
+        },
+        {
+            "sample_time_seconds": 4.0,
+            "root_rss_bytes": 240,
+            "tree_rss_bytes": 240,
+            "child_process_count": 0,
+            "child_rss_bytes": [],
+        },
+    ]
+    events = [
+        {"event": "execution_started", "perf_counter_seconds": 0.5},
+        {"event": "execution_finished", "perf_counter_seconds": 2.5},
+        {"event": "bundle_write_started", "perf_counter_seconds": 3.5},
+        {"event": "bundle_write_finished", "perf_counter_seconds": 4.5},
+    ]
+
+    peak = _peak_sample_for_phases(
+        samples,
+        events,
+        phases={"execution"},
+        key="root_rss_bytes",
+    )
+
+    assert peak is not None
+    assert peak["sample_time_seconds"] == 2.0
+    assert peak["root_rss_bytes"] == 130
+
+
+def test_architecture_bakeoff_default_bundle_prefers_latest_runtime_case(tmp_path: Path):
+    from analysis.architecture_bakeoff import _default_bundle
+
+    older = tmp_path / "backtests" / "older_review" / "runtime" / "cases" / "mc_ceiling_light_w8"
+    newer = tmp_path / "backtests" / "newer_review" / "runtime" / "cases" / "mc_ceiling_light_w8"
+    older.mkdir(parents=True)
+    newer.mkdir(parents=True)
+    old_bundle = older / "dashboard.json"
+    new_bundle = newer / "dashboard.json"
+    old_bundle.write_text("{}", encoding="utf-8")
+    new_bundle.write_text("{}", encoding="utf-8")
+    os.utime(old_bundle, (10, 10))
+    os.utime(new_bundle, (20, 20))
+
+    assert _default_bundle(tmp_path) == new_bundle

@@ -22,7 +22,18 @@ from analysis.benchmark_runtime import _git_text  # noqa: E402
 
 
 def _default_bundle(repo_root: Path) -> Path:
-    return repo_root / "backtests" / "_phase5_runtime_current" / "cases" / "mc_ceiling_light_w8" / "dashboard.json"
+    candidates = sorted(
+        (
+            path
+            for path in (repo_root / "backtests").rglob("mc_ceiling_light_w8/dashboard.json")
+            if "runtime" in {part.lower() for part in path.parts}
+        ),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    if candidates:
+        return candidates[0]
+    return repo_root / "backtests" / "runtime_benchmark" / "cases" / "mc_ceiling_light_w8" / "dashboard.json"
 
 
 def _default_output_dir(repo_root: Path) -> Path:

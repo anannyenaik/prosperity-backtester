@@ -185,6 +185,41 @@ def test_server_bundle_discovery_skips_registry_seeded_warmup_bundles(tmp_path):
     ]
 
 
+def test_server_bundle_discovery_skips_benchmark_internal_bundles(tmp_path):
+    review_root = tmp_path / 'review'
+    backend_case = review_root / 'backend' / 'cases' / 'main_default_w8__streaming'
+    frontier_case = review_root / 'rss_frontier' / 'case_output'
+    reference_case = review_root / 'reference' / 'current_repo' / 'default_100_10_w1'
+    direct_case = review_root / 'direct_cli_checks' / 'mc_default_light_w8'
+    runtime_case = review_root / 'runtime' / 'cases' / 'mc_default_light_w8'
+    storage_case = review_root / 'storage' / 'mc_light'
+    for path, created_at in (
+        (backend_case, '2026-04-23T11:00:00+00:00'),
+        (frontier_case, '2026-04-23T11:05:00+00:00'),
+        (reference_case, '2026-04-23T11:10:00+00:00'),
+        (direct_case, '2026-04-23T11:15:00+00:00'),
+        (runtime_case, '2026-04-23T11:20:00+00:00'),
+        (storage_case, '2026-04-23T11:25:00+00:00'),
+    ):
+        path.mkdir(parents=True)
+        (path / 'dashboard.json').write_text('{}', encoding='utf-8')
+        (path / 'manifest.json').write_text(
+            json.dumps({
+                'run_type': 'monte_carlo',
+                'run_name': path.name,
+                'created_at': created_at,
+            }),
+            encoding='utf-8',
+        )
+
+    bundles = _find_bundles(review_root)
+
+    assert [bundle['path'] for bundle in bundles] == [
+        'storage/mc_light/dashboard.json',
+        'runtime/cases/mc_default_light_w8/dashboard.json',
+    ]
+
+
 def test_prune_old_auto_runs_keeps_named_directories(tmp_path):
     old_run = tmp_path / '2026-04-18_00-00-00_replay'
     new_run = tmp_path / '2026-04-19_00-00-00_replay'

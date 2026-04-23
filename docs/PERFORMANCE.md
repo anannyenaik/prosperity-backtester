@@ -1,223 +1,202 @@
 # Performance
 
-Result: the repo still has the strongest overall local research-platform
-performance story, but the current-local runtime picture is now more mixed and
-execution-phase ceiling RSS remains the blocker to an honest all-axis crown.
+Result: the audited 2026-04-23 proof still supports calling this repo the
+strongest overall local Prosperity research platform. It does not yet support
+an all-axis performance crown, because wide-worker ceiling RSS still loses to
+the strongest local external reference.
 
-All claims below come from fresh current-local benchmark runs on 2026-04-23.
-See [`docs/BENCHMARKS.md`](BENCHMARKS.md) and
-[`docs/BENCHMARK_SUMMARY.json`](BENCHMARK_SUMMARY.json) for the tracked proof
-surface.
+The core runtime, storage, attribution, backend, reference and architecture
+artefacts in `backtests/review_2026-04-23_final` were captured on clean commit
+`d041e8bc4e2b94b7fe0664330df142a88f174569`. The three `rss_frontier*` reruns
+were captured immediately after the RSS attribution wording fix and therefore
+record `git_dirty: true`.
 
 ## Proof status
 
-The tracked current-local headline artefacts were captured from a dirty
-worktree:
+Current proof artefacts:
 
-- `backtests/_final_output_current_local`
-- `backtests/_final_runtime_current_local`
-- `backtests/_final_attribution_current_local`
-- `backtests/_final_rss_frontier_current_local_v2`
-- `backtests/_final_backend_current_local`
-- `backtests/_final_reference_current_local`
-- `backtests/_final_architecture_current_local`
+- `backtests/review_2026-04-23_final/runtime`
+- `backtests/review_2026-04-23_final/storage`
+- `backtests/review_2026-04-23_final/attribution`
+- `backtests/review_2026-04-23_final/rss_frontier`
+- `backtests/review_2026-04-23_final/backend`
+- `backtests/review_2026-04-23_final/reference`
+- `backtests/review_2026-04-23_final/architecture`
 
 Important limits:
 
-- this clone does not retain a separate clean exact-same-worktree historical
-  throughput baseline for the final diagnostics-only state
+- this clone still does not retain a clean exact-same-worktree historical
+  baseline for the final diagnostics state
+- the `rss_frontier*` reruns were taken after an analysis-layer reporting fix,
+  so they should be read as current memory-shape proof rather than clean-tree
+  headline throughput proof
 - the Chris Roberts comparison is same-machine and matched on a shared no-op
   trader plus tick budget, but it is not full semantic parity
 - the shared-memory result is a transport microbenchmark only
 
-## Current backend choice
+## Runtime
 
-There are three Monte Carlo backends in
-`prosperity_backtester/mc_backends.py`:
+Headline current-local warm timings from
+`backtests/review_2026-04-23_final/runtime/benchmark_report.json`:
 
-| Backend | Use it when | Current verdict |
-| --- | --- | --- |
-| `streaming` | normal research work and the default branch loop | Design default, not raw-speed leader in this rerun. It won `3` of the `7` measured realistic-trader cells and remains the path-band-first architecture baseline. |
-| `classic` | parity checks and cases where you want replay-style materialisation | Co-equal Python backend. It won `4` of the `7` measured realistic-trader cells, so it is not honest to describe it as only a slower fallback. |
-| `rust` | explicit backend experiments | Kept available, but not recommended. It stayed slower than both Python backends in every fresh realistic rerun in this pass. |
+- day-0 replay: `2.917s`
+- day-0 compare: `2.207s`
+- fast pack: `5.203s`
+- validation pack: `17.646s`
+- default Monte Carlo light, `100/10`, `8` workers: `1.417s`
+- heavy Monte Carlo light, `192/16`, `8` workers: `1.769s`
+- ceiling Monte Carlo light, `768/24`, `8` workers: `3.435s`
 
-`auto` still resolves to `streaming`.
+Tracked Monte Carlo scaling on the `250`-tick fixture:
 
-## Quality-compromise check
+| Case | 1 worker | 2 workers | 4 workers | 8 workers |
+| --- | ---: | ---: | ---: | ---: |
+| MC quick light (`64/8`) | `1.499s` | `1.366s` | `1.229s` | `1.242s` |
+| MC default light (`100/10`) | `1.943s` | `1.827s` | `1.432s` | `1.417s` |
+| MC heavy light (`192/16`) | `3.400s` | `n/a` | `n/a` | `1.769s` |
+| MC ceiling light (`768/24`) | `n/a` | `n/a` | `n/a` | `3.435s` |
 
-No current headline win depends on silently dropping decision-critical
-information.
+The previously tracked dirty-worktree timings are now retired. They were
+`37%` to `46%` slower than the clean audited run on the headline cases and no
+longer represent the current committed tree.
 
-Why that statement is evidence-backed:
+## Harness sanity check
 
-- light mode still keeps exact replay summaries and exact fills
-- Monte Carlo light mode still keeps exact final distributions and all-session
-  path bands
-- sampled Monte Carlo runs are still clearly qualitative previews, with
-  truncation fields carried in the contract
-- manifests, provenance, runtime phase timings and reporting-phase RSS are
-  still written and benchmarked
-- runtime claims include bundle writing rather than hiding cost in a later
-  phase
+The monitored runtime harness is not materially overstating or understating the
+headline CLI timings.
 
-The retained-byte gains come from compact layout and duplicate-structure
-removal, not from weakening realism, reproducibility, storage trust or review
-workflow.
+Fresh direct CLI reruns on the same machine gave:
 
-## What the current pass proved
+- `replay_day0_light`: harness `2.917s`, direct mean `2.705s`, `-7.3%`
+- `compare_day0_light`: harness `2.207s`, direct mean `2.239s`, `+1.4%`
+- `mc_default_light_w8`: harness `1.417s`, direct mean `1.361s`, `-4.0%`
+- `mc_ceiling_light_w8`: harness `3.435s`, direct mean `3.548s`, `+3.3%`
 
-The current-local runtime story is now mixed rather than uniformly stronger
-than the older audit baseline:
+That sits inside a normal local rerun and monitor-overhead band, not a separate
+timing mode that would mislead readers.
 
-- default day-0 replay: `5.259s`
-- default day-0 compare: `3.980s`
-- fast pack: `9.667s`
-- validation pack: `28.105s`
-- default Monte Carlo light, `100/10`, `8` workers: `2.278s`
-- heavy Monte Carlo light, `192/16`, `8` workers: `3.082s`
-- ceiling Monte Carlo light, `768/24`, `8` workers: `6.405s`
+## Retained output
 
-Replay, compare and fast-pack are roughly flat-to-slower than the older audit
-baseline on this machine. Wide-worker Monte Carlo and the matched same-machine
-external reference still show a strong local throughput story.
-
-The retained-output story is also strong on the tracked fixture:
+Current retained-output sizes from
+`backtests/review_2026-04-23_final/storage/benchmark_report.json`:
 
 - replay light: `1.36 MB`, `6` files
 - replay full: `1.99 MB`, `12` files
-- Monte Carlo light: `819.9 KB`, `6` files
+- Monte Carlo light: `819.8 KB`, `6` files
 - Monte Carlo full: `5.16 MB`, `18` files
 
-The fresh same-machine Chris Roberts rerun still proves:
+Retained-byte ownership in light Monte Carlo remains led by:
 
-- `4.80x` to `14.75x` faster on the default `100/10` cases
-- `9.59x` to `18.35x` faster on the ceiling `1000/100` cases
-- fewer retained bytes in every measured cell
-- far fewer retained files, `5` instead of `50` or `410`
-
-What it does not prove is a memory-efficiency crown. Chris still keeps lower
-RSS on every ceiling case.
-
-## Current bottleneck picture
-
-Fresh attribution and RSS probing now make the remaining frontier explicit.
-
-Retained-byte ownership in light Monte Carlo is led by:
-
-1. `monteCarlo.sampleRuns` preview series
+1. `monteCarlo.sampleRuns`
 2. `fills.csv`
 3. the reporting path itself
 
-The corrected high-resolution ceiling probe showed the true global peak is
-still execution-phase process-tree RSS:
+For `mc_default_light_w8`:
 
-- `mc_ceiling_light_w8` runtime report: `411.5 MB` tree RSS
-- corrected RSS probe: `404.4 MB` tree peak, `execution` phase
-- workers alive at the tree peak: `8`
-- live worker RSS at the tree peak: `266.9 MB`
-- parent RSS at the tree peak: `137.4 MB`
-- later parent-only peak: `282.7 MB`
-- parent execution transient above the pre-reporting baseline: about `43.6 MB`
-- reporting transient above the pre-reporting baseline: about `43.5 MB`
+- dashboard payload: `1,567,126` bytes
+- `fills.csv`: `1,289,324` bytes
+- top dashboard owner: `monteCarlo.sampleRuns` at `1,243,393` bytes
 
-That means the remaining memory story is not "dashboard build is too big". The
-true ceiling still comes from eight live workers plus a smaller parent-side
-receive and merge bump.
+For `mc_ceiling_light_w8`:
 
-## Noise characterisation and rerun stability
+- dashboard payload: `3,349,453` bytes
+- `fills.csv`: `3,098,231` bytes
+- top dashboard owner: `monteCarlo.sampleRuns` at `2,986,485` bytes
 
-Fresh same-code reruns on 2026-04-23 characterise local measurement noise:
+That means the retained-byte frontier is narrow. It is no longer honest to
+describe `pathBands` as the dominant storage problem.
 
-| Case | Committed elapsed | Fresh min-of-3 | Fresh max-of-3 | Noise band |
-| --- | ---: | ---: | ---: | --- |
-| `mc_ceiling_light_w8` | `6.405s` | `6.129s` | `6.312s` | `-4%` to `-1%` |
-| `mc_default_light_w8` | `2.278s` | `2.333s` | `2.394s` | `+2%` to `+5%` |
-| `replay_day0_light` | `5.259s` | `4.883s` | `4.952s` | `-7%` to `-6%` |
+## Memory frontier
 
-The current code is not regressing on these cases. The committed baseline is
-honest and sits within one noise band of the fresh rerun.
+The clean runtime report and the high-resolution RSS probe now tell a consistent
+story:
 
-Tree-peak RSS on `mc_ceiling_light_w8` varied `404 MB` to `424 MB` across
-fresh same-code RSS-frontier probes, a `5%` noise band. The committed
-`404.4 MB` is on the low end of that band, so the honest way to describe the
-global tree peak is `~400 MB` to `~425 MB`, not a single number.
+- runtime suite tree peak on `mc_ceiling_light_w8`: `415.9 MB`
+- `5 ms` RSS-frontier reruns: `418.1 MB`, `421.0 MB`, `422.7 MB`
+- tree peak phase on every rerun: `execution`
+- workers alive at tree peak on every rerun: `8`
+- live worker RSS at tree peak: `282.8 MB` to `289.6 MB`
+- parent RSS at tree peak: `128.4 MB` to `138.2 MB`
+- later parent-only reporting peak: `269.8 MB` to `316.7 MB`, in `bundle_write`
 
-## Why the parent-side streaming-merge did not land
+The corrected RSS report wording matters. The parent-side driver at the global
+peak is the parent's actual RSS at the tree peak, not the later
+`bundle_write` peak after workers have exited.
 
-The obvious candidate for cutting the parent-side execution transient was to
-fold path-band merge, profile merge and result collection directly into the
-executor iterator, dropping each `chunk_output` reference immediately after
-absorption. That was prototyped in this pass and measured against the same
-`mc_ceiling_light_w8` probe twice:
+So the remaining ceiling story is:
 
-| Metric | Deferred merge (kept) | Streaming merge (tried, reverted) |
-| --- | ---: | ---: |
-| Tree peak | `404 MB`-`424 MB` | `458 MB` (both reruns) |
-| Parent RSS at tree peak | `~135 MB` | `~191 MB` |
-| Parent-only peak | `~245 MB`-`~283 MB` | `~229 MB` |
-| Pre-reporting parent baseline | `~240 MB` | `~191 MB` |
-| Worker total at tree peak | `267 MB`-`290 MB` | `~267 MB` |
+1. live worker processes dominate the global peak
+2. the parent still contributes a meaningful `~128 MB` to `~138 MB` at that
+   same moment
+3. reporting still adds real parent-only pressure later, but it does not set
+   the global tree peak
 
-Streaming merge lowers the parent's isolated peak later in reporting, but it
-makes the parent heavier *during* execution, which is exactly when workers
-are still paying their interpreter floor. Tree peak therefore rose by
-`~35 MB`. The deferred-merge design already in the code is correct for the
-tree-peak metric.
+That is enough to reject the idea that the remaining problem is mainly
+dashboard assembly.
 
-That finding narrows the frontier. The only material remaining driver of the
-tree peak is the per-worker Python interpreter plus imports on Windows
-`spawn`, which is an architectural cost rather than a code-level leak.
+## Backend choice
+
+Current realistic-trader backend rerun from
+`backtests/review_2026-04-23_final/backend/backend_benchmark.json`:
+
+- `streaming` won `4` of `7` measured cells
+- `classic` won `3` of `7`
+- `rust` won `0`
+
+Current honest guidance:
+
+- keep `streaming` as the design default and `auto` target
+- keep `classic` as a co-equal parity and performance backend
+- keep `rust` explicit and experimental only
+
+## External reference
+
+Current same-machine Chris Roberts rerun from
+`backtests/review_2026-04-23_final/reference/reference_benchmark.json`:
+
+- default `100/10`: `3.78x` to `15.54x` faster
+- ceiling `1000/100`: `9.46x` to `18.80x` faster
+- smaller retained bytes in every measured cell
+- far fewer retained files, `5` instead of `50` or `410`
+
+What still loses:
+
+- RSS on every `1000/100` ceiling case
+
+So the repo wins throughput, retained bytes and retained file count on the
+matched same-machine test, but not ceiling RSS.
 
 ## Architecture direction
 
-The best current architecture remains the streaming-first Python design, but
-the backend default is less final than the earlier proof text implied.
+The fresh bake-off kept the same overall answer:
 
-The fresh evidence now says:
+- MessagePack remains the only still-plausible contract-boundary move
+- shared memory improved to a `1.253x` transport-only win
+- neither result solves the current end-to-end ceiling-RSS frontier
 
-- keep `streaming` as the design default for now
-- keep `classic` as a real parity and performance option
-- keep `rust` experimental only
-- do not land optional binary sidecars now
-- do not land shared-memory transport now
-- do not pursue deeper native code without a real isolated compute kernel
+That keeps the best current architecture as:
 
-Why optional binary sidecars do not land now:
-
-- MessagePack shrank the real payload from `3.35 MB` to `2.39 MB`
-- MessagePack encoded and decoded faster than compact JSON
-- but the remaining blocker is execution RSS, not contract-boundary bytes
-- keeping JSON canonical plus adding a sidecar would increase retained bytes by
-  default
-
-Why shared memory still does not land now:
-
-- the fresh bake-off moved from a loss to a small win
-- pickled transport: `0.631s`
-- shared memory: `0.583s`
-- speed-up: `1.081x`
-- but that is still only a transport microbenchmark, not end-to-end engine
-  proof
+- Python backend
+- `streaming` default
+- `classic` co-equal option
+- JSON canonical contract
+- no binary sidecars landed
+- no shared-memory transport landed
+- no deeper native path justified yet
 
 ## Honest verdict
 
 Current honest scorecard:
 
-- runtime throughput: strong overall, and fresh reruns are within `~5%` noise
-  of the committed baseline on all key cases
-- retained-output efficiency: very strong and fully attributed
-- trust and proof cleanliness: strong; fresh clean-baseline reruns confirm the
-  committed numbers are honest and within noise
-- ceiling-case RSS: still the main unresolved gap, but the remaining driver
-  is now proven to be the Windows-`spawn` per-worker Python interpreter floor
-  rather than a code-level leak that a parent-side rewrite could fix
-- architecture finality: the remaining non-native Python options have been
-  enumerated and tested; the tested parent-side streaming merge regressed the
-  tree peak by `~35 MB` and was reverted, which narrows the remaining live
-  architecture options to either a contract-boundary binary format or a
-  deeper native engine, and neither is currently justified by the evidence
+- runtime throughput: very strong
+- retained-output efficiency: very strong
+- trust and proof cleanliness: strong again after the clean rerun and RSS
+  wording fix
+- deployment and workflow sanity: strong, but still benefits from serving the
+  curated runtime case root instead of every raw benchmark scratch directory
+- memory efficiency: not yet 10/10, because wide-worker ceiling RSS still
+  trails the best local reference
 
-The repo is strong enough to claim the best overall local research platform on
-the audited evidence. It is not honest yet to claim the best performance on
-every important axis, because execution-phase ceiling RSS still trails the best
-local external reference.
+The repo is ready to claim the strongest overall local research platform on the
+audited evidence. It is not ready to claim the best performance on every
+important axis.

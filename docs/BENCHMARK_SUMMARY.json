@@ -1,623 +1,230 @@
 {
   "audited_on": "2026-04-23",
+  "review_root": "backtests/review_2026-04-23_final",
   "repo": {
-    "git_commit": "2724491da4b6006d42f1e8fc66a3d167476c0a9e",
-    "git_dirty": true,
-    "git_branch": "main"
+    "headline_commit": "d041e8bc4e2b94b7fe0664330df142a88f174569",
+    "headline_commit_clean": true,
+    "rss_frontier_reruns_git_dirty": true
   },
   "artefacts": {
-    "storage": "backtests/_final_output_current_local/benchmark_report.json",
-    "runtime": "backtests/_final_runtime_current_local/benchmark_report.json",
-    "attribution": "backtests/_final_attribution_current_local/bundle_attribution.json",
-    "rss": "backtests/_final_rss_frontier_current_local_v2/rss_frontier_report.json",
-    "backend": "backtests/_final_backend_current_local/backend_benchmark.json",
-    "reference": "backtests/_final_reference_current_local/reference_benchmark.json",
-    "architecture": "backtests/_final_architecture_current_local/architecture_bakeoff.json"
+    "runtime": "backtests/review_2026-04-23_final/runtime/benchmark_report.json",
+    "storage": "backtests/review_2026-04-23_final/storage/benchmark_report.json",
+    "attribution": "backtests/review_2026-04-23_final/attribution/bundle_attribution.json",
+    "rss_frontier": [
+      "backtests/review_2026-04-23_final/rss_frontier/rss_frontier_report.json",
+      "backtests/review_2026-04-23_final/rss_frontier_rerun_1/rss_frontier_report.json",
+      "backtests/review_2026-04-23_final/rss_frontier_rerun_2/rss_frontier_report.json"
+    ],
+    "backend": "backtests/review_2026-04-23_final/backend/backend_benchmark.json",
+    "reference": "backtests/review_2026-04-23_final/reference/reference_benchmark.json",
+    "architecture": "backtests/review_2026-04-23_final/architecture/architecture_bakeoff.json"
   },
   "caveats": [
-    "All results were captured from a dirty worktree in this clone before the proof refresh and analysis-layer fixes were committed.",
-    "This clone still does not retain a separate clean exact-same-worktree historical throughput baseline for the current diagnostics state.",
+    "This clone does not retain a separate clean exact-same-worktree historical throughput baseline for the final diagnostics-only state.",
+    "The core runtime, storage, attribution, backend, reference and architecture artefacts were captured on clean commit d041e8bc4e2b94b7fe0664330df142a88f174569.",
+    "The rss_frontier reruns were captured immediately after the parent-versus-reporting RSS wording fix in analysis/rss_frontier.py, so those reports record git_dirty true.",
     "The Chris Roberts comparison is same-machine and matched on a shared no-op trader plus tick budget, but it is not full semantic parity.",
-    "The shared-memory result is a transport microbenchmark only, not end-to-end Monte Carlo proof.",
-    "The RSS frontier probe now unwraps Windows launcher processes correctly for parent-versus-worker attribution and should be used for memory shape, not headline throughput.",
-    "Fresh 2026-04-23 same-code reruns confirm a noise band of roughly 5-7% on elapsed for the headline cases and about 5% on tree peak for mc_ceiling_light_w8, so single-number comparisons below that band are not real regressions or wins.",
-    "A parent-side streaming chunk-merge prototype was measured against the same mc_ceiling_light_w8 probe twice in this pass. It lowered the parent-only reporting peak but raised the global tree peak from 404-424 MB to 458 MB on both reruns because merge allocation shifted into the execution window while workers were still alive. It was reverted."
+    "The shared-memory result is a transport microbenchmark only, not end-to-end Monte Carlo proof."
   ],
-  "current_local": {
-    "storage": {
-      "replay_light": {
-        "bundle_size_bytes": 1364158,
-        "file_count": 6,
-        "output_dir": "D:\\Programming\\prosperity-backtester\\backtests\\_final_output_current_local\\replay_light"
-      },
-      "replay_full": {
-        "bundle_size_bytes": 1992849,
-        "file_count": 12,
-        "output_dir": "D:\\Programming\\prosperity-backtester\\backtests\\_final_output_current_local\\replay_full"
-      },
-      "mc_light": {
-        "bundle_size_bytes": 819812,
-        "file_count": 6,
-        "output_dir": "D:\\Programming\\prosperity-backtester\\backtests\\_final_output_current_local\\mc_light"
-      },
-      "mc_full": {
-        "bundle_size_bytes": 5159223,
-        "file_count": 18,
-        "output_dir": "D:\\Programming\\prosperity-backtester\\backtests\\_final_output_current_local\\mc_full"
-      }
+  "verdict": {
+    "overall": "strongest overall local Prosperity research platform on the audited evidence",
+    "all_axis_performance_crown": false,
+    "blocking_gap": "wide-worker ceiling RSS still trails the strongest local external reference"
+  },
+  "runtime": {
+    "headline_seconds": {
+      "replay_day0_light": 2.917,
+      "compare_day0_light": 2.207,
+      "pack_fast": 5.203,
+      "pack_validation": 17.646,
+      "mc_quick_light_w8": 1.242,
+      "mc_default_light_w8": 1.417,
+      "mc_heavy_light_w8": 1.769,
+      "mc_ceiling_light_w8": 3.435,
+      "mc_default_full_w1": 3.089,
+      "mc_default_full_trimmed_w1": 2.465
     },
-    "runtime": {
-      "replay_day0_light": {
-        "elapsed_seconds": 5.259,
-        "peak_tree_rss_bytes": 171585536,
-        "size_bytes": 21148197,
-        "file_count": 6
-      },
-      "compare_day0_light": {
-        "elapsed_seconds": 3.98,
-        "peak_tree_rss_bytes": 183652352,
-        "size_bytes": 12083,
-        "file_count": 3
-      },
-      "pack_fast": {
-        "elapsed_seconds": 9.667,
-        "peak_tree_rss_bytes": 391458816,
-        "size_bytes": 21771812,
-        "file_count": 17
-      },
-      "pack_validation": {
-        "elapsed_seconds": 28.105,
-        "peak_tree_rss_bytes": 685330432,
-        "size_bytes": 61823064,
-        "file_count": 17
-      },
-      "mc_quick_light_w1": {
-        "elapsed_seconds": 2.924,
-        "peak_tree_rss_bytes": 86773760,
-        "size_bytes": 2369647,
-        "file_count": 6
-      },
-      "mc_quick_light_w2": {
-        "elapsed_seconds": 2.5,
-        "peak_tree_rss_bytes": 137814016,
-        "size_bytes": 2369648,
-        "file_count": 6
-      },
-      "mc_quick_light_w4": {
-        "elapsed_seconds": 2.128,
-        "peak_tree_rss_bytes": 212283392,
-        "size_bytes": 2369650,
-        "file_count": 6
-      },
-      "mc_quick_light_w8": {
-        "elapsed_seconds": 2.087,
-        "peak_tree_rss_bytes": 361455616,
-        "size_bytes": 2369646,
-        "file_count": 6
-      },
-      "mc_default_light_w1": {
-        "elapsed_seconds": 3.952,
-        "peak_tree_rss_bytes": 95420416,
-        "size_bytes": 2900929,
-        "file_count": 6
-      },
-      "mc_default_light_w2": {
-        "elapsed_seconds": 3.245,
-        "peak_tree_rss_bytes": 148185088,
-        "size_bytes": 2900916,
-        "file_count": 6
-      },
-      "mc_default_light_w4": {
-        "elapsed_seconds": 2.52,
-        "peak_tree_rss_bytes": 215179264,
-        "size_bytes": 2900933,
-        "file_count": 6
-      },
-      "mc_default_light_w8": {
-        "elapsed_seconds": 2.278,
-        "peak_tree_rss_bytes": 374460416,
-        "size_bytes": 2900929,
-        "file_count": 6
-      },
-      "mc_heavy_light_w1": {
-        "elapsed_seconds": 6.838,
-        "peak_tree_rss_bytes": 135884800,
-        "size_bytes": 4439852,
-        "file_count": 6
-      },
-      "mc_heavy_light_w8": {
-        "elapsed_seconds": 3.082,
-        "peak_tree_rss_bytes": 376422400,
-        "size_bytes": 4439848,
-        "file_count": 6
-      },
-      "mc_ceiling_light_w8": {
-        "elapsed_seconds": 6.405,
-        "peak_tree_rss_bytes": 431517696,
-        "size_bytes": 6645976,
-        "file_count": 6
-      },
-      "mc_default_full_w1": {
-        "elapsed_seconds": 6.8,
-        "peak_tree_rss_bytes": 133230592,
-        "size_bytes": 25175713,
-        "file_count": 122
-      }
+    "headline_peak_tree_rss_bytes": {
+      "replay_day0_light": 175542272,
+      "compare_day0_light": 183828480,
+      "pack_fast": 405504000,
+      "pack_validation": 708673536,
+      "mc_quick_light_w8": 360738816,
+      "mc_default_light_w8": 368381952,
+      "mc_heavy_light_w8": 386015232,
+      "mc_ceiling_light_w8": 436101120
     },
-    "retained_output": {
-      "mc_default_light_w8": {
-        "bundle_size_bytes": 2900929,
-        "file_count": 6,
-        "top_dashboard_sections": [
-          {
-            "component": "monteCarlo",
-            "schema_path": "$.monteCarlo",
-            "writer_path": "prosperity_backtester.reports.build_dashboard_payload",
-            "json_bytes": 1560167,
-            "estimated_object_size_bytes": 5887206,
-            "entry_count": 5
-          },
-          {
-            "component": "monteCarlo.sampleRuns",
-            "schema_path": "$.monteCarlo.sampleRuns",
-            "writer_path": "prosperity_backtester.reports._sample_run_payload",
-            "json_bytes": 1243393,
-            "estimated_object_size_bytes": 4624029,
-            "row_count": 10
-          },
-          {
-            "component": "monteCarlo.pathBands",
-            "schema_path": "$.monteCarlo.pathBands",
-            "writer_path": "prosperity_backtester.reports.finalize_path_band_accumulator",
-            "json_bytes": 308931,
-            "estimated_object_size_bytes": 1228092,
-            "entry_count": 4
-          },
-          {
-            "component": "monteCarlo.sampleRuns.fills",
-            "schema_path": "$.monteCarlo.sampleRuns[*].fills",
-            "writer_path": "prosperity_backtester.reports._sample_run_payload",
-            "json_bytes": 283252,
-            "estimated_object_size_bytes": 1206974,
-            "storage_encoding": "row_table_v1",
-            "row_count": 1200,
-            "column_count": 25
-          },
-          {
-            "component": "monteCarlo.sampleRuns.orderIntent",
-            "schema_path": "$.monteCarlo.sampleRuns[*].orderIntent",
-            "writer_path": "prosperity_backtester.reports._sample_run_payload",
-            "json_bytes": 257141,
-            "estimated_object_size_bytes": 939090,
-            "storage_encoding": "row_table_v1",
-            "row_count": 1200,
-            "column_count": 27
-          },
-          {
-            "component": "monteCarlo.sampleRuns.fairValueSeries",
-            "schema_path": "$.monteCarlo.sampleRuns[*].fairValueSeries",
-            "writer_path": "prosperity_backtester.reports._sample_run_payload",
-            "json_bytes": 223022,
-            "estimated_object_size_bytes": 678749,
-            "storage_encoding": "row_table_v1",
-            "row_count": 1200,
-            "column_count": 14
-          },
-          {
-            "component": "monteCarlo.sampleRuns.behaviourSeries",
-            "schema_path": "$.monteCarlo.sampleRuns[*].behaviourSeries",
-            "writer_path": "prosperity_backtester.reports._sample_run_payload",
-            "json_bytes": 177112,
-            "estimated_object_size_bytes": 654724,
-            "storage_encoding": "row_table_v1",
-            "row_count": 1200,
-            "column_count": 24
-          },
-          {
-            "component": "monteCarlo.sampleRuns.pnlSeries",
-            "schema_path": "$.monteCarlo.sampleRuns[*].pnlSeries",
-            "writer_path": "prosperity_backtester.reports._sample_run_payload",
-            "json_bytes": 144331,
-            "estimated_object_size_bytes": 548200,
-            "storage_encoding": "row_table_v1",
-            "row_count": 1200,
-            "column_count": 12
-          }
-        ],
-        "phase_rss_bytes": {
-          "before_reporting_rss_bytes": 96399360,
-          "sample_row_compaction": {
-            "elapsed_seconds": 0.09757,
-            "rss_before_bytes": 96399360,
-            "rss_after_bytes": 115515392,
-            "rss_delta_bytes": 19116032,
-            "rss_peak_bytes": 115515392
-          },
-          "dashboard_build": {
-            "elapsed_seconds": 0.010134,
-            "rss_before_bytes": 115654656,
-            "rss_after_bytes": 120430592,
-            "rss_delta_bytes": 4775936,
-            "rss_peak_bytes": 120434688
-          },
-          "bundle_write": {
-            "elapsed_seconds": 0.407499,
-            "rss_before_bytes": 120430592,
-            "rss_after_bytes": 126001152,
-            "rss_delta_bytes": 5570560,
-            "rss_peak_bytes": 132067328
-          }
-        }
+    "monte_carlo_scaling_seconds": {
+      "mc_quick_light": {
+        "workers_1": 1.499,
+        "workers_2": 1.366,
+        "workers_4": 1.229,
+        "workers_8": 1.242
       },
-      "mc_ceiling_light_w8": {
-        "bundle_size_bytes": 6645976,
-        "file_count": 6,
-        "top_dashboard_sections": [
-          {
-            "component": "monteCarlo",
-            "schema_path": "$.monteCarlo",
-            "writer_path": "prosperity_backtester.reports.build_dashboard_payload",
-            "json_bytes": 3342494,
-            "estimated_object_size_bytes": 12611862,
-            "entry_count": 5
-          },
-          {
-            "component": "monteCarlo.sampleRuns",
-            "schema_path": "$.monteCarlo.sampleRuns",
-            "writer_path": "prosperity_backtester.reports._sample_run_payload",
-            "json_bytes": 2986485,
-            "estimated_object_size_bytes": 11085517,
-            "row_count": 24
-          },
-          {
-            "component": "monteCarlo.sampleRuns.fills",
-            "schema_path": "$.monteCarlo.sampleRuns[*].fills",
-            "writer_path": "prosperity_backtester.reports._sample_run_payload",
-            "json_bytes": 680250,
-            "estimated_object_size_bytes": 2892590,
-            "storage_encoding": "row_table_v1",
-            "row_count": 2880,
-            "column_count": 25
-          },
-          {
-            "component": "monteCarlo.sampleRuns.orderIntent",
-            "schema_path": "$.monteCarlo.sampleRuns[*].orderIntent",
-            "writer_path": "prosperity_backtester.reports._sample_run_payload",
-            "json_bytes": 616955,
-            "estimated_object_size_bytes": 2249230,
-            "storage_encoding": "row_table_v1",
-            "row_count": 2880,
-            "column_count": 27
-          },
-          {
-            "component": "monteCarlo.sampleRuns.fairValueSeries",
-            "schema_path": "$.monteCarlo.sampleRuns[*].fairValueSeries",
-            "writer_path": "prosperity_backtester.reports._sample_run_payload",
-            "json_bytes": 534751,
-            "estimated_object_size_bytes": 1626005,
-            "storage_encoding": "row_table_v1",
-            "row_count": 2880,
-            "column_count": 14
-          },
-          {
-            "component": "monteCarlo.sampleRuns.behaviourSeries",
-            "schema_path": "$.monteCarlo.sampleRuns[*].behaviourSeries",
-            "writer_path": "prosperity_backtester.reports._sample_run_payload",
-            "json_bytes": 424652,
-            "estimated_object_size_bytes": 1566700,
-            "storage_encoding": "row_table_v1",
-            "row_count": 2880,
-            "column_count": 24
-          },
-          {
-            "component": "monteCarlo.sampleRuns.pnlSeries",
-            "schema_path": "$.monteCarlo.sampleRuns[*].pnlSeries",
-            "writer_path": "prosperity_backtester.reports._sample_run_payload",
-            "json_bytes": 346573,
-            "estimated_object_size_bytes": 1312336,
-            "storage_encoding": "row_table_v1",
-            "row_count": 2880,
-            "column_count": 12
-          },
-          {
-            "component": "monteCarlo.pathBands",
-            "schema_path": "$.monteCarlo.pathBands",
-            "writer_path": "prosperity_backtester.reports.finalize_path_band_accumulator",
-            "json_bytes": 302699,
-            "estimated_object_size_bytes": 1284092,
-            "entry_count": 4
-          }
-        ],
-        "phase_rss_bytes": {
-          "before_reporting_rss_bytes": 250777600,
-          "sample_row_compaction": {
-            "elapsed_seconds": 0.229475,
-            "rss_before_bytes": 250777600,
-            "rss_after_bytes": 296443904,
-            "rss_delta_bytes": 45666304,
-            "rss_peak_bytes": 296443904
-          },
-          "dashboard_build": {
-            "elapsed_seconds": 0.030424,
-            "rss_before_bytes": 206495744,
-            "rss_after_bytes": 218124288,
-            "rss_delta_bytes": 11628544,
-            "rss_peak_bytes": 218124288
-          },
-          "bundle_write": {
-            "elapsed_seconds": 1.056226,
-            "rss_before_bytes": 218107904,
-            "rss_after_bytes": 242200576,
-            "rss_delta_bytes": 24092672,
-            "rss_peak_bytes": 244850688
-          }
-        }
-      }
-    },
-    "rss_frontier": {
-      "tree_peak_bytes": 424001536,
-      "parent_peak_bytes": 296443904,
-      "parent_rss_at_tree_peak_bytes": 144093184,
-      "before_reporting_rss_bytes": 250707968,
-      "reporting_peak_bytes": 296370176,
-      "worker_total_rss_at_tree_peak_bytes": 279908352,
-      "worker_count_at_tree_peak": 8,
-      "worker_rss_min_at_tree_peak_bytes": 34168832,
-      "worker_rss_max_at_tree_peak_bytes": 36683776,
-      "parent_transient_before_reporting_bytes": 45735936,
-      "reporting_transient_before_reporting_bytes": 45662208,
-      "tree_peak_phase": "execution",
-      "latest_chunk_before_tree_peak": {
-        "accumulated_result_count": 768,
-        "chunk_index": 15,
-        "chunk_path_band_accumulator_pickle_bytes": 927287,
-        "chunk_payload_pickle_bytes": 1477700,
-        "chunk_result_count": 48,
-        "chunk_sampled_result_count": 1,
-        "event": "chunk_output_received",
-        "perf_counter_seconds": 671749.013134,
-        "pid": 45668
-      }
-    },
-    "backend": {
-      "live_v9_default_w1": {
-        "streaming": {
-          "best_elapsed_seconds": 7.478,
-          "peak_tree_rss_bytes": 91545600,
-          "output_size_bytes": 1548339
-        },
-        "classic": {
-          "best_elapsed_seconds": 7.437,
-          "peak_tree_rss_bytes": 90730496,
-          "output_size_bytes": 1547107
-        },
-        "rust": {
-          "best_elapsed_seconds": 9.056,
-          "peak_tree_rss_bytes": 97153024,
-          "output_size_bytes": 1547968
-        }
+      "mc_default_light": {
+        "workers_1": 1.943,
+        "workers_2": 1.827,
+        "workers_4": 1.432,
+        "workers_8": 1.417
       },
-      "live_v9_default_w8": {
-        "streaming": {
-          "best_elapsed_seconds": 2.679,
-          "peak_tree_rss_bytes": 358064128,
-          "output_size_bytes": 1548354
-        },
-        "classic": {
-          "best_elapsed_seconds": 2.65,
-          "peak_tree_rss_bytes": 356814848,
-          "output_size_bytes": 1547126
-        },
-        "rust": {
-          "best_elapsed_seconds": 3.541,
-          "peak_tree_rss_bytes": 356130816,
-          "output_size_bytes": 1547946
-        }
+      "mc_heavy_light": {
+        "workers_1": 3.4,
+        "workers_8": 1.769
       },
-      "live_v9_heavy_w8": {
-        "streaming": {
-          "best_elapsed_seconds": 3.77,
-          "peak_tree_rss_bytes": 376070144,
-          "output_size_bytes": 2268997
-        },
-        "classic": {
-          "best_elapsed_seconds": 3.893,
-          "peak_tree_rss_bytes": 381526016,
-          "output_size_bytes": 2266880
-        },
-        "rust": {
-          "best_elapsed_seconds": 4.732,
-          "peak_tree_rss_bytes": 380428288,
-          "output_size_bytes": 2264138
-        }
-      },
-      "main_default_w8": {
-        "streaming": {
-          "best_elapsed_seconds": 2.451,
-          "peak_tree_rss_bytes": 357175296,
-          "output_size_bytes": 1845119
-        },
-        "classic": {
-          "best_elapsed_seconds": 2.378,
-          "peak_tree_rss_bytes": 357040128,
-          "output_size_bytes": 1842800
-        },
-        "rust": {
-          "best_elapsed_seconds": 3.237,
-          "peak_tree_rss_bytes": 345042944,
-          "output_size_bytes": 1839179
-        }
-      },
-      "main_heavy_w8": {
-        "streaming": {
-          "best_elapsed_seconds": 3.194,
-          "peak_tree_rss_bytes": 369344512,
-          "output_size_bytes": 2693091
-        },
-        "classic": {
-          "best_elapsed_seconds": 3.109,
-          "peak_tree_rss_bytes": 370683904,
-          "output_size_bytes": 2689411
-        },
-        "rust": {
-          "best_elapsed_seconds": 4.311,
-          "peak_tree_rss_bytes": 365993984,
-          "output_size_bytes": 2684193
-        }
-      },
-      "r2_stateful_default_w8": {
-        "streaming": {
-          "best_elapsed_seconds": 2.47,
-          "peak_tree_rss_bytes": 350404608,
-          "output_size_bytes": 1719699
-        },
-        "classic": {
-          "best_elapsed_seconds": 2.517,
-          "peak_tree_rss_bytes": 351698944,
-          "output_size_bytes": 1717904
-        },
-        "rust": {
-          "best_elapsed_seconds": 3.564,
-          "peak_tree_rss_bytes": 345378816,
-          "output_size_bytes": 1716508
-        }
-      },
-      "r2_stateful_heavy_w8": {
-        "streaming": {
-          "best_elapsed_seconds": 3.441,
-          "peak_tree_rss_bytes": 368779264,
-          "output_size_bytes": 2512205
-        },
-        "classic": {
-          "best_elapsed_seconds": 3.564,
-          "peak_tree_rss_bytes": 370798592,
-          "output_size_bytes": 2509264
-        },
-        "rust": {
-          "best_elapsed_seconds": 4.483,
-          "peak_tree_rss_bytes": 366043136,
-          "output_size_bytes": 2506254
-        }
-      }
-    },
-    "reference": {
-      "default_100_10_w1": {
-        "speedup_ratio": 14.746,
-        "current_elapsed_seconds": 2.796,
-        "reference_elapsed_seconds": 41.229,
-        "current_peak_tree_rss_bytes": 73359360,
-        "reference_peak_tree_rss_bytes": 131317760,
-        "current_output_size_bytes": 928162,
-        "reference_output_size_bytes": 1519971,
-        "current_file_count": 5,
-        "reference_file_count": 50
-      },
-      "default_100_10_w2": {
-        "speedup_ratio": 8.025,
-        "current_elapsed_seconds": 2.723,
-        "reference_elapsed_seconds": 21.853,
-        "current_peak_tree_rss_bytes": 132112384,
-        "reference_peak_tree_rss_bytes": 170618880,
-        "current_output_size_bytes": 928158,
-        "reference_output_size_bytes": 1519971,
-        "current_file_count": 5,
-        "reference_file_count": 50
-      },
-      "default_100_10_w4": {
-        "speedup_ratio": 6.58,
-        "current_elapsed_seconds": 1.958,
-        "reference_elapsed_seconds": 12.884,
-        "current_peak_tree_rss_bytes": 216948736,
-        "reference_peak_tree_rss_bytes": 248844288,
-        "current_output_size_bytes": 928158,
-        "reference_output_size_bytes": 1519971,
-        "current_file_count": 5,
-        "reference_file_count": 50
-      },
-      "default_100_10_w8": {
-        "speedup_ratio": 4.797,
-        "current_elapsed_seconds": 2.021,
-        "reference_elapsed_seconds": 9.694,
-        "current_peak_tree_rss_bytes": 363773952,
-        "reference_peak_tree_rss_bytes": 407932928,
-        "current_output_size_bytes": 928165,
-        "reference_output_size_bytes": 1519971,
-        "current_file_count": 5,
-        "reference_file_count": 50
-      },
-      "ceiling_1000_100_w1": {
-        "speedup_ratio": 18.35,
-        "current_elapsed_seconds": 21.626,
-        "reference_elapsed_seconds": 396.83,
-        "current_peak_tree_rss_bytes": 345894912,
-        "reference_peak_tree_rss_bytes": 142737408,
-        "current_output_size_bytes": 6870952,
-        "reference_output_size_bytes": 9689023,
-        "current_file_count": 5,
-        "reference_file_count": 410
-      },
-      "ceiling_1000_100_w2": {
-        "speedup_ratio": 14.301,
-        "current_elapsed_seconds": 13.859,
-        "reference_elapsed_seconds": 198.194,
-        "current_peak_tree_rss_bytes": 390332416,
-        "reference_peak_tree_rss_bytes": 182636544,
-        "current_output_size_bytes": 6870944,
-        "reference_output_size_bytes": 9689023,
-        "current_file_count": 5,
-        "reference_file_count": 410
-      },
-      "ceiling_1000_100_w4": {
-        "speedup_ratio": 12.425,
-        "current_elapsed_seconds": 8.525,
-        "reference_elapsed_seconds": 105.919,
-        "current_peak_tree_rss_bytes": 438730752,
-        "reference_peak_tree_rss_bytes": 261222400,
-        "current_output_size_bytes": 6870943,
-        "reference_output_size_bytes": 9689023,
-        "current_file_count": 5,
-        "reference_file_count": 410
-      },
-      "ceiling_1000_100_w8": {
-        "speedup_ratio": 9.594,
-        "current_elapsed_seconds": 6.568,
-        "reference_elapsed_seconds": 63.016,
-        "current_peak_tree_rss_bytes": 585920512,
-        "reference_peak_tree_rss_bytes": 421449728,
-        "current_output_size_bytes": 6870942,
-        "reference_output_size_bytes": 9689023,
-        "current_file_count": 5,
-        "reference_file_count": 410
-      }
-    },
-    "architecture": {
-      "bundle_size_bytes": 3349505,
-      "serialisation": {
-        "json_size_bytes": 3349505,
-        "msgpack_size_bytes": 2388492,
-        "json_encode_seconds": 0.107407,
-        "msgpack_encode_seconds": 0.019244,
-        "json_decode_seconds": 0.091897,
-        "msgpack_decode_seconds": 0.024159
-      },
-      "transport": {
-        "payload_bytes": 3349505,
-        "workers": 8,
-        "tasks": 32,
-        "pickle_seconds": 0.631,
-        "shared_memory_seconds": 0.583,
-        "speedup_ratio": 1.081,
-        "checksums_match": true
+      "mc_ceiling_light": {
+        "workers_8": 3.435
       }
     }
   },
+  "harness_sanity": {
+    "direct_cli_vs_harness_percent_delta": {
+      "replay_day0_light": -7.3,
+      "compare_day0_light": 1.4,
+      "mc_default_light_w8": -4.0,
+      "mc_ceiling_light_w8": 3.3
+    },
+    "conclusion": "The monitored harness stays inside a normal local noise and monitor-overhead band and does not use a materially different timing mode."
+  },
+  "storage": {
+    "bundle_size_bytes": {
+      "replay_light": 1364200,
+      "replay_full": 1992891,
+      "mc_light": 819828,
+      "mc_full": 5159241
+    },
+    "file_count": {
+      "replay_light": 6,
+      "replay_full": 12,
+      "mc_light": 6,
+      "mc_full": 18
+    }
+  },
+  "retained_output": {
+    "mc_default_light_w8": {
+      "bundle_size_bytes": 2900848,
+      "file_count": 6,
+      "top_dashboard_sections_bytes": {
+        "monteCarlo.sampleRuns": 1243393,
+        "monteCarlo.pathBands": 308931,
+        "monteCarlo.sampleRuns.fills": 283252,
+        "monteCarlo.sampleRuns.orderIntent": 257141
+      },
+      "top_file_components_bytes": {
+        "dashboard_payload": 1567126,
+        "fills_csv": 1289324
+      }
+    },
+    "mc_ceiling_light_w8": {
+      "bundle_size_bytes": 6645872,
+      "file_count": 6,
+      "top_dashboard_sections_bytes": {
+        "monteCarlo.sampleRuns": 2986485,
+        "monteCarlo.sampleRuns.fills": 680250,
+        "monteCarlo.sampleRuns.orderIntent": 616955,
+        "monteCarlo.sampleRuns.fairValueSeries": 534751
+      },
+      "top_file_components_bytes": {
+        "dashboard_payload": 3349453,
+        "fills_csv": 3098231
+      }
+    },
+    "dominant_frontier": [
+      "monteCarlo.sampleRuns",
+      "fills.csv",
+      "reporting-path write pressure"
+    ]
+  },
+  "memory_frontier": {
+    "runtime_suite_tree_peak_bytes": 436101120,
+    "high_resolution_tree_peak_bytes": [
+      438374400,
+      443199488,
+      441413632
+    ],
+    "worker_count_at_tree_peak": [
+      8,
+      8,
+      8
+    ],
+    "worker_total_rss_at_tree_peak_bytes": [
+      303718400,
+      303312896,
+      296501248
+    ],
+    "parent_rss_at_tree_peak_bytes": [
+      134656000,
+      139886592,
+      144912384
+    ],
+    "later_parent_reporting_peak_bytes": [
+      282861568,
+      332066816,
+      331968512
+    ],
+    "top_memory_drivers": [
+      "live_worker_processes",
+      "parent_root_at_tree_peak",
+      "reporting_write_path"
+    ],
+    "conclusion": "The global ceiling peak is still execution-phase process-tree RSS, driven first by live workers and second by the parent's resident set at that same moment. Later bundle_write pressure is real but does not set the tree peak."
+  },
+  "backend": {
+    "wins": {
+      "streaming": 4,
+      "classic": 3,
+      "rust": 0
+    },
+    "case_winners": {
+      "live_v9_default_w1": "streaming",
+      "live_v9_default_w8": "classic",
+      "live_v9_heavy_w8": "streaming",
+      "main_default_w8": "streaming",
+      "main_heavy_w8": "streaming",
+      "r2_stateful_default_w8": "classic",
+      "r2_stateful_heavy_w8": "classic"
+    },
+    "guidance": {
+      "auto": "streaming",
+      "classic": "keep as co-equal parity and performance option",
+      "rust": "keep explicit and experimental only"
+    }
+  },
+  "reference": {
+    "default_100_10_speedup_range": {
+      "min": 3.78,
+      "max": 15.54
+    },
+    "ceiling_1000_100_speedup_range": {
+      "min": 9.46,
+      "max": 18.8
+    },
+    "smaller_retained_bytes_every_case": true,
+    "smaller_file_count_every_case": true,
+    "lower_rss_on_default_100_10_cases": true,
+    "lower_rss_on_ceiling_1000_100_cases": false,
+    "blocking_gap": "Chris Roberts still kept lower RSS on every 1000/100 ceiling case."
+  },
+  "architecture": {
+    "serialisation": {
+      "json_size_bytes": 3349453,
+      "msgpack_size_bytes": 2388447,
+      "json_encode_seconds": 0.056794,
+      "msgpack_encode_seconds": 0.00972,
+      "json_decode_seconds": 0.041332,
+      "msgpack_decode_seconds": 0.010357
+    },
+    "transport": {
+      "pickle_seconds": 0.44,
+      "shared_memory_seconds": 0.351,
+      "shared_memory_speedup_ratio": 1.253
+    },
+    "decision": "Keep JSON canonical and do not land binary sidecars or shared-memory transport yet."
+  },
   "decisions": {
     "default_architecture": "streaming_first_python",
-    "classic_backend_status": "keep_as_real_parity_and_performance_option",
-    "rust_backend_status": "keep_experimental_only",
     "optional_binary_sidecars": "do_not_land_now",
-    "shared_memory_transport": "interesting_microbenchmark_only_not_landing",
+    "shared_memory_transport": "not_landing",
     "deeper_native_path": "not_justified",
-    "parent_side_streaming_chunk_merge": "tried_and_reverted_because_it_raised_the_tree_peak"
+    "remaining_frontier": "wide-worker execution-phase ceiling RSS on Windows spawn"
   }
 }

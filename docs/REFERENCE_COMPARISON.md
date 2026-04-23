@@ -1,19 +1,20 @@
 # Reference Comparison
 
-Current result: on the matched same-machine Chris Roberts no-op benchmark, this
-repo wins runtime, retained bytes and file count, but still loses ceiling-case
-RSS.
+Result: on the matched same-machine Chris Roberts no-op benchmark, this repo
+wins runtime, retained bytes and retained file count, but still loses
+ceiling-case RSS.
 
-This page records what the 2026-04-23 local audit could actually prove against
-the reference repos that were available in this session.
+This page records only what the clean 2026-04-23 local audit could prove
+against the reference repos available in this session.
 
 ## Scope note
 
 The strongest fresh external proof in this pass is the same-machine Chris
 Roberts rerun from `analysis/benchmark_chris_reference.py`.
 
-The wording below is intentionally about locally audited evidence, not a public
-internet-wide leaderboard claim.
+The exact clean artefact is:
+
+- `backtests/review_2026-04-23_final/reference/reference_benchmark.json`
 
 ## Short conclusion
 
@@ -30,7 +31,7 @@ Current honest conclusion:
 ## Versus Chris Roberts
 
 Chris Roberts' repo remains the highest-signal narrow Monte Carlo reference
-that was available locally in this pass.
+available locally in this pass.
 
 ### What the rerun matched
 
@@ -42,25 +43,21 @@ The fresh same-machine rerun used:
 - matched `1`, `2`, `4` and `8` worker or thread counts
 - one warm-up pass per repo before the measured runs
 
-The exact command is tracked in
-[`docs/BENCHMARK_SUMMARY.json`](BENCHMARK_SUMMARY.json) and in
-`backtests/_final_reference_current_local/reference_benchmark.json`.
-
 ### Runtime result
 
 This repo won every measured runtime cell:
 
-- default `100/10`: `4.80x` to `14.75x` faster
-- ceiling `1000/100`: `9.59x` to `18.35x` faster
+- default `100/10`: `3.78x` to `15.54x` faster
+- ceiling `1000/100`: `9.46x` to `18.80x` faster
 
 Representative cells:
 
 | Case | Workers | This repo | Chris Roberts | Speed-up |
 | --- | ---: | ---: | ---: | ---: |
-| default `100/10` | `1` | `2.796s` | `41.229s` | `14.75x` |
-| default `100/10` | `8` | `2.021s` | `9.694s` | `4.80x` |
-| ceiling `1000/100` | `1` | `21.626s` | `396.830s` | `18.35x` |
-| ceiling `1000/100` | `8` | `6.568s` | `63.016s` | `9.59x` |
+| default `100/10` | `1` | `1.301s` | `20.220s` | `15.54x` |
+| default `100/10` | `8` | `1.252s` | `4.731s` | `3.78x` |
+| ceiling `1000/100` | `1` | `12.052s` | `226.633s` | `18.80x` |
+| ceiling `1000/100` | `8` | `4.907s` | `46.438s` | `9.46x` |
 
 ### Memory and retained-output result
 
@@ -68,7 +65,7 @@ The all-axis story is still mixed.
 
 What this repo did better:
 
-- less RSS on every smaller default `100/10` case
+- lower RSS on every smaller default `100/10` case
 - fewer retained bytes in every measured same-machine no-op comparison cell
 - far fewer retained files, `5` instead of `50` or `410`
 - much stronger runtime throughput
@@ -81,12 +78,12 @@ Representative ceiling rows:
 
 | Workers | This repo RSS | Chris RSS | This repo bytes | Chris bytes |
 | ---: | ---: | ---: | ---: | ---: |
-| `1` | `329.9 MB` | `136.1 MB` | `6.87 MB` | `9.69 MB` |
-| `4` | `418.4 MB` | `249.1 MB` | `6.87 MB` | `9.69 MB` |
-| `8` | `558.8 MB` | `401.9 MB` | `6.87 MB` | `9.69 MB` |
+| `1` | `328.5 MB` | `132.1 MB` | `6.87 MB` | `9.69 MB` |
+| `4` | `462.2 MB` | `239.9 MB` | `6.87 MB` | `9.69 MB` |
+| `8` | `568.1 MB` | `379.4 MB` | `6.87 MB` | `9.69 MB` |
 
-That means the retained-byte gap did close on this matched comparison. The
-remaining hard gap is ceiling RSS.
+That means the retained-byte gap really did close on the matched comparison.
+The remaining hard gap is ceiling RSS.
 
 ### What this does not prove
 
@@ -123,8 +120,8 @@ fresh same-machine benchmarks in this pass.
 - Nabayan Saha remains a useful replay-first ergonomics reference.
 - Jasper van Merle remains a useful historical small-backtester reference.
 
-Those repos can still shape workflow judgement, but they do not change the
-hardest remaining gap from this pass, which is ceiling RSS rather than runtime
+Those repos still shape workflow judgement, but they do not change the hardest
+remaining gap from this pass, which is ceiling RSS rather than runtime
 throughput or retained bytes.
 
 ## Honest status

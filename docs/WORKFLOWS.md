@@ -29,9 +29,9 @@ python analysis/research_pack.py fast --trader strategies/trader.py --baseline s
 
 Measured on 2026-04-23 on this machine:
 
-- default day-0 replay: about `5.26s`
-- default day-0 compare: about `3.98s`
-- fast pack: about `9.67s`
+- default day-0 replay: about `2.92s`
+- default day-0 compare: about `2.21s`
+- fast pack: about `5.20s`
 
 Useful trust checks during the fast loop:
 
@@ -57,7 +57,7 @@ This gives:
 
 Measured on 2026-04-23 on this machine:
 
-- validation pack: about `28.11s`
+- validation pack: about `17.65s`
 
 ## Heavy forensic loop
 
@@ -108,15 +108,15 @@ preview-capped examples for qualitative inspection only in light mode.
 
 Measured on 2026-04-23 on the tracked `250`-tick fixture:
 
-- quick light, `64/8`, `1` worker: about `2.92s`
-- quick light, `64/8`, `4` workers: about `2.13s`
-- quick light, `64/8`, `8` workers: about `2.09s`
-- default light, `100/10`, `1` worker: about `3.95s`
-- default light, `100/10`, `4` workers: about `2.52s`
-- default light, `100/10`, `8` workers: about `2.28s`
-- heavy light, `192/16`, `1` worker: about `6.84s`
-- heavy light, `192/16`, `8` workers: about `3.08s`
-- ceiling light, `768/24`, `8` workers: about `6.41s`
+- quick light, `64/8`, `1` worker: about `1.50s`
+- quick light, `64/8`, `4` workers: about `1.23s`
+- quick light, `64/8`, `8` workers: about `1.24s`
+- default light, `100/10`, `1` worker: about `1.94s`
+- default light, `100/10`, `4` workers: about `1.43s`
+- default light, `100/10`, `8` workers: about `1.42s`
+- heavy light, `192/16`, `1` worker: about `3.40s`
+- heavy light, `192/16`, `8` workers: about `1.77s`
+- ceiling light, `768/24`, `8` workers: about `3.44s`
 
 Backend guidance is now simple:
 
@@ -125,8 +125,8 @@ Backend guidance is now simple:
 - use `rust` only for explicit backend experiments
 
 On the fresh realistic-trader rerun in
-`backtests/_final_backend_current_local`, `classic` won `4` of the `7`
-measured cells, `streaming` won `3`, and `rust` won none.
+`backtests/review_2026-04-23_final/backend`, `streaming` won `4` of the `7`
+measured cells, `classic` won `3`, and `rust` won none.
 
 ## Sweep
 
@@ -185,13 +185,17 @@ local verification pass.
 ```bash
 npm run build --prefix dashboard
 python -m prosperity_backtester serve --port 5555
+python -m prosperity_backtester serve --dir backtests/review_2026-04-23_final/runtime/cases --port 5555
 python -m prosperity_backtester serve --latest
 python -m prosperity_backtester serve --latest-type replay
 python -m prosperity_backtester serve --latest-type monte-carlo
 ```
 
 Open `http://127.0.0.1:5555/`, then use the latest-run shortcuts or browse the
-local server directly.
+local server directly. For the clean audited proof bundles from this pass,
+prefer serving `backtests/review_2026-04-23_final/runtime/cases` rather than
+the entire review root. The server now hides the main benchmark scratch
+bundles, but `runtime/cases` is still the cleanest review surface.
 
 To finish a run and open its bundle directly:
 

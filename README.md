@@ -144,64 +144,70 @@ python analysis/profile_replay.py strategies/trader.py --compare-trader strategi
 
 The proof split is now explicit.
 
-The tracked current-local headline artefacts were captured from a dirty
-worktree:
+The current audited review root is `backtests/review_2026-04-23_final`.
 
-- `backtests/_final_output_current_local`
-- `backtests/_final_runtime_current_local`
-- `backtests/_final_attribution_current_local`
-- `backtests/_final_rss_frontier_current_local_v2`
-- `backtests/_final_backend_current_local`
-- `backtests/_final_reference_current_local`
-- `backtests/_final_architecture_current_local`
+The core headline artefacts in that review root were captured on clean commit
+`d041e8bc4e2b94b7fe0664330df142a88f174569`:
 
-Earlier `_audit_*` and `_final_runtime_after_*` outputs remain useful
-exploration artefacts from this pass, but they are not the headline proof. This
-clone does not retain a separate clean exact-same-worktree historical
-throughput baseline for the final diagnostics-only state, so the timings below
-carry that recorded dirty-worktree caveat.
+- `runtime/`
+- `storage/`
+- `attribution/`
+- `backend/`
+- `reference/`
+- `architecture/`
+
+The three `rss_frontier*` reruns were captured immediately after the
+parent-versus-reporting RSS wording fix in `analysis/rss_frontier.py`, so those
+reports record `git_dirty: true`. Use them for memory shape and driver
+attribution, not headline throughput.
 
 Current local branch-loop timings from
-`backtests/_final_runtime_current_local/benchmark_report.json`:
+`backtests/review_2026-04-23_final/runtime/benchmark_report.json`:
 
-- default day-0 replay: about `5.26s`
-- default day-0 compare: about `3.98s`
-- fast pack: about `9.67s`
-- validation pack: about `28.11s`
+- default day-0 replay: `2.917s`
+- default day-0 compare: `2.207s`
+- fast pack: `5.203s`
+- validation pack: `17.646s`
 
-Tracked `250`-tick Monte Carlo throughput table from the fresh current-local
+Tracked `250`-tick Monte Carlo throughput table from the clean current-local
 runtime rerun:
 
 | Case | 1 worker | 2 workers | 4 workers | 8 workers |
 | --- | ---: | ---: | ---: | ---: |
-| MC quick light (64 sess) | `2.924s` | `2.500s` | `2.128s` | `2.087s` |
-| MC default light (100 sess) | `3.952s` | `3.245s` | `2.520s` | `2.278s` |
-| MC heavy light (192 sess) | `6.838s` | `n/a` | `n/a` | `3.082s` |
-| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `6.405s` |
+| MC quick light (64 sess) | `1.499s` | `1.366s` | `1.229s` | `1.242s` |
+| MC default light (100 sess) | `1.943s` | `1.827s` | `1.432s` | `1.417s` |
+| MC heavy light (192 sess) | `3.400s` | `n/a` | `n/a` | `1.769s` |
+| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `3.435s` |
 
 Current retained-output sizes from
-`backtests/_final_output_current_local/benchmark_report.json`:
+`backtests/review_2026-04-23_final/storage/benchmark_report.json`:
 
 - replay light: `1.36 MB`, `6` files
 - replay full: `1.99 MB`, `12` files
-- Monte Carlo light: `819.9 KB`, `6` files
+- Monte Carlo light: `819.8 KB`, `6` files
 - Monte Carlo full: `5.16 MB`, `18` files
 
-Fresh current-local ceiling probes now make the remaining gap precise rather
-than fuzzy. The sharp remaining blocker is still execution-phase process-tree
-RSS, not parent-only reporting RSS or dashboard assembly. The
-corrected `analysis/rss_frontier.py` probe recorded a `404.4 MB` tree peak on
-`mc_ceiling_light_w8`, with `8` workers alive, about `266.9 MB` of live worker
-RSS at the tree peak, about `137.4 MB` of parent RSS at the tree peak, a later
-parent peak of `282.7 MB`, and about `43.6 MB` of parent execution transient.
+Fresh direct CLI spot checks stayed within `-7.3%` to `+3.3%` of the monitored
+harness on the headline cases, so the benchmark harness wording is now honest
+and defensible rather than a different timing mode.
+
+Fresh `5 ms` ceiling probes on `mc_ceiling_light_w8` now make the remaining gap
+precise rather than fuzzy. The sharp remaining blocker is still execution-phase
+process-tree RSS, not dashboard assembly:
+
+- tree peak reruns: `418.1 MB`, `421.0 MB`, `422.7 MB`
+- workers alive at the tree peak: `8`
+- live worker RSS at the tree peak: `282.8 MB` to `289.6 MB`
+- parent RSS at the exact tree peak: `128.4 MB` to `138.2 MB`
+- later parent-only `bundle_write` peak: `269.8 MB` to `316.7 MB`
 
 The default streaming Monte Carlo backend remains the design default, but the
 fresh realistic-trader rerun is now more mixed than the earlier proof text
 said. Use `--mc-backend classic` for parity checks and fresh local timing
 checks as well as replay-style materialisation. The compiled `rust` backend
-remains available for explicit backend experiments only. On the fresh
-realistic-trader rerun in `backtests/_final_backend_current_local`, `classic`
-won `4` of the `7` measured cells, `streaming` won `3`, and `rust` won none.
+remains available for explicit backend experiments only. On the clean rerun in
+`backtests/review_2026-04-23_final/backend`, `streaming` won `4` of the `7`
+measured cells, `classic` won `3`, and `rust` won none.
 
 Forensic work is still deliberate full-profile work and should be treated as a minute-scale task rather than part of the normal branch loop.
 
@@ -217,10 +223,11 @@ Chris Roberts' repo remains
 the strongest narrow tutorial-round Monte Carlo reference, but this repo is
 the stronger end-to-end research platform on the locally available evidence.
 On the fresh same-machine shared no-op trader benchmark in
-`backtests/_final_reference_current_local`, with matched `250`-tick sessions, matched
-`100/10` and `1000/100` session or sample tiers, and matched `1`, `2`, `4`,
-and `8` worker settings, this repo was `4.80x` to `14.75x` faster on the
-default cases and `9.59x` to `18.35x` faster on the ceiling cases,
+`backtests/review_2026-04-23_final/reference`, with matched `250`-tick
+sessions, matched `100/10` and `1000/100` session or sample tiers, and matched
+`1`, `2`, `4`, and `8` worker settings, this repo was `3.78x` to `15.54x`
+faster on the default cases and `9.46x` to `18.80x` faster on the ceiling
+cases,
 wrote fewer retained bytes in every measured cell, and used far fewer files
 (`5` versus `50` or `410`). On the smaller `100/10` cases it also used less
 RSS, but Chris still kept the lighter RSS on the `1000/100` ceiling cases.
@@ -312,10 +319,11 @@ Build the dashboard:
 npm run build --prefix dashboard
 ```
 
-Serve the repo root:
+Serve the repo or a curated review root:
 
 ```bash
 python -m prosperity_backtester serve --port 5555
+python -m prosperity_backtester serve --dir backtests/review_2026-04-23_final/runtime/cases --port 5555
 python -m prosperity_backtester serve --latest
 python -m prosperity_backtester serve --latest-type replay
 python -m prosperity_backtester serve --latest-type monte-carlo
@@ -327,7 +335,14 @@ Open:
 http://127.0.0.1:5555/
 ```
 
-You can drag one or more `dashboard.json` bundles into the app, use **Open latest run**, **Latest replay**, **Latest MC**, **Latest compare**, **Latest calibration**, **Latest optimise**, or **Latest Round 2**, or use **Browse local server** to discover bundles under the served directory. The server reads `manifest.json` and `run_registry.jsonl` first when available, so discovery stays fast for large bundles and keeps workflow metadata visible.
+You can drag one or more `dashboard.json` bundles into the app, use **Open
+latest run**, **Latest replay**, **Latest MC**, **Latest compare**, **Latest
+calibration**, **Latest optimise**, or **Latest Round 2**, or use **Browse
+local server** to discover bundles under the served directory. The server reads
+`manifest.json` and `run_registry.jsonl` first when available, hides the main
+benchmark scratch bundles, and keeps workflow metadata visible. For the clean
+audited review pack from this pass, `backtests/review_2026-04-23_final/runtime/cases`
+is still the cleanest review surface.
 
 To finish a workflow and jump straight into the written bundle:
 
