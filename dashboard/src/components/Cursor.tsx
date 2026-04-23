@@ -1,10 +1,9 @@
 import { useEffect, useRef } from 'react'
-
-const INTERACTIVE_SELECTOR =
-  'a, button, [role="button"], input:not([type="checkbox"]):not([type="radio"]):not([disabled]), select, textarea, summary, label[for], [data-interactive="true"], .file-drop'
-const TEXT_SELECTOR =
-  'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([disabled]), textarea, [contenteditable="true"]'
-const CLOSE_SELECTOR = '[data-cursor="close"], [aria-label^="Close"], [aria-label^="Dismiss"]'
+import {
+  isPointNearViewportScrollbar,
+  measureViewportScrollbars,
+  resolveCursorState,
+} from '../lib/cursor'
 
 export function Cursor() {
   const ringRef = useRef<HTMLDivElement>(null)
@@ -33,6 +32,7 @@ export function Cursor() {
     let coreY = targetY
     let raf = 0
     let visible = false
+    let scrollbarMode = false
 
     const step = () => {
       if (prefersReduced) {
@@ -64,44 +64,81 @@ export function Cursor() {
       core.classList.remove('is-visible')
     }
 
+    const updateScrollbarMode = (clientX: number, clientY: number) => {
+      const scrollbars = measureViewportScrollbars(
+        window.innerWidth,
+        window.innerHeight,
+        document.documentElement.clientWidth,
+        document.documentElement.clientHeight,
+      )
+      const nextScrollbarMode = isPointNearViewportScrollbar(
+        { x: clientX, y: clientY },
+        { width: window.innerWidth, height: window.innerHeight },
+        scrollbars,
+      )
+
+      if (nextScrollbarMode) {
+        scrollbarMode = true
+        body.dataset.cursorState = 'idle'
+        delete body.dataset.cursorPressed
+        hide()
+        return true
+      }
+
+      scrollbarMode = false
+      return false
+    }
+
     const onMove = (event: PointerEvent) => {
+      if (updateScrollbarMode(event.clientX, event.clientY)) return
       targetX = event.clientX
       targetY = event.clientY
+      body.dataset.cursorState = resolveCursorState(document.elementFromPoint(event.clientX, event.clientY))
       show()
     }
     const onOver = (event: PointerEvent) => {
-      const target = event.target as Element | null
-      if (!target) return
-      if (target.closest(CLOSE_SELECTOR)) {
-        body.dataset.cursorState = 'close'
-        return
-      }
-      if (target.closest(TEXT_SELECTOR)) {
-        body.dataset.cursorState = 'text'
-        return
-      }
-      if (target.closest(INTERACTIVE_SELECTOR)) {
-        body.dataset.cursorState = 'hover'
-        return
-      }
-      body.dataset.cursorState = 'idle'
+      if (updateScrollbarMode(event.clientX, event.clientY)) return
+      body.dataset.cursorState = resolveCursorState(event.target as Element | null)
     }
-    const onDown = () => {
+    const onDown = (event: PointerEvent) => {
+      if (updateScrollbarMode(event.clientX, event.clientY)) return
       body.dataset.cursorPressed = 'true'
     }
-    const onUp = () => {
+    const onUp = (event: PointerEvent) => {
       delete body.dataset.cursorPressed
+      if (updateScrollbarMode(event.clientX, event.clientY)) return
+      body.dataset.cursorState = resolveCursorState(document.elementFromPoint(event.clientX, event.clientY))
+      show()
+    }
+    const onScroll = () => {
+      if (body.dataset.cursorPressed !== 'true') return
+      scrollbarMode = true
+      body.dataset.cursorState = 'idle'
+      hide()
     }
     const onLeaveWindow = (event: PointerEvent) => {
-      if (event.relatedTarget == null) hide()
+      if (event.relatedTarget == null) {
+        scrollbarMode = false
+        hide()
+      }
     }
-    const onEnterWindow = () => show()
-    const onBlur = () => hide()
+    const onEnterWindow = (event: PointerEvent) => {
+      if (updateScrollbarMode(event.clientX, event.clientY)) return
+      body.dataset.cursorState = resolveCursorState(document.elementFromPoint(event.clientX, event.clientY))
+      show()
+    }
+    const onBlur = () => {
+      scrollbarMode = false
+      delete body.dataset.cursorPressed
+      body.dataset.cursorState = 'idle'
+      hide()
+    }
 
     window.addEventListener('pointermove', onMove, { passive: true })
     window.addEventListener('pointerover', onOver, { passive: true })
     window.addEventListener('pointerdown', onDown)
     window.addEventListener('pointerup', onUp)
+    window.addEventListener('scroll', onScroll, true)
     document.addEventListener('pointerleave', onLeaveWindow)
     document.addEventListener('pointerenter', onEnterWindow)
     window.addEventListener('blur', onBlur)
@@ -112,6 +149,7 @@ export function Cursor() {
       window.removeEventListener('pointerover', onOver)
       window.removeEventListener('pointerdown', onDown)
       window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('scroll', onScroll, true)
       document.removeEventListener('pointerleave', onLeaveWindow)
       document.removeEventListener('pointerenter', onEnterWindow)
       window.removeEventListener('blur', onBlur)

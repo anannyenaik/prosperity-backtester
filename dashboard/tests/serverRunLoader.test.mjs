@@ -236,6 +236,60 @@ test('unavailable notices can be dismissed cleanly', async (t) => {
   assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /Quick load unavailable/)
 })
 
+test('browse from an unavailable notice opens the bundle browser and clears the notice', async (t) => {
+  resetStore()
+  const compareRun = runMeta({
+    path: 'backtests/2026-04-23_20-10-00_compare/dashboard.json',
+    name: '2026-04-23 compare',
+    type: 'comparison',
+  })
+  let runListCount = 0
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    if (url !== '/api/runs') {
+      throw new Error(`Unexpected fetch request: ${url}`)
+    }
+    runListCount += 1
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return runListCount === 1 ? [runMeta()] : [runMeta(), compareRun]
+      },
+    }
+  }
+
+  t.after(() => {
+    if (originalFetch) {
+      globalThis.fetch = originalFetch
+    } else {
+      delete globalThis.fetch
+    }
+    resetStore()
+  })
+
+  let renderer
+  await act(async () => {
+    renderer = create(React.createElement(ServerRunLoader))
+  })
+
+  await act(async () => {
+    await findButton(renderer.root, 'Load latest Comparison bundle').props.onClick()
+  })
+
+  assert.equal(renderer.root.findAll((node) => node.props['data-loader-surface'] === 'notice').length, 1)
+
+  await act(async () => {
+    await findButton(renderer.root, 'Browse available bundles').props.onClick()
+  })
+
+  const rendered = JSON.stringify(renderer.toJSON())
+  assert.equal(renderer.root.findAll((node) => node.props['data-loader-surface'] === 'notice').length, 0)
+  assert.match(rendered, /Bundle browser/)
+  assert.match(rendered, /2026-04-23 compare/)
+})
+
 test('matching quick-loads still fetch and load the selected bundle', async (t) => {
   resetStore()
   const compareRun = runMeta({

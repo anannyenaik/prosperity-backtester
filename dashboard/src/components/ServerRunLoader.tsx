@@ -26,6 +26,7 @@ import { clsx } from 'clsx'
 import { useStore, type ServerRunMeta } from '../store'
 import type { DashboardPayload } from '../types'
 import { fmtBytes, fmtDate, fmtNum } from '../lib/format'
+import { computeFloatingLayerLayout } from '../lib/floatingLayer'
 
 type RunFilter = 'all' | 'replay' | 'monte_carlo' | 'comparison' | 'calibration' | 'optimization' | 'round2_scenarios'
 type QuickLoadKind = Exclude<RunFilter, 'all'>
@@ -54,28 +55,25 @@ interface LoaderActionButtonProps {
   onClick: () => void
   disabled: boolean
   tone?: 'primary' | 'secondary'
-  compact?: boolean
   indicator?: ReactNode
-  keyLabel?: string
 }
 
 interface QuickLoadChipProps {
   label: string
   caption: string
   icon: ReactNode
-  code: string
   onClick: () => void
   disabled: boolean
   loading: boolean
 }
 
-const TYPE_BUTTONS: Array<QuickLoadButton & { code: string; caption: string; icon: ReactNode }> = [
-  { type: 'replay', label: 'Replay', code: '01', caption: 'Historical', icon: <History className="h-3.5 w-3.5" /> },
-  { type: 'monte_carlo', label: 'Monte Carlo', code: '02', caption: 'Synthetic paths', icon: <Sliders className="h-3.5 w-3.5" /> },
-  { type: 'calibration', label: 'Calibration', code: '03', caption: 'Model fit', icon: <Target className="h-3.5 w-3.5" /> },
-  { type: 'comparison', label: 'Comparison', code: '04', caption: 'Multi-trader', icon: <GitCompare className="h-3.5 w-3.5" /> },
-  { type: 'optimization', label: 'Optimise', code: '05', caption: 'Variant rank', icon: <FlaskConical className="h-3.5 w-3.5" /> },
-  { type: 'round2_scenarios', label: 'Round 2', code: 'R2', caption: 'Scenarios', icon: <Boxes className="h-3.5 w-3.5" /> },
+const TYPE_BUTTONS: Array<QuickLoadButton & { caption: string; icon: ReactNode }> = [
+  { type: 'replay', label: 'Replay', caption: 'Historical', icon: <History className="h-3.5 w-3.5" /> },
+  { type: 'monte_carlo', label: 'Monte Carlo', caption: 'Synthetic paths', icon: <Sliders className="h-3.5 w-3.5" /> },
+  { type: 'calibration', label: 'Calibration', caption: 'Model fit', icon: <Target className="h-3.5 w-3.5" /> },
+  { type: 'comparison', label: 'Comparison', caption: 'Multi-trader', icon: <GitCompare className="h-3.5 w-3.5" /> },
+  { type: 'optimization', label: 'Optimise', caption: 'Variant rank', icon: <FlaskConical className="h-3.5 w-3.5" /> },
+  { type: 'round2_scenarios', label: 'Round 2', caption: 'Scenarios', icon: <Boxes className="h-3.5 w-3.5" /> },
 ]
 
 const RUN_TYPE_MAP: Record<string, Exclude<RunFilter, 'all'>> = {
@@ -101,9 +99,9 @@ const RUN_TYPE_MAP: Record<string, Exclude<RunFilter, 'all'>> = {
 
 const DEFAULT_LAYER_STYLE: CSSProperties = {
   left: '16px',
-  top: '208px',
+  top: '16px',
   width: 'min(40rem, calc(100vw - 2rem))',
-  maxHeight: 'min(34rem, calc(100vh - 14rem))',
+  maxHeight: 'calc(100vh - 2rem)',
 }
 
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
@@ -202,6 +200,7 @@ export function ServerRunLoader() {
 
   async function openBrowser() {
     await runWithLoading('browse', async () => {
+      setNotice(null)
       setFilter('all')
       await fetchRuns({ openBrowser: true })
     })
@@ -257,25 +256,27 @@ export function ServerRunLoader() {
 
   return (
     <div ref={rootRef} className="relative mt-3">
-      <div className="quickload-panel edge-traced rounded-[12px] p-4 md:p-[18px]">
-        <div className="flex items-baseline justify-between gap-3">
-          <div>
-            <div className="hud-label text-accent-2">Local bundle server</div>
-            <div className="mt-1.5 font-display text-[0.82rem] font-semibold uppercase tracking-[0.08em] text-txt">
-              Quick load and browse
+      <div className="quickload-panel edge-traced edge-traced--panel rounded-[12px] p-3.5 md:p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="hud-label text-accent-2">Bundle server</div>
+            <div className="mt-1.5 font-display text-[0.9rem] font-semibold uppercase tracking-[0.08em] text-txt">
+              Quick load
+            </div>
+            <div className="mt-1.5 max-w-[28rem] text-[12px] leading-5 text-muted">
+              Open the latest run immediately or browse every served bundle.
             </div>
           </div>
-          <div className="quickload-status hud-label">
+          <div className="quickload-status quickload-status--pill hud-label">
             <span className={clsx('quickload-status__dot', loading && 'is-loading')} aria-hidden="true" />
             {loading ? 'Loading' : 'Ready'}
           </div>
         </div>
 
-        <div className="quickload-primary mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="quickload-primary mt-3 grid gap-2.5 sm:grid-cols-2">
           <LoaderActionButton
-            label="Open latest run"
-            caption="Most recent bundle"
-            keyLabel="PRIMARY"
+            label="Open latest bundle"
+            caption="Most recent run on the server"
             icon={loadingKey === 'latest' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Server className="h-4 w-4" />}
             onClick={() => void loadLatestFromServer()}
             disabled={loadingKey != null}
@@ -285,7 +286,6 @@ export function ServerRunLoader() {
           <LoaderActionButton
             label={browserState.open ? 'Hide browser' : 'Browse local server'}
             caption={browserState.open ? 'Bundle browser open' : 'Inspect available bundles'}
-            keyLabel="BROWSE"
             icon={
               loadingKey === 'browse' ? (
                 <RefreshCw className="h-4 w-4 animate-spin" />
@@ -308,18 +308,16 @@ export function ServerRunLoader() {
         </div>
 
         <div className="quickload-divider mt-4 flex items-center gap-3">
-          <span className="hud-label text-muted">Bundle shortcuts</span>
+          <span className="hud-label text-muted">Shortcuts</span>
           <span className="quickload-divider__rule" aria-hidden="true" />
-          <span className="hud-label text-steel">{TYPE_BUTTONS.length}</span>
         </div>
 
-        <div className="quickload-chips mt-3 grid gap-2 grid-cols-2 md:grid-cols-3">
-          {TYPE_BUTTONS.map(({ type, label, code, caption, icon }) => (
+        <div className="quickload-chips mt-3 grid grid-cols-2 gap-2 md:grid-cols-3">
+          {TYPE_BUTTONS.map(({ type, label, caption, icon }) => (
             <QuickLoadChip
               key={type}
               label={label}
               caption={caption}
-              code={code}
               icon={icon}
               onClick={() => void loadLatestFromServer(type)}
               disabled={loadingKey != null}
@@ -506,9 +504,7 @@ function LoaderActionButton({
   onClick,
   disabled,
   tone = 'secondary',
-  compact = false,
   indicator,
-  keyLabel,
 }: LoaderActionButtonProps) {
   return (
     <button
@@ -519,7 +515,6 @@ function LoaderActionButton({
       className={clsx(
         'qa-button group loader-action rounded-[11px] text-left',
         tone === 'primary' ? 'qa-button--primary' : 'qa-button--secondary',
-        compact ? 'qa-button--compact' : 'qa-button--expanded',
       )}
     >
       <span className="qa-button__sheen" aria-hidden="true" />
@@ -533,7 +528,6 @@ function LoaderActionButton({
           <span className="qa-button__caption hud-label">{caption}</span>
         </span>
         <span className="qa-button__meta" aria-hidden="true">
-          {keyLabel && <span className="qa-button__key hud-label">{keyLabel}</span>}
           {indicator && <span className="qa-button__indicator">{indicator}</span>}
         </span>
       </span>
@@ -541,7 +535,7 @@ function LoaderActionButton({
   )
 }
 
-function QuickLoadChip({ label, caption, icon, code, onClick, disabled, loading }: QuickLoadChipProps) {
+function QuickLoadChip({ label, caption, icon, onClick, disabled, loading }: QuickLoadChipProps) {
   return (
     <button
       type="button"
@@ -557,7 +551,6 @@ function QuickLoadChip({ label, caption, icon, code, onClick, disabled, loading 
           <span className="qa-chip__icon">
             {loading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : icon}
           </span>
-          <span className="qa-chip__code hud-label">{code}</span>
         </span>
         <span className="qa-chip__label font-display">{label}</span>
         <span className="qa-chip__caption hud-label">{caption}</span>
@@ -578,18 +571,24 @@ function useAnchoredLayerStyle(anchorRef: RefObject<HTMLElement>, active: boolea
       const rect = anchorRef.current?.getBoundingClientRect()
       if (!rect) return
 
-      const viewportGap = 16
-      const width = Math.min(Math.max(rect.width, 320), window.innerWidth - viewportGap * 2)
-      const maxLeft = Math.max(viewportGap, window.innerWidth - width - viewportGap)
-      const left = clamp(rect.left, viewportGap, maxLeft)
-      const top = Math.max(viewportGap, rect.bottom + 14)
-      const maxHeight = Math.max(240, window.innerHeight - top - viewportGap)
+      const layout = computeFloatingLayerLayout(
+        {
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+        },
+        {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        },
+      )
 
       setStyle({
-        left: `${left}px`,
-        top: `${top}px`,
-        width: `${width}px`,
-        maxHeight: `${maxHeight}px`,
+        left: `${layout.left}px`,
+        top: `${layout.top}px`,
+        width: `${layout.width}px`,
+        maxHeight: `${layout.maxHeight}px`,
       })
     }
 
@@ -624,10 +623,6 @@ function useAnchoredLayerStyle(anchorRef: RefObject<HTMLElement>, active: boolea
   return style
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max)
-}
-
 function normaliseRunType(value: string | null | undefined): RunFilter {
   const key = (value ?? 'unknown').toLowerCase()
   return RUN_TYPE_MAP[key] ?? 'all'
@@ -642,17 +637,6 @@ function filterLabel(value: RunFilter) {
     calibration: 'Calibration',
     optimization: 'Optimise',
     round2_scenarios: 'Round 2',
-  }[value]
-}
-
-function quickLoadCaption(value: QuickLoadKind): string {
-  return {
-    replay: 'Historical bundle',
-    monte_carlo: 'Synthetic paths',
-    comparison: 'Multi-trader view',
-    calibration: 'Model fit sweep',
-    optimization: 'Variant ranking',
-    round2_scenarios: 'Access scenarios',
   }[value]
 }
 
@@ -679,7 +663,7 @@ function unavailableNotice(kind?: QuickLoadKind): LoaderNotice {
   return {
     variant: 'unavailable',
     title: `${label} bundle unavailable`,
-    message: `No ${label.toLowerCase()} bundle is currently available on the local server.`,
+    message: `No ${label.toLowerCase()} bundle is currently available on the local server. Browse another bundle or generate a fresh ${label.toLowerCase()} run.`,
   }
 }
 

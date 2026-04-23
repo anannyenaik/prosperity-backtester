@@ -36,6 +36,7 @@ const VIEWS: Record<TabId, React.ComponentType> = {
 export function App() {
   const { runs, activeTab, loadRun, setServerRuns } = useStore()
   const View = VIEWS[activeTab] ?? Overview
+  const isLanding = runs.length === 0
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -85,8 +86,8 @@ export function App() {
       <Cursor />
       <div className="app-atmosphere" aria-hidden="true" />
       <NavBar />
-      <main className="relative z-10 min-h-screen pt-[116px]">
-        {runs.length === 0 ? (
+      <main className={isLanding ? 'relative z-10 pt-[104px] lg:h-[100dvh] lg:overflow-hidden' : 'relative z-10 min-h-screen pt-[116px]'}>
+        {isLanding ? (
           <LandingScreen />
         ) : (
           <div className="mx-auto w-full max-w-[1680px] px-4 pb-12 md:px-7">
@@ -99,51 +100,53 @@ export function App() {
 }
 
 const CAPABILITY_NODES = [
-  { icon: <BarChart2 className="h-3.5 w-3.5" />, code: '01', label: 'Replay', value: 'Path diagnostics' },
-  { icon: <Sliders className="h-3.5 w-3.5" />, code: '02', label: 'Monte Carlo', value: 'Tail risk ranking' },
-  { icon: <GitCompare className="h-3.5 w-3.5" />, code: '04', label: 'Comparison', value: 'Multi-trader' },
-  { icon: <Cpu className="h-3.5 w-3.5" />, code: '05', label: 'Optimisation', value: 'Variant ranking' },
+  { icon: <BarChart2 className="h-3.5 w-3.5" />, label: 'Replay', value: 'Path diagnostics' },
+  { icon: <Sliders className="h-3.5 w-3.5" />, label: 'Monte Carlo', value: 'Tail risk ranking' },
+  { icon: <GitCompare className="h-3.5 w-3.5" />, label: 'Comparison', value: 'Multi-trader' },
+  { icon: <Cpu className="h-3.5 w-3.5" />, label: 'Optimisation', value: 'Variant ranking' },
 ]
 
 function LandingScreen() {
   return (
-    <div className="mx-auto grid w-full max-w-[1380px] items-center gap-7 px-4 pb-8 pt-5 md:px-7 md:pb-9 md:pt-6 lg:min-h-[calc(100vh-116px)] lg:grid-cols-[minmax(0,0.98fr)_minmax(380px,0.78fr)] lg:items-stretch lg:gap-10 xl:gap-12">
+    <div className="mx-auto grid h-full w-full max-w-[1360px] items-center gap-5 px-4 pb-5 pt-4 md:px-7 md:pb-6 md:pt-5 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.84fr)] lg:gap-8 xl:gap-10">
       <section className="flex min-w-0 flex-col justify-center lg:pr-2">
         <div className="hud-label chapter-rule mb-3 text-accent">IMC PROSPERITY / RESEARCH PLATFORM</div>
-        <h1 className="font-display max-w-[720px] text-[2.6rem] font-extrabold uppercase leading-[0.9] tracking-normal text-txt md:text-[3.45rem] lg:text-[3rem] xl:text-[3.6rem] 2xl:text-[3.8rem]">
+        <h1 className="font-display max-w-[700px] text-[2.4rem] font-extrabold uppercase leading-[0.9] tracking-normal text-txt md:text-[3.15rem] lg:text-[2.85rem] xl:text-[3.3rem] 2xl:text-[3.55rem]">
           <span className="block">Strategy</span>
           <span className="block">research</span>
           <em className="font-serif mt-1 block text-[0.72em] font-light normal-case leading-[1.05] tracking-normal text-accent-2">decision workspace</em>
         </h1>
-        <p className="mt-5 max-w-[620px] text-base leading-7 text-txt-soft md:text-lg md:leading-8">
+        <p className="mt-4 max-w-[600px] text-[0.98rem] leading-7 text-txt-soft md:text-base md:leading-7">
           Load replay, Monte Carlo, calibration, comparison, optimisation or scenario bundles to inspect run evidence and drive research decisions.
         </p>
 
-        <div className="motif-strip mt-6 grid max-w-[720px] grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <div className="motif-strip mt-5 grid max-w-[720px] grid-cols-2 gap-2.5 sm:grid-cols-4">
           {CAPABILITY_NODES.map((item) => (
-            <div key={item.label} className="motif-card rounded-lg px-3 py-3">
-              <div className="flex items-center justify-between">
-                <span className="text-accent">{item.icon}</span>
-                <span className="hud-label text-steel">{item.code}</span>
+            <div key={item.label} className="motif-card edge-traced edge-traced--soft rounded-lg px-3 py-3">
+              <div className="grid h-9 w-9 place-items-center rounded-lg border border-accent/20 bg-accent/10 text-accent shadow-[0_8px_18px_rgba(0,0,0,0.22)]">
+                {item.icon}
               </div>
-              <div className="font-display mt-3 text-[0.82rem] font-semibold uppercase tracking-[0.1em] text-txt">
+              <div className="font-display mt-3 text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-txt">
                 {item.label}
               </div>
-              <div className="hud-label mt-1 text-muted">{item.value}</div>
+              <div className="mt-1 text-[12px] leading-5 text-muted">{item.value}</div>
             </div>
           ))}
         </div>
 
-        <div className="hud-label mt-6 max-w-[720px] text-muted">
+        <div className="hud-label mt-5 max-w-[720px] text-muted">
           <span className="text-accent-2">~</span>&nbsp;python -m prosperity_backtester replay &middot; monte-carlo &middot; compare &middot; round2-scenarios
         </div>
       </section>
 
-      <section className="glass-panel edge-traced edge-traced--slow flex w-full flex-col justify-between overflow-visible rounded-lg p-4 md:p-5 lg:max-w-[590px] lg:justify-self-end lg:self-stretch">
-        <div className="mb-3 flex items-start justify-between gap-4 border-b border-border pb-3">
+      <section className="glass-panel edge-traced edge-traced--slow flex w-full min-w-0 flex-col justify-between overflow-visible rounded-lg p-4 md:p-5 lg:max-w-[570px] lg:justify-self-end">
+        <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <div className="hud-label text-accent-2">Bundle intake</div>
-            <h2 className="font-display mt-1.5 text-lg font-bold uppercase tracking-[0.08em]">Load a run</h2>
+            <h2 className="font-display mt-1.5 text-lg font-bold uppercase tracking-[0.08em]">Load a bundle</h2>
+            <div className="mt-1.5 max-w-[28rem] text-[12px] leading-5 text-muted">
+              Drop a local dashboard.json file or open one from the local bundle server.
+            </div>
           </div>
           <FolderOpen className="h-5 w-5 text-accent" />
         </div>

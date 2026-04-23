@@ -156,19 +156,17 @@ export function NavBar() {
                   onClick={() => setActiveTab(tab.id)}
                   title={availability.supported ? availability.message : availability.title}
                   className={clsx(
-                    'group flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs transition-all duration-500 ease-observatory',
-                    isActive
-                      ? 'bg-accent/12 text-accent'
-                      : 'text-muted hover:bg-white/[0.035] hover:text-txt',
+                    'nav-item group flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs',
+                    isActive ? 'nav-item--active text-accent' : 'nav-item--idle text-muted',
                     !availability.supported && !isActive && 'opacity-45',
                     tab.group === 'product' && !isActive && 'opacity-75',
                   )}
                 >
-                  <span className={clsx('hud-label', isActive ? 'text-accent-2' : 'text-steel')}>{tab.code}</span>
-                  {tab.icon}
-                  <span className="font-display font-semibold uppercase tracking-[0.08em]">{tab.label}</span>
+                  <span className={clsx('nav-item__code hud-label', isActive ? 'text-accent-2' : 'text-steel')}>{tab.code}</span>
+                  <span className="nav-item__icon">{tab.icon}</span>
+                  <span className="nav-item__label font-display font-semibold uppercase tracking-[0.08em]">{tab.label}</span>
                   {!availability.supported && runs.length > 0 && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-warn/80" aria-hidden="true" />
+                    <span className="nav-item__dot h-1.5 w-1.5 rounded-full bg-warn/80" aria-hidden="true" />
                   )}
                 </button>
               )
