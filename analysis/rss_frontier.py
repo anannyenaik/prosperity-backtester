@@ -14,11 +14,16 @@ from typing import Any
 
 try:
     import psutil
-except ImportError as exc:  # pragma: no cover - analysis-only helper
-    raise SystemExit(
-        "psutil is required for analysis/rss_frontier.py. "
-        "Install the analysis extras or run `python -m pip install psutil`."
-    ) from exc
+except ImportError:  # pragma: no cover - analysis-only helper
+    psutil = None
+
+if __package__ in {None, ""}:
+    repo_root = Path(__file__).resolve().parents[1]
+    repo_root_text = str(repo_root)
+    if repo_root_text not in sys.path:
+        sys.path.insert(0, repo_root_text)
+
+from analysis.benchmark_runtime import _select_effective_root_process  # noqa: E402
 
 
 DEFAULT_CASE_NAME = "mc_ceiling_light_w8"
@@ -60,14 +65,15 @@ def _root_relative(path: Path, root: Path) -> str:
 def _format_bytes(value: int | None) -> str:
     if value is None:
         return "n/a"
+    sign = "-" if value < 0 else ""
     units = ("B", "KB", "MB", "GB")
-    size = float(value)
+    size = float(abs(value))
     unit = units[0]
     for unit in units:
         if size < 1024.0 or unit == units[-1]:
             break
         size /= 1024.0
-    return f"{size:.1f} {unit}"
+    return f"{sign}{size:.1f} {unit}"
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -103,13 +109,15 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _sample_process_tree(root_pid: int) -> dict[str, Any] | None:
+def _sample_process_tree(root_pid: int, expected_command: list[str]) -> dict[str, Any] | None:
     try:
-        root_process = psutil.Process(root_pid)
+        launch_process = psutil.Process(root_pid)
+        root_process = _select_effective_root_process(launch_process, expected_command)
         processes = [root_process, *root_process.children(recursive=True)]
     except (psutil.NoSuchProcess, psutil.Error):
         return None
     sample_time = time.perf_counter()
+    effective_root_pid = int(root_process.pid)
     root_rss = 0
     tree_rss = 0
     children: list[dict[str, Any]] = []
@@ -121,7 +129,7 @@ def _sample_process_tree(root_pid: int) -> dict[str, Any] | None:
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
         tree_rss += rss_bytes
-        if process.pid == root_pid:
+        if process.pid == effective_root_pid:
             root_rss = rss_bytes
             continue
         children.append({
@@ -133,6 +141,8 @@ def _sample_process_tree(root_pid: int) -> dict[str, Any] | None:
     children.sort(key=lambda row: int(row["rss_bytes"]), reverse=True)
     return {
         "sample_time_seconds": round(sample_time, 6),
+        "launch_pid": int(root_pid),
+        "root_pid": effective_root_pid,
         "root_rss_bytes": root_rss,
         "tree_rss_bytes": tree_rss,
         "child_process_count": len(children),
@@ -144,6 +154,8 @@ def _sample_process_tree(root_pid: int) -> dict[str, Any] | None:
 def _compact_sample(sample: dict[str, Any]) -> dict[str, Any]:
     return {
         "sample_time_seconds": sample["sample_time_seconds"],
+        "launch_pid": sample.get("launch_pid"),
+        "root_pid": sample.get("root_pid"),
         "root_rss_bytes": sample["root_rss_bytes"],
         "tree_rss_bytes": sample["tree_rss_bytes"],
         "child_process_count": sample["child_process_count"],
@@ -267,6 +279,11 @@ def _render_markdown(report: dict[str, Any]) -> str:
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
+    if psutil is None:
+        raise SystemExit(
+            "psutil is required for analysis/rss_frontier.py. "
+            "Install the analysis extras or run `python -m pip install psutil`."
+        )
     repo_root = Path(args.repo_root).resolve()
     output_dir = Path(args.output_dir).resolve() if args.output_dir else _default_output_dir(repo_root)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -316,11 +333,11 @@ def main(argv: list[str] | None = None) -> None:
     sample_interval_seconds = max(0.001, float(args.sample_interval_ms) / 1000.0)
     samples: list[dict[str, Any]] = []
     while process.poll() is None:
-        sample = _sample_process_tree(process.pid)
+        sample = _sample_process_tree(process.pid, command)
         if sample is not None:
             samples.append(sample)
         time.sleep(sample_interval_seconds)
-    final_sample = _sample_process_tree(process.pid)
+    final_sample = _sample_process_tree(process.pid, command)
     if final_sample is not None:
         samples.append(final_sample)
     stdout_text, stderr_text = process.communicate()

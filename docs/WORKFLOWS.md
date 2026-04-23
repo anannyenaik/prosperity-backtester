@@ -27,11 +27,11 @@ Monte Carlo set in one go:
 python analysis/research_pack.py fast --trader strategies/trader.py --baseline strategies/starter.py
 ```
 
-Measured on 2026-04-22 on this machine:
+Measured on 2026-04-23 on this machine:
 
-- default day-0 replay: about `2.57s`
-- default day-0 compare: about `2.03s`
-- fast pack: about `5.30s`
+- default day-0 replay: about `5.26s`
+- default day-0 compare: about `3.98s`
+- fast pack: about `9.67s`
 
 Useful trust checks during the fast loop:
 
@@ -55,9 +55,9 @@ This gives:
 - three-day compare
 - stronger Monte Carlo than the fast loop, still trimmed for local iteration
 
-Measured on 2026-04-22 on this machine:
+Measured on 2026-04-23 on this machine:
 
-- validation pack: about `17.78s`
+- validation pack: about `28.11s`
 
 ## Heavy forensic loop
 
@@ -89,11 +89,9 @@ The helper benchmarks each requested day separately and reports:
 - dashboard build time
 - bundle write time
 
-The current slowest replay day is still day `0`, with about:
-
-- `1.410s` in the market session
-- `0.729s` in replay-row compaction
-- `1.059s` in bundle write work
+Rerun this helper locally before using any exact replay-phase timings in docs or
+reviews. The tracked headline proof for this pass lives in the benchmark
+reports, not in a fixed replay-profile snapshot.
 
 ## Monte Carlo
 
@@ -108,27 +106,27 @@ Review mean, median, P05, expected shortfall, drawdown and limit breaches. The
 dashboard path bands are computed from all sessions. Saved sample runs are
 preview-capped examples for qualitative inspection only in light mode.
 
-Measured on 2026-04-22 on the tracked `250`-tick fixture:
+Measured on 2026-04-23 on the tracked `250`-tick fixture:
 
-- quick light, `64/8`, `1` worker: about `1.40s`
-- quick light, `64/8`, `4` workers: about `1.14s`
-- quick light, `64/8`, `8` workers: about `1.28s`
-- default light, `100/10`, `1` worker: about `1.94s`
-- default light, `100/10`, `4` workers: about `1.32s`
-- default light, `100/10`, `8` workers: about `1.32s`
-- heavy light, `192/16`, `1` worker: about `3.36s`
-- heavy light, `192/16`, `8` workers: about `1.83s`
-- ceiling light, `768/24`, `8` workers: about `3.37s`
+- quick light, `64/8`, `1` worker: about `2.92s`
+- quick light, `64/8`, `4` workers: about `2.13s`
+- quick light, `64/8`, `8` workers: about `2.09s`
+- default light, `100/10`, `1` worker: about `3.95s`
+- default light, `100/10`, `4` workers: about `2.52s`
+- default light, `100/10`, `8` workers: about `2.28s`
+- heavy light, `192/16`, `1` worker: about `6.84s`
+- heavy light, `192/16`, `8` workers: about `3.08s`
+- ceiling light, `768/24`, `8` workers: about `6.41s`
 
 Backend guidance is now simple:
 
-- use `streaming` for normal research work
-- use `classic` when you want a parity fallback against full replay materialisation
+- use `streaming` for the default path-band-first architecture
+- use `classic` when you want a parity fallback or a fresh local timing check against replay-style materialisation
 - use `rust` only for explicit backend experiments
 
 On the fresh realistic-trader rerun in
-`backtests/_final_backend_current_local`, `streaming` won `5` of the `7`
-measured cells, `classic` won `2`, and `rust` won none.
+`backtests/_final_backend_current_local`, `classic` won `4` of the `7`
+measured cells, `streaming` won `3`, and `rust` won none.
 
 ## Sweep
 

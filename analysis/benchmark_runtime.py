@@ -11,7 +11,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 try:
     import psutil
@@ -98,6 +98,42 @@ def _case_output(case_name: str, output_root: Path) -> Path:
     return output_root / "cases" / case_name
 
 
+def _expected_command_tail(command: object) -> tuple[str, ...]:
+    if not isinstance(command, (list, tuple)) or len(command) < 2:
+        return ()
+    return tuple(str(token) for token in command[1:])
+
+
+def _cmdline_matches_expected(cmdline: Sequence[str] | None, expected_tail: Sequence[str]) -> bool:
+    if not cmdline or not expected_tail:
+        return False
+    return tuple(str(token) for token in cmdline[1:]) == tuple(str(token) for token in expected_tail)
+
+
+def _select_effective_root_process(root_process, expected_command: object):
+    expected_tail = _expected_command_tail(expected_command)
+    if not expected_tail:
+        return root_process
+    matches = []
+    with contextlib.suppress(psutil.Error, OSError, AttributeError):
+        if _cmdline_matches_expected(root_process.cmdline(), expected_tail):
+            matches.append(root_process)
+    with contextlib.suppress(psutil.Error, OSError, AttributeError):
+        descendants = root_process.children(recursive=True)
+        for candidate in descendants:
+            with contextlib.suppress(psutil.Error, OSError, AttributeError):
+                if _cmdline_matches_expected(candidate.cmdline(), expected_tail):
+                    matches.append(candidate)
+    if matches:
+        def sort_key(candidate) -> tuple[int, int]:
+            with contextlib.suppress(psutil.Error, OSError, AttributeError):
+                return (int(candidate.memory_info().rss), int(candidate.pid))
+            return (0, int(getattr(candidate, "pid", 0)))
+
+        return max(matches, key=sort_key)
+    return root_process
+
+
 def _sample_process_tree_memory(process: subprocess.Popen[str]) -> dict[str, int | None]:
     if psutil is None:
         return {
@@ -107,7 +143,8 @@ def _sample_process_tree_memory(process: subprocess.Popen[str]) -> dict[str, int
         }
     with contextlib.suppress(psutil.Error):
         root = psutil.Process(process.pid)
-        processes = [root, *root.children(recursive=True)]
+        effective_root = _select_effective_root_process(root, process.args)
+        processes = [effective_root, *effective_root.children(recursive=True)]
         process_rss = 0
         tree_rss = 0
         peak_children = max(0, len(processes) - 1)
@@ -115,7 +152,7 @@ def _sample_process_tree_memory(process: subprocess.Popen[str]) -> dict[str, int
             with contextlib.suppress(psutil.Error):
                 rss = int(candidate.memory_info().rss)
                 tree_rss += rss
-                if candidate.pid == process.pid:
+                if candidate.pid == effective_root.pid:
                     process_rss = rss
         return {
             "peak_process_rss_bytes": process_rss,

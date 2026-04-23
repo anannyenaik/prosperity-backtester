@@ -1,7 +1,7 @@
 {
-  "audited_on": "2026-04-22",
+  "audited_on": "2026-04-23",
   "repo": {
-    "git_commit": "3adcc01ca88b006b3af07b263cfea4a335a72b1b",
+    "git_commit": "2724491da4b6006d42f1e8fc66a3d167476c0a9e",
     "git_dirty": true,
     "git_branch": "main"
   },
@@ -15,258 +15,355 @@
     "architecture": "backtests/_final_architecture_current_local/architecture_bakeoff.json"
   },
   "caveats": [
-    "All results are fresh dirty-worktree local evidence from this clone.",
-    "There is no separate clean exact-same-worktree historical throughput baseline retained for the final diagnostics-only worktree state in this clone.",
+    "All results were captured from a dirty worktree in this clone before the proof refresh and analysis-layer fixes were committed.",
+    "This clone still does not retain a separate clean exact-same-worktree historical throughput baseline for the current diagnostics state.",
     "The Chris Roberts comparison is same-machine and matched on a shared no-op trader plus tick budget, but it is not full semantic parity.",
     "The shared-memory result is a transport microbenchmark only, not end-to-end Monte Carlo proof.",
-    "The RSS frontier probe adds diagnostics and process sampling overhead, so use it for memory shape, not for headline throughput."
+    "The RSS frontier probe now unwraps Windows launcher processes correctly for parent-versus-worker attribution and should be used for memory shape, not headline throughput."
   ],
   "current_local": {
     "storage": {
       "replay_light": {
-        "bundle_size_bytes": 1364258,
+        "bundle_size_bytes": 1364158,
         "file_count": 6,
         "output_dir": "D:\\Programming\\prosperity-backtester\\backtests\\_final_output_current_local\\replay_light"
       },
       "replay_full": {
-        "bundle_size_bytes": 1992949,
+        "bundle_size_bytes": 1992849,
         "file_count": 12,
         "output_dir": "D:\\Programming\\prosperity-backtester\\backtests\\_final_output_current_local\\replay_full"
       },
       "mc_light": {
-        "bundle_size_bytes": 819912,
+        "bundle_size_bytes": 819812,
         "file_count": 6,
         "output_dir": "D:\\Programming\\prosperity-backtester\\backtests\\_final_output_current_local\\mc_light"
       },
       "mc_full": {
-        "bundle_size_bytes": 5159319,
+        "bundle_size_bytes": 5159223,
         "file_count": 18,
         "output_dir": "D:\\Programming\\prosperity-backtester\\backtests\\_final_output_current_local\\mc_full"
       }
     },
     "runtime": {
       "replay_day0_light": {
-        "elapsed_seconds": 2.57,
-        "peak_tree_rss_bytes": 164548608,
+        "elapsed_seconds": 5.259,
+        "peak_tree_rss_bytes": 171585536,
         "size_bytes": 21148197,
         "file_count": 6
       },
       "compare_day0_light": {
-        "elapsed_seconds": 2.027,
-        "peak_tree_rss_bytes": 184082432,
+        "elapsed_seconds": 3.98,
+        "peak_tree_rss_bytes": 183652352,
         "size_bytes": 12083,
         "file_count": 3
       },
       "pack_fast": {
-        "elapsed_seconds": 5.299,
-        "peak_tree_rss_bytes": 405331968,
-        "size_bytes": 21771803,
+        "elapsed_seconds": 9.667,
+        "peak_tree_rss_bytes": 391458816,
+        "size_bytes": 21771812,
         "file_count": 17
       },
       "pack_validation": {
-        "elapsed_seconds": 17.783,
-        "peak_tree_rss_bytes": 755470336,
-        "size_bytes": 61823066,
+        "elapsed_seconds": 28.105,
+        "peak_tree_rss_bytes": 685330432,
+        "size_bytes": 61823064,
         "file_count": 17
       },
       "mc_quick_light_w1": {
-        "elapsed_seconds": 1.402,
-        "peak_tree_rss_bytes": 82989056,
-        "size_bytes": 2369650,
+        "elapsed_seconds": 2.924,
+        "peak_tree_rss_bytes": 86773760,
+        "size_bytes": 2369647,
         "file_count": 6
       },
-      "mc_quick_light_w4": {
-        "elapsed_seconds": 1.138,
-        "peak_tree_rss_bytes": 213950464,
+      "mc_quick_light_w2": {
+        "elapsed_seconds": 2.5,
+        "peak_tree_rss_bytes": 137814016,
         "size_bytes": 2369648,
         "file_count": 6
       },
+      "mc_quick_light_w4": {
+        "elapsed_seconds": 2.128,
+        "peak_tree_rss_bytes": 212283392,
+        "size_bytes": 2369650,
+        "file_count": 6
+      },
       "mc_quick_light_w8": {
-        "elapsed_seconds": 1.282,
-        "peak_tree_rss_bytes": 368652288,
-        "size_bytes": 2369651,
+        "elapsed_seconds": 2.087,
+        "peak_tree_rss_bytes": 361455616,
+        "size_bytes": 2369646,
         "file_count": 6
       },
       "mc_default_light_w1": {
-        "elapsed_seconds": 1.936,
-        "peak_tree_rss_bytes": 99258368,
+        "elapsed_seconds": 3.952,
+        "peak_tree_rss_bytes": 95420416,
         "size_bytes": 2900929,
         "file_count": 6
       },
+      "mc_default_light_w2": {
+        "elapsed_seconds": 3.245,
+        "peak_tree_rss_bytes": 148185088,
+        "size_bytes": 2900916,
+        "file_count": 6
+      },
       "mc_default_light_w4": {
-        "elapsed_seconds": 1.32,
-        "peak_tree_rss_bytes": 222928896,
-        "size_bytes": 2900932,
+        "elapsed_seconds": 2.52,
+        "peak_tree_rss_bytes": 215179264,
+        "size_bytes": 2900933,
         "file_count": 6
       },
       "mc_default_light_w8": {
-        "elapsed_seconds": 1.321,
-        "peak_tree_rss_bytes": 371884032,
-        "size_bytes": 2900938,
+        "elapsed_seconds": 2.278,
+        "peak_tree_rss_bytes": 374460416,
+        "size_bytes": 2900929,
         "file_count": 6
       },
       "mc_heavy_light_w1": {
-        "elapsed_seconds": 3.362,
-        "peak_tree_rss_bytes": 140963840,
-        "size_bytes": 4439845,
+        "elapsed_seconds": 6.838,
+        "peak_tree_rss_bytes": 135884800,
+        "size_bytes": 4439852,
         "file_count": 6
       },
       "mc_heavy_light_w8": {
-        "elapsed_seconds": 1.83,
-        "peak_tree_rss_bytes": 390127616,
-        "size_bytes": 4439849,
+        "elapsed_seconds": 3.082,
+        "peak_tree_rss_bytes": 376422400,
+        "size_bytes": 4439848,
         "file_count": 6
       },
       "mc_ceiling_light_w8": {
-        "elapsed_seconds": 3.37,
-        "peak_tree_rss_bytes": 437788672,
-        "size_bytes": 6645972,
+        "elapsed_seconds": 6.405,
+        "peak_tree_rss_bytes": 431517696,
+        "size_bytes": 6645976,
         "file_count": 6
       },
       "mc_default_full_w1": {
-        "elapsed_seconds": 3.302,
-        "peak_tree_rss_bytes": 134045696,
-        "size_bytes": 25175707,
+        "elapsed_seconds": 6.8,
+        "peak_tree_rss_bytes": 133230592,
+        "size_bytes": 25175713,
         "file_count": 122
       }
     },
     "retained_output": {
       "mc_default_light_w8": {
-        "bundle_size_bytes": 2900938,
+        "bundle_size_bytes": 2900929,
         "file_count": 6,
         "top_dashboard_sections": [
           {
             "component": "monteCarlo",
-            "json_bytes": 1560167
+            "schema_path": "$.monteCarlo",
+            "writer_path": "prosperity_backtester.reports.build_dashboard_payload",
+            "json_bytes": 1560167,
+            "estimated_object_size_bytes": 5887206,
+            "entry_count": 5
           },
           {
             "component": "monteCarlo.sampleRuns",
-            "json_bytes": 1243393
+            "schema_path": "$.monteCarlo.sampleRuns",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 1243393,
+            "estimated_object_size_bytes": 4624029,
+            "row_count": 10
           },
           {
             "component": "monteCarlo.pathBands",
-            "json_bytes": 308931
+            "schema_path": "$.monteCarlo.pathBands",
+            "writer_path": "prosperity_backtester.reports.finalize_path_band_accumulator",
+            "json_bytes": 308931,
+            "estimated_object_size_bytes": 1228092,
+            "entry_count": 4
           },
           {
             "component": "monteCarlo.sampleRuns.fills",
-            "json_bytes": 283252
+            "schema_path": "$.monteCarlo.sampleRuns[*].fills",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 283252,
+            "estimated_object_size_bytes": 1206974,
+            "storage_encoding": "row_table_v1",
+            "row_count": 1200,
+            "column_count": 25
           },
           {
             "component": "monteCarlo.sampleRuns.orderIntent",
-            "json_bytes": 257141
+            "schema_path": "$.monteCarlo.sampleRuns[*].orderIntent",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 257141,
+            "estimated_object_size_bytes": 939090,
+            "storage_encoding": "row_table_v1",
+            "row_count": 1200,
+            "column_count": 27
           },
           {
             "component": "monteCarlo.sampleRuns.fairValueSeries",
-            "json_bytes": 223022
+            "schema_path": "$.monteCarlo.sampleRuns[*].fairValueSeries",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 223022,
+            "estimated_object_size_bytes": 678749,
+            "storage_encoding": "row_table_v1",
+            "row_count": 1200,
+            "column_count": 14
           },
           {
             "component": "monteCarlo.sampleRuns.behaviourSeries",
-            "json_bytes": 177112
+            "schema_path": "$.monteCarlo.sampleRuns[*].behaviourSeries",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 177112,
+            "estimated_object_size_bytes": 654724,
+            "storage_encoding": "row_table_v1",
+            "row_count": 1200,
+            "column_count": 24
           },
           {
             "component": "monteCarlo.sampleRuns.pnlSeries",
-            "json_bytes": 144331
+            "schema_path": "$.monteCarlo.sampleRuns[*].pnlSeries",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 144331,
+            "estimated_object_size_bytes": 548200,
+            "storage_encoding": "row_table_v1",
+            "row_count": 1200,
+            "column_count": 12
           }
         ],
         "phase_rss_bytes": {
-          "before_reporting_rss_bytes": 97677312,
+          "before_reporting_rss_bytes": 96399360,
           "sample_row_compaction": {
-            "elapsed_seconds": 0.059929,
-            "rss_before_bytes": 97677312,
-            "rss_after_bytes": 116834304,
-            "rss_delta_bytes": 19156992,
-            "rss_peak_bytes": 116838400
+            "elapsed_seconds": 0.09757,
+            "rss_before_bytes": 96399360,
+            "rss_after_bytes": 115515392,
+            "rss_delta_bytes": 19116032,
+            "rss_peak_bytes": 115515392
           },
           "dashboard_build": {
-            "elapsed_seconds": 0.006614,
-            "rss_before_bytes": 109756416,
-            "rss_after_bytes": 114442240,
-            "rss_delta_bytes": 4685824,
-            "rss_peak_bytes": 114442240
+            "elapsed_seconds": 0.010134,
+            "rss_before_bytes": 115654656,
+            "rss_after_bytes": 120430592,
+            "rss_delta_bytes": 4775936,
+            "rss_peak_bytes": 120434688
           },
           "bundle_write": {
-            "elapsed_seconds": 0.219134,
-            "rss_before_bytes": 114442240,
-            "rss_after_bytes": 126619648,
-            "rss_delta_bytes": 12177408,
-            "rss_peak_bytes": 126619648
+            "elapsed_seconds": 0.407499,
+            "rss_before_bytes": 120430592,
+            "rss_after_bytes": 126001152,
+            "rss_delta_bytes": 5570560,
+            "rss_peak_bytes": 132067328
           }
         }
       },
       "mc_ceiling_light_w8": {
-        "bundle_size_bytes": 6645972,
+        "bundle_size_bytes": 6645976,
         "file_count": 6,
         "top_dashboard_sections": [
           {
             "component": "monteCarlo",
-            "json_bytes": 3342494
+            "schema_path": "$.monteCarlo",
+            "writer_path": "prosperity_backtester.reports.build_dashboard_payload",
+            "json_bytes": 3342494,
+            "estimated_object_size_bytes": 12611862,
+            "entry_count": 5
           },
           {
             "component": "monteCarlo.sampleRuns",
-            "json_bytes": 2986485
+            "schema_path": "$.monteCarlo.sampleRuns",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 2986485,
+            "estimated_object_size_bytes": 11085517,
+            "row_count": 24
           },
           {
             "component": "monteCarlo.sampleRuns.fills",
-            "json_bytes": 680250
+            "schema_path": "$.monteCarlo.sampleRuns[*].fills",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 680250,
+            "estimated_object_size_bytes": 2892590,
+            "storage_encoding": "row_table_v1",
+            "row_count": 2880,
+            "column_count": 25
           },
           {
             "component": "monteCarlo.sampleRuns.orderIntent",
-            "json_bytes": 616955
+            "schema_path": "$.monteCarlo.sampleRuns[*].orderIntent",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 616955,
+            "estimated_object_size_bytes": 2249230,
+            "storage_encoding": "row_table_v1",
+            "row_count": 2880,
+            "column_count": 27
           },
           {
             "component": "monteCarlo.sampleRuns.fairValueSeries",
-            "json_bytes": 534751
+            "schema_path": "$.monteCarlo.sampleRuns[*].fairValueSeries",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 534751,
+            "estimated_object_size_bytes": 1626005,
+            "storage_encoding": "row_table_v1",
+            "row_count": 2880,
+            "column_count": 14
           },
           {
             "component": "monteCarlo.sampleRuns.behaviourSeries",
-            "json_bytes": 424652
+            "schema_path": "$.monteCarlo.sampleRuns[*].behaviourSeries",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 424652,
+            "estimated_object_size_bytes": 1566700,
+            "storage_encoding": "row_table_v1",
+            "row_count": 2880,
+            "column_count": 24
           },
           {
             "component": "monteCarlo.sampleRuns.pnlSeries",
-            "json_bytes": 346573
+            "schema_path": "$.monteCarlo.sampleRuns[*].pnlSeries",
+            "writer_path": "prosperity_backtester.reports._sample_run_payload",
+            "json_bytes": 346573,
+            "estimated_object_size_bytes": 1312336,
+            "storage_encoding": "row_table_v1",
+            "row_count": 2880,
+            "column_count": 12
           },
           {
             "component": "monteCarlo.pathBands",
-            "json_bytes": 302699
+            "schema_path": "$.monteCarlo.pathBands",
+            "writer_path": "prosperity_backtester.reports.finalize_path_band_accumulator",
+            "json_bytes": 302699,
+            "estimated_object_size_bytes": 1284092,
+            "entry_count": 4
           }
         ],
         "phase_rss_bytes": {
-          "before_reporting_rss_bytes": 247595008,
+          "before_reporting_rss_bytes": 250777600,
           "sample_row_compaction": {
-            "elapsed_seconds": 0.139249,
-            "rss_before_bytes": 247595008,
-            "rss_after_bytes": 293474304,
-            "rss_delta_bytes": 45879296,
-            "rss_peak_bytes": 293474304
+            "elapsed_seconds": 0.229475,
+            "rss_before_bytes": 250777600,
+            "rss_after_bytes": 296443904,
+            "rss_delta_bytes": 45666304,
+            "rss_peak_bytes": 296443904
           },
           "dashboard_build": {
-            "elapsed_seconds": 0.020103,
-            "rss_before_bytes": 293707776,
-            "rss_after_bytes": 305197056,
-            "rss_delta_bytes": 11489280,
-            "rss_peak_bytes": 305201152
+            "elapsed_seconds": 0.030424,
+            "rss_before_bytes": 206495744,
+            "rss_after_bytes": 218124288,
+            "rss_delta_bytes": 11628544,
+            "rss_peak_bytes": 218124288
           },
           "bundle_write": {
-            "elapsed_seconds": 0.52329,
-            "rss_before_bytes": 305197056,
-            "rss_after_bytes": 332222464,
-            "rss_delta_bytes": 27025408,
-            "rss_peak_bytes": 332226560
+            "elapsed_seconds": 1.056226,
+            "rss_before_bytes": 218107904,
+            "rss_after_bytes": 242200576,
+            "rss_delta_bytes": 24092672,
+            "rss_peak_bytes": 244850688
           }
         }
       }
     },
     "rss_frontier": {
-      "tree_peak_bytes": 435429376,
-      "parent_peak_bytes": 289701888,
-      "before_reporting_rss_bytes": 250892288,
-      "reporting_peak_bytes": 287653888,
-      "worker_total_rss_at_tree_peak_bytes": 291237888,
+      "tree_peak_bytes": 424001536,
+      "parent_peak_bytes": 296443904,
+      "parent_rss_at_tree_peak_bytes": 144093184,
+      "before_reporting_rss_bytes": 250707968,
+      "reporting_peak_bytes": 296370176,
+      "worker_total_rss_at_tree_peak_bytes": 279908352,
       "worker_count_at_tree_peak": 8,
-      "worker_rss_min_at_tree_peak_bytes": 35512320,
-      "worker_rss_max_at_tree_peak_bytes": 36851712,
-      "parent_transient_before_reporting_bytes": 38809600,
-      "reporting_transient_before_reporting_bytes": 36761600,
+      "worker_rss_min_at_tree_peak_bytes": 34168832,
+      "worker_rss_max_at_tree_peak_bytes": 36683776,
+      "parent_transient_before_reporting_bytes": 45735936,
+      "reporting_transient_before_reporting_bytes": 45662208,
       "tree_peak_phase": "execution",
       "latest_chunk_before_tree_peak": {
         "accumulated_result_count": 768,
@@ -276,245 +373,245 @@
         "chunk_result_count": 48,
         "chunk_sampled_result_count": 1,
         "event": "chunk_output_received",
-        "perf_counter_seconds": 660027.460159,
-        "pid": 14028
+        "perf_counter_seconds": 671749.013134,
+        "pid": 45668
       }
     },
     "backend": {
       "live_v9_default_w1": {
         "streaming": {
-          "best_elapsed_seconds": 4.039,
-          "peak_tree_rss_bytes": 90308608,
-          "output_size_bytes": 1548337
+          "best_elapsed_seconds": 7.478,
+          "peak_tree_rss_bytes": 91545600,
+          "output_size_bytes": 1548339
         },
         "classic": {
-          "best_elapsed_seconds": 4.106,
-          "peak_tree_rss_bytes": 92446720,
-          "output_size_bytes": 1547114
+          "best_elapsed_seconds": 7.437,
+          "peak_tree_rss_bytes": 90730496,
+          "output_size_bytes": 1547107
         },
         "rust": {
-          "best_elapsed_seconds": 4.98,
-          "peak_tree_rss_bytes": 96976896,
-          "output_size_bytes": 1547950
+          "best_elapsed_seconds": 9.056,
+          "peak_tree_rss_bytes": 97153024,
+          "output_size_bytes": 1547968
         }
       },
       "live_v9_default_w8": {
         "streaming": {
-          "best_elapsed_seconds": 1.894,
-          "peak_tree_rss_bytes": 376578048,
-          "output_size_bytes": 1548348
+          "best_elapsed_seconds": 2.679,
+          "peak_tree_rss_bytes": 358064128,
+          "output_size_bytes": 1548354
         },
         "classic": {
-          "best_elapsed_seconds": 1.948,
-          "peak_tree_rss_bytes": 372158464,
-          "output_size_bytes": 1547124
+          "best_elapsed_seconds": 2.65,
+          "peak_tree_rss_bytes": 356814848,
+          "output_size_bytes": 1547126
         },
         "rust": {
-          "best_elapsed_seconds": 2.561,
-          "peak_tree_rss_bytes": 357318656,
+          "best_elapsed_seconds": 3.541,
+          "peak_tree_rss_bytes": 356130816,
           "output_size_bytes": 1547946
         }
       },
       "live_v9_heavy_w8": {
         "streaming": {
-          "best_elapsed_seconds": 2.639,
-          "peak_tree_rss_bytes": 382005248,
-          "output_size_bytes": 2269009
+          "best_elapsed_seconds": 3.77,
+          "peak_tree_rss_bytes": 376070144,
+          "output_size_bytes": 2268997
         },
         "classic": {
-          "best_elapsed_seconds": 2.689,
-          "peak_tree_rss_bytes": 389365760,
-          "output_size_bytes": 2266870
+          "best_elapsed_seconds": 3.893,
+          "peak_tree_rss_bytes": 381526016,
+          "output_size_bytes": 2266880
         },
         "rust": {
-          "best_elapsed_seconds": 3.264,
-          "peak_tree_rss_bytes": 381571072,
-          "output_size_bytes": 2264137
+          "best_elapsed_seconds": 4.732,
+          "peak_tree_rss_bytes": 380428288,
+          "output_size_bytes": 2264138
         }
       },
       "main_default_w8": {
         "streaming": {
-          "best_elapsed_seconds": 1.749,
-          "peak_tree_rss_bytes": 365735936,
-          "output_size_bytes": 1845113
+          "best_elapsed_seconds": 2.451,
+          "peak_tree_rss_bytes": 357175296,
+          "output_size_bytes": 1845119
         },
         "classic": {
-          "best_elapsed_seconds": 1.691,
-          "peak_tree_rss_bytes": 367296512,
-          "output_size_bytes": 1842801
+          "best_elapsed_seconds": 2.378,
+          "peak_tree_rss_bytes": 357040128,
+          "output_size_bytes": 1842800
         },
         "rust": {
-          "best_elapsed_seconds": 2.432,
-          "peak_tree_rss_bytes": 330506240,
-          "output_size_bytes": 1839171
+          "best_elapsed_seconds": 3.237,
+          "peak_tree_rss_bytes": 345042944,
+          "output_size_bytes": 1839179
         }
       },
       "main_heavy_w8": {
         "streaming": {
-          "best_elapsed_seconds": 2.264,
-          "peak_tree_rss_bytes": 365051904,
-          "output_size_bytes": 2693096
+          "best_elapsed_seconds": 3.194,
+          "peak_tree_rss_bytes": 369344512,
+          "output_size_bytes": 2693091
         },
         "classic": {
-          "best_elapsed_seconds": 2.332,
-          "peak_tree_rss_bytes": 370294784,
-          "output_size_bytes": 2689409
+          "best_elapsed_seconds": 3.109,
+          "peak_tree_rss_bytes": 370683904,
+          "output_size_bytes": 2689411
         },
         "rust": {
-          "best_elapsed_seconds": 3.161,
-          "peak_tree_rss_bytes": 367513600,
-          "output_size_bytes": 2684181
+          "best_elapsed_seconds": 4.311,
+          "peak_tree_rss_bytes": 365993984,
+          "output_size_bytes": 2684193
         }
       },
       "r2_stateful_default_w8": {
         "streaming": {
-          "best_elapsed_seconds": 1.798,
-          "peak_tree_rss_bytes": 366628864,
+          "best_elapsed_seconds": 2.47,
+          "peak_tree_rss_bytes": 350404608,
           "output_size_bytes": 1719699
         },
         "classic": {
-          "best_elapsed_seconds": 1.808,
-          "peak_tree_rss_bytes": 368201728,
-          "output_size_bytes": 1717891
+          "best_elapsed_seconds": 2.517,
+          "peak_tree_rss_bytes": 351698944,
+          "output_size_bytes": 1717904
         },
         "rust": {
-          "best_elapsed_seconds": 2.419,
-          "peak_tree_rss_bytes": 341860352,
-          "output_size_bytes": 1716506
+          "best_elapsed_seconds": 3.564,
+          "peak_tree_rss_bytes": 345378816,
+          "output_size_bytes": 1716508
         }
       },
       "r2_stateful_heavy_w8": {
         "streaming": {
-          "best_elapsed_seconds": 2.383,
-          "peak_tree_rss_bytes": 371642368,
-          "output_size_bytes": 2512207
+          "best_elapsed_seconds": 3.441,
+          "peak_tree_rss_bytes": 368779264,
+          "output_size_bytes": 2512205
         },
         "classic": {
-          "best_elapsed_seconds": 1.932,
-          "peak_tree_rss_bytes": 370724864,
+          "best_elapsed_seconds": 3.564,
+          "peak_tree_rss_bytes": 370798592,
           "output_size_bytes": 2509264
         },
         "rust": {
-          "best_elapsed_seconds": 3.101,
-          "peak_tree_rss_bytes": 367468544,
-          "output_size_bytes": 2506247
+          "best_elapsed_seconds": 4.483,
+          "peak_tree_rss_bytes": 366043136,
+          "output_size_bytes": 2506254
         }
       }
     },
     "reference": {
-      "ceiling_1000_100_w1": {
-        "speedup_ratio": 15.755,
-        "current_elapsed_seconds": 15.242,
-        "reference_elapsed_seconds": 240.145,
-        "current_peak_tree_rss_bytes": 344621056,
-        "reference_peak_tree_rss_bytes": 149716992,
-        "current_output_size_bytes": 6870942,
-        "reference_output_size_bytes": 9689023,
-        "current_file_count": 5,
-        "reference_file_count": 410
-      },
-      "ceiling_1000_100_w2": {
-        "speedup_ratio": 13.958,
-        "current_elapsed_seconds": 9.658,
-        "reference_elapsed_seconds": 134.81,
-        "current_peak_tree_rss_bytes": 399523840,
-        "reference_peak_tree_rss_bytes": 188145664,
-        "current_output_size_bytes": 6870937,
-        "reference_output_size_bytes": 9689023,
-        "current_file_count": 5,
-        "reference_file_count": 410
-      },
-      "ceiling_1000_100_w4": {
-        "speedup_ratio": 11.848,
-        "current_elapsed_seconds": 6.283,
-        "reference_elapsed_seconds": 74.441,
-        "current_peak_tree_rss_bytes": 476422144,
-        "reference_peak_tree_rss_bytes": 265052160,
-        "current_output_size_bytes": 6870941,
-        "reference_output_size_bytes": 9689023,
-        "current_file_count": 5,
-        "reference_file_count": 410
-      },
-      "ceiling_1000_100_w8": {
-        "speedup_ratio": 10.266,
-        "current_elapsed_seconds": 5.152,
-        "reference_elapsed_seconds": 52.892,
-        "current_peak_tree_rss_bytes": 586465280,
-        "reference_peak_tree_rss_bytes": 408281088,
-        "current_output_size_bytes": 6870942,
-        "reference_output_size_bytes": 9689023,
-        "current_file_count": 5,
-        "reference_file_count": 410
-      },
       "default_100_10_w1": {
-        "speedup_ratio": 18.086,
-        "current_elapsed_seconds": 1.321,
-        "reference_elapsed_seconds": 23.892,
-        "current_peak_tree_rss_bytes": 77402112,
-        "reference_peak_tree_rss_bytes": 138842112,
+        "speedup_ratio": 14.746,
+        "current_elapsed_seconds": 2.796,
+        "reference_elapsed_seconds": 41.229,
+        "current_peak_tree_rss_bytes": 73359360,
+        "reference_peak_tree_rss_bytes": 131317760,
         "current_output_size_bytes": 928162,
         "reference_output_size_bytes": 1519971,
         "current_file_count": 5,
         "reference_file_count": 50
       },
       "default_100_10_w2": {
-        "speedup_ratio": 9.235,
-        "current_elapsed_seconds": 1.492,
-        "reference_elapsed_seconds": 13.779,
-        "current_peak_tree_rss_bytes": 135766016,
-        "reference_peak_tree_rss_bytes": 176406528,
-        "current_output_size_bytes": 928160,
+        "speedup_ratio": 8.025,
+        "current_elapsed_seconds": 2.723,
+        "reference_elapsed_seconds": 21.853,
+        "current_peak_tree_rss_bytes": 132112384,
+        "reference_peak_tree_rss_bytes": 170618880,
+        "current_output_size_bytes": 928158,
         "reference_output_size_bytes": 1519971,
         "current_file_count": 5,
         "reference_file_count": 50
       },
       "default_100_10_w4": {
-        "speedup_ratio": 6.274,
-        "current_elapsed_seconds": 1.308,
-        "reference_elapsed_seconds": 8.207,
-        "current_peak_tree_rss_bytes": 212553728,
-        "reference_peak_tree_rss_bytes": 251224064,
+        "speedup_ratio": 6.58,
+        "current_elapsed_seconds": 1.958,
+        "reference_elapsed_seconds": 12.884,
+        "current_peak_tree_rss_bytes": 216948736,
+        "reference_peak_tree_rss_bytes": 248844288,
         "current_output_size_bytes": 928158,
         "reference_output_size_bytes": 1519971,
         "current_file_count": 5,
         "reference_file_count": 50
       },
       "default_100_10_w8": {
-        "speedup_ratio": 4.177,
-        "current_elapsed_seconds": 1.477,
-        "reference_elapsed_seconds": 6.17,
-        "current_peak_tree_rss_bytes": 356651008,
-        "reference_peak_tree_rss_bytes": 399912960,
-        "current_output_size_bytes": 928160,
+        "speedup_ratio": 4.797,
+        "current_elapsed_seconds": 2.021,
+        "reference_elapsed_seconds": 9.694,
+        "current_peak_tree_rss_bytes": 363773952,
+        "reference_peak_tree_rss_bytes": 407932928,
+        "current_output_size_bytes": 928165,
         "reference_output_size_bytes": 1519971,
         "current_file_count": 5,
         "reference_file_count": 50
+      },
+      "ceiling_1000_100_w1": {
+        "speedup_ratio": 18.35,
+        "current_elapsed_seconds": 21.626,
+        "reference_elapsed_seconds": 396.83,
+        "current_peak_tree_rss_bytes": 345894912,
+        "reference_peak_tree_rss_bytes": 142737408,
+        "current_output_size_bytes": 6870952,
+        "reference_output_size_bytes": 9689023,
+        "current_file_count": 5,
+        "reference_file_count": 410
+      },
+      "ceiling_1000_100_w2": {
+        "speedup_ratio": 14.301,
+        "current_elapsed_seconds": 13.859,
+        "reference_elapsed_seconds": 198.194,
+        "current_peak_tree_rss_bytes": 390332416,
+        "reference_peak_tree_rss_bytes": 182636544,
+        "current_output_size_bytes": 6870944,
+        "reference_output_size_bytes": 9689023,
+        "current_file_count": 5,
+        "reference_file_count": 410
+      },
+      "ceiling_1000_100_w4": {
+        "speedup_ratio": 12.425,
+        "current_elapsed_seconds": 8.525,
+        "reference_elapsed_seconds": 105.919,
+        "current_peak_tree_rss_bytes": 438730752,
+        "reference_peak_tree_rss_bytes": 261222400,
+        "current_output_size_bytes": 6870943,
+        "reference_output_size_bytes": 9689023,
+        "current_file_count": 5,
+        "reference_file_count": 410
+      },
+      "ceiling_1000_100_w8": {
+        "speedup_ratio": 9.594,
+        "current_elapsed_seconds": 6.568,
+        "reference_elapsed_seconds": 63.016,
+        "current_peak_tree_rss_bytes": 585920512,
+        "reference_peak_tree_rss_bytes": 421449728,
+        "current_output_size_bytes": 6870942,
+        "reference_output_size_bytes": 9689023,
+        "current_file_count": 5,
+        "reference_file_count": 410
       }
     },
     "architecture": {
-      "bundle_size_bytes": 3349504,
+      "bundle_size_bytes": 3349505,
       "serialisation": {
-        "json_size_bytes": 3349504,
+        "json_size_bytes": 3349505,
         "msgpack_size_bytes": 2388492,
-        "json_encode_seconds": 0.069035,
-        "msgpack_encode_seconds": 0.012625,
-        "json_decode_seconds": 0.053648,
-        "msgpack_decode_seconds": 0.027612
+        "json_encode_seconds": 0.107407,
+        "msgpack_encode_seconds": 0.019244,
+        "json_decode_seconds": 0.091897,
+        "msgpack_decode_seconds": 0.024159
       },
       "transport": {
-        "payload_bytes": 3349504,
+        "payload_bytes": 3349505,
         "workers": 8,
         "tasks": 32,
-        "pickle_seconds": 0.718,
-        "shared_memory_seconds": 0.599,
-        "speedup_ratio": 1.199,
+        "pickle_seconds": 0.631,
+        "shared_memory_seconds": 0.583,
+        "speedup_ratio": 1.081,
         "checksums_match": true
       }
     }
   },
   "decisions": {
     "default_architecture": "streaming_first_python",
-    "classic_backend_status": "keep_as_real_parity_and_fallback",
+    "classic_backend_status": "keep_as_real_parity_and_performance_option",
     "rust_backend_status": "keep_experimental_only",
     "optional_binary_sidecars": "do_not_land_now",
     "shared_memory_transport": "interesting_microbenchmark_only_not_landing",

@@ -53,7 +53,7 @@ Architecture bake-off on a real dashboard payload:
 python analysis/architecture_bakeoff.py --output-dir backtests/architecture_bakeoff --bundle backtests/runtime_benchmark/cases/mc_ceiling_light_w8/dashboard.json --workers 8 --tasks 32 --repeats 3
 ```
 
-The tracked machine-readable summary for the audited 2026-04-22 local state
+The tracked machine-readable summary for the audited 2026-04-23 local state
 lives in [`docs/BENCHMARK_SUMMARY.json`](BENCHMARK_SUMMARY.json).
 
 ## What the harness records
@@ -112,7 +112,7 @@ The benchmark suite is intentionally split by purpose.
 
 ## Current proof surface
 
-Fresh current-local headline artefacts from this dirty worktree:
+Tracked current-local headline artefacts captured from a dirty worktree:
 
 - `backtests/_final_output_current_local`
 - `backtests/_final_runtime_current_local`
@@ -132,7 +132,8 @@ proof:
 
 Important caveats:
 
-- all results are fresh dirty-worktree local evidence from this clone
+- all results were captured from a dirty worktree in this clone before this
+  proof refresh was committed
 - this clone does not retain a separate clean exact-same-worktree historical
   throughput baseline for the final diagnostics-only state
 - the Chris Roberts comparison is same-machine and matched on a shared no-op
@@ -142,7 +143,7 @@ Important caveats:
 
 ## Current storage results
 
-Measured on 2026-04-22 with
+Measured on 2026-04-23 with
 `backtests/_final_output_current_local/benchmark_report.json`:
 
 | Case | Size | Files | What it proves |
@@ -159,25 +160,25 @@ current local headline runtime report for this pass.
 
 | Case | Elapsed | Peak tree RSS | Output bytes | Files |
 | --- | ---: | ---: | ---: | ---: |
-| `replay_day0_light` | `2.570s` | `156.9 MB` | `21,148,197` | `6` |
-| `compare_day0_light` | `2.027s` | `175.6 MB` | `12,083` | `3` |
-| `pack_fast` | `5.299s` | `386.6 MB` | `21,771,803` | `17` |
-| `pack_validation` | `17.783s` | `720.5 MB` | `61,823,066` | `17` |
-| `mc_quick_light_w8` | `1.282s` | `351.6 MB` | `2,369,651` | `6` |
-| `mc_default_light_w8` | `1.321s` | `354.7 MB` | `2,900,938` | `6` |
-| `mc_heavy_light_w8` | `1.830s` | `372.1 MB` | `4,439,849` | `6` |
-| `mc_ceiling_light_w8` | `3.370s` | `417.5 MB` | `6,645,972` | `6` |
-| `mc_default_full_w1` | `3.302s` | `127.8 MB` | `25,175,707` | `122` |
+| `replay_day0_light` | `5.259s` | `163.6 MB` | `21,148,197` | `6` |
+| `compare_day0_light` | `3.980s` | `175.1 MB` | `12,083` | `3` |
+| `pack_fast` | `9.667s` | `373.3 MB` | `21,771,812` | `17` |
+| `pack_validation` | `28.105s` | `653.6 MB` | `61,823,064` | `17` |
+| `mc_quick_light_w8` | `2.087s` | `344.7 MB` | `2,369,646` | `6` |
+| `mc_default_light_w8` | `2.278s` | `357.1 MB` | `2,900,929` | `6` |
+| `mc_heavy_light_w8` | `3.082s` | `359.0 MB` | `4,439,848` | `6` |
+| `mc_ceiling_light_w8` | `6.405s` | `411.5 MB` | `6,645,976` | `6` |
+| `mc_default_full_w1` | `6.800s` | `127.1 MB` | `25,175,713` | `122` |
 
 For the tracked `250`-tick Monte Carlo fixture, the fresh current-local scaling
 table is:
 
 | Case | 1 worker | 2 workers | 4 workers | 8 workers |
 | --- | ---: | ---: | ---: | ---: |
-| MC quick light (64 sess) | `1.402s` | `1.370s` | `1.138s` | `1.282s` |
-| MC default light (100 sess) | `1.936s` | `1.564s` | `1.320s` | `1.321s` |
-| MC heavy light (192 sess) | `3.362s` | `n/a` | `n/a` | `1.830s` |
-| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `3.370s` |
+| MC quick light (64 sess) | `2.924s` | `2.500s` | `2.128s` | `2.087s` |
+| MC default light (100 sess) | `3.952s` | `3.245s` | `2.520s` | `2.278s` |
+| MC heavy light (192 sess) | `6.838s` | `n/a` | `n/a` | `3.082s` |
+| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `6.405s` |
 
 ## Current retained-output and reporting ownership
 
@@ -186,7 +187,7 @@ The fresh attribution pass is tracked in
 
 For `mc_default_light_w8`:
 
-- bundle bytes: `2,900,938`
+- bundle bytes: `2,900,929`
 - file count: `6`
 - top dashboard owners:
   - `monteCarlo.sampleRuns`: `1,243,393`
@@ -194,14 +195,14 @@ For `mc_default_light_w8`:
   - `monteCarlo.sampleRuns.fills`: `283,252`
   - `monteCarlo.sampleRuns.orderIntent`: `257,141`
 - reporting-phase RSS:
-  - before reporting: `93.1 MB`
-  - sampled-row compaction peak: `111.4 MB`
-  - dashboard build peak: `109.1 MB`
-  - bundle write peak: `120.8 MB`
+  - before reporting: `91.9 MB`
+  - sampled-row compaction peak: `110.2 MB`
+  - dashboard build peak: `114.9 MB`
+  - bundle write peak: `125.9 MB`
 
 For `mc_ceiling_light_w8`:
 
-- bundle bytes: `6,645,972`
+- bundle bytes: `6,645,976`
 - file count: `6`
 - top dashboard owners:
   - `monteCarlo.sampleRuns`: `2,986,485`
@@ -209,10 +210,10 @@ For `mc_ceiling_light_w8`:
   - `monteCarlo.sampleRuns.orderIntent`: `616,955`
   - `monteCarlo.sampleRuns.fairValueSeries`: `534,751`
 - reporting-phase RSS:
-  - before reporting: `236.1 MB`
-  - sampled-row compaction peak: `279.9 MB`
-  - dashboard build peak: `291.1 MB`
-  - bundle write peak: `316.8 MB`
+  - before reporting: `239.2 MB`
+  - sampled-row compaction peak: `282.7 MB`
+  - dashboard build peak: `208.0 MB`
+  - bundle write peak: `233.5 MB`
 
 The retained-byte frontier is now narrow and explicit:
 
@@ -230,14 +231,15 @@ The fresh high-resolution ceiling probe is tracked in
 
 Headline numbers for `mc_ceiling_light_w8`:
 
-- tree peak: `415.3 MB`
-- parent peak: `276.3 MB`
+- tree peak: `404.4 MB`
+- parent peak: `282.7 MB`
 - peak phase: `execution`
 - workers alive at tree peak: `8`
-- worker RSS at tree peak: `33.9 MB` to `35.1 MB`
-- live worker RSS at tree peak: `277.7 MB`
-- parent execution transient above the pre-reporting baseline: `37.0 MB`
-- reporting transient above the pre-reporting baseline: `35.1 MB`
+- worker RSS at tree peak: `32.6 MB` to `35.0 MB`
+- live worker RSS at tree peak: `266.9 MB`
+- parent RSS at tree peak: `137.4 MB`
+- parent execution transient above the pre-reporting baseline: `43.6 MB`
+- reporting transient above the pre-reporting baseline: `43.5 MB`
 - latest chunk before the peak:
   - payload pickle size: `1,477,700` bytes
   - path-band accumulator pickle size: `927,287` bytes
@@ -258,18 +260,18 @@ backend story mixed but stable:
 
 | Case | Streaming | Classic | Rust | Winner |
 | --- | ---: | ---: | ---: | --- |
-| `live_v9_default_w1` | `4.039s` | `4.106s` | `4.980s` | `streaming` |
-| `live_v9_default_w8` | `1.894s` | `1.948s` | `2.561s` | `streaming` |
-| `live_v9_heavy_w8` | `2.639s` | `2.689s` | `3.264s` | `streaming` |
-| `main_default_w8` | `1.749s` | `1.691s` | `2.432s` | `classic` |
-| `main_heavy_w8` | `2.264s` | `2.332s` | `3.161s` | `streaming` |
-| `r2_stateful_default_w8` | `1.798s` | `1.808s` | `2.419s` | `streaming` |
-| `r2_stateful_heavy_w8` | `2.383s` | `1.932s` | `3.101s` | `classic` |
+| `live_v9_default_w1` | `7.478s` | `7.437s` | `9.056s` | `classic` |
+| `live_v9_default_w8` | `2.679s` | `2.650s` | `3.541s` | `classic` |
+| `live_v9_heavy_w8` | `3.770s` | `3.893s` | `4.732s` | `streaming` |
+| `main_default_w8` | `2.451s` | `2.378s` | `3.237s` | `classic` |
+| `main_heavy_w8` | `3.194s` | `3.109s` | `4.311s` | `classic` |
+| `r2_stateful_default_w8` | `2.470s` | `2.517s` | `3.564s` | `streaming` |
+| `r2_stateful_heavy_w8` | `3.441s` | `3.564s` | `4.483s` | `streaming` |
 
 The honest current position is:
 
-- `streaming` remains the best overall default
-- `classic` is still a real parity and performance fallback
+- `streaming` remains the design default, but not the raw-speed leader in this rerun
+- `classic` is a real parity and performance option, not a slower fallback
 - `rust` stayed slower than both Python backends in every measured cell
 
 ## External reference result
@@ -289,8 +291,8 @@ The fresh same-machine rerun in
 Warm same-machine runtime results still favoured this repo in every measured
 cell:
 
-- default `100/10`: `4.18x` to `18.09x` faster
-- ceiling `1000/100`: `10.27x` to `15.76x` faster
+- default `100/10`: `4.80x` to `14.75x` faster
+- ceiling `1000/100`: `9.59x` to `18.35x` faster
 
 The retained-output story also held:
 
@@ -310,14 +312,14 @@ So the honest external claim is:
 
 The fresh architecture bake-off used
 `backtests/_final_runtime_current_local/cases/mc_ceiling_light_w8/dashboard.json`,
-`3,349,504` bytes on disk.
+`3,349,505` bytes on disk.
 
 Results:
 
-- MessagePack payload: `2,388,492` bytes versus `3,349,504` for compact JSON
-- MessagePack encode: `0.0126s` versus JSON `0.0690s`
-- MessagePack decode: `0.0276s` versus JSON `0.0536s`
-- shared-memory transport: `0.599s` versus pickled transport `0.718s`
+- MessagePack payload: `2,388,492` bytes versus `3,349,505` for compact JSON
+- MessagePack encode: `0.0192s` versus JSON `0.1074s`
+- MessagePack decode: `0.0242s` versus JSON `0.0919s`
+- shared-memory transport: `0.583s` versus pickled transport `0.631s`
 
 That keeps MessagePack alive as the only still-plausible contract-boundary
 architecture move. Shared memory is no longer negative on the microbenchmark,

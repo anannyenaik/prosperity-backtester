@@ -144,7 +144,8 @@ python analysis/profile_replay.py strategies/trader.py --compare-trader strategi
 
 The proof split is now explicit.
 
-Fresh current-local headline artefacts from this dirty worktree are:
+The tracked current-local headline artefacts were captured from a dirty
+worktree:
 
 - `backtests/_final_output_current_local`
 - `backtests/_final_runtime_current_local`
@@ -158,25 +159,25 @@ Earlier `_audit_*` and `_final_runtime_after_*` outputs remain useful
 exploration artefacts from this pass, but they are not the headline proof. This
 clone does not retain a separate clean exact-same-worktree historical
 throughput baseline for the final diagnostics-only state, so the timings below
-are fresh current-local results with a dirty-worktree caveat.
+carry that recorded dirty-worktree caveat.
 
 Current local branch-loop timings from
 `backtests/_final_runtime_current_local/benchmark_report.json`:
 
-- default day-0 replay: about `2.57s`
-- default day-0 compare: about `2.03s`
-- fast pack: about `5.30s`
-- validation pack: about `17.78s`
+- default day-0 replay: about `5.26s`
+- default day-0 compare: about `3.98s`
+- fast pack: about `9.67s`
+- validation pack: about `28.11s`
 
 Tracked `250`-tick Monte Carlo throughput table from the fresh current-local
 runtime rerun:
 
 | Case | 1 worker | 2 workers | 4 workers | 8 workers |
 | --- | ---: | ---: | ---: | ---: |
-| MC quick light (64 sess) | `1.402s` | `1.370s` | `1.138s` | `1.282s` |
-| MC default light (100 sess) | `1.936s` | `1.564s` | `1.320s` | `1.321s` |
-| MC heavy light (192 sess) | `3.362s` | `n/a` | `n/a` | `1.830s` |
-| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `3.370s` |
+| MC quick light (64 sess) | `2.924s` | `2.500s` | `2.128s` | `2.087s` |
+| MC default light (100 sess) | `3.952s` | `3.245s` | `2.520s` | `2.278s` |
+| MC heavy light (192 sess) | `6.838s` | `n/a` | `n/a` | `3.082s` |
+| MC ceiling light (768 sess) | `n/a` | `n/a` | `n/a` | `6.405s` |
 
 Current retained-output sizes from
 `backtests/_final_output_current_local/benchmark_report.json`:
@@ -189,18 +190,18 @@ Current retained-output sizes from
 Fresh current-local ceiling probes now make the remaining gap precise rather
 than fuzzy. The sharp remaining blocker is still execution-phase process-tree
 RSS, not parent-only reporting RSS or dashboard assembly. The
-`analysis/rss_frontier.py` probe recorded a `415.3 MB` tree peak on
-`mc_ceiling_light_w8`, with `8` workers alive, about `277.7 MB` of live worker
-RSS at the peak, about `37 MB` of parent execution transient, and a lower
-reporting peak of `274.3 MB`.
+corrected `analysis/rss_frontier.py` probe recorded a `404.4 MB` tree peak on
+`mc_ceiling_light_w8`, with `8` workers alive, about `266.9 MB` of live worker
+RSS at the tree peak, about `137.4 MB` of parent RSS at the tree peak, a later
+parent peak of `282.7 MB`, and about `43.6 MB` of parent execution transient.
 
-The default streaming Monte Carlo backend remains the recommended choice. Use
-`--mc-backend classic` for parity checks and realistic cells where it still
-wins. The compiled `rust` backend remains available for explicit backend
-experiments only. On the fresh realistic-trader rerun in
-`backtests/_final_backend_current_local`, `streaming` won `5` of the `7`
-measured cells, `classic` won `main_default_w8` and
-`r2_stateful_heavy_w8`, and `rust` won none.
+The default streaming Monte Carlo backend remains the design default, but the
+fresh realistic-trader rerun is now more mixed than the earlier proof text
+said. Use `--mc-backend classic` for parity checks and fresh local timing
+checks as well as replay-style materialisation. The compiled `rust` backend
+remains available for explicit backend experiments only. On the fresh
+realistic-trader rerun in `backtests/_final_backend_current_local`, `classic`
+won `4` of the `7` measured cells, `streaming` won `3`, and `rust` won none.
 
 Forensic work is still deliberate full-profile work and should be treated as a minute-scale task rather than part of the normal branch loop.
 
@@ -209,17 +210,17 @@ Forensic work is still deliberate full-profile work and should be treated as a m
 Compared with simpler replay backtesters, this repo now keeps a short daily loop through day-0 defaults, `--match-trades`, per-day PnL output, `--open`, and `serve --latest`, while still carrying compare, optimisation, calibration, scenarios and Round 2 research.
 
 Compared with Monte Carlo-first repos, this repo now makes the practical path
-faster and the proof layer clearer. The default `streaming` backend remains
-the best overall default, `classic` is the explicit parity path and sometimes
-slightly faster realistic-trader fallback, and `rust` stays available as an
-explicit experiment rather than a recommendation. Chris Roberts' repo remains
+faster and the proof layer clearer. The default `streaming` backend remains the
+design default, `classic` is now a co-equal parity and performance option, and
+`rust` stays available as an explicit experiment rather than a recommendation.
+Chris Roberts' repo remains
 the strongest narrow tutorial-round Monte Carlo reference, but this repo is
 the stronger end-to-end research platform on the locally available evidence.
 On the fresh same-machine shared no-op trader benchmark in
 `backtests/_final_reference_current_local`, with matched `250`-tick sessions, matched
 `100/10` and `1000/100` session or sample tiers, and matched `1`, `2`, `4`,
-and `8` worker settings, this repo was `4.18x` to `18.09x` faster on the
-default cases and `10.27x` to `15.76x` faster on the ceiling cases,
+and `8` worker settings, this repo was `4.80x` to `14.75x` faster on the
+default cases and `9.59x` to `18.35x` faster on the ceiling cases,
 wrote fewer retained bytes in every measured cell, and used far fewer files
 (`5` versus `50` or `410`). On the smaller `100/10` cases it also used less
 RSS, but Chris still kept the lighter RSS on the `1000/100` ceiling cases.

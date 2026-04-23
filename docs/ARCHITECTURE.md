@@ -196,7 +196,7 @@ one-off report format.
 - The React dashboard is the primary review surface. The static dashboard is
   only a fallback.
 
-## 2026-04-22 Architecture Decision
+## 2026-04-23 Architecture Decision
 
 The best current architecture remains the existing streaming-first Python
 design, not a broad rewrite.
@@ -209,8 +209,9 @@ That recommendation is based on five measured facts from this pass:
   the ceiling-RSS gap did not
 - fresh current-local ceiling probes put the global RSS peak in execution-phase
   process-tree RSS rather than parent-only reporting RSS
-- the fresh realistic-trader backend rerun kept `streaming` ahead overall,
-  `classic` alive as a real fallback, and `rust` behind in every cell
+- the fresh realistic-trader backend rerun kept the two Python backends alive,
+  with `classic` winning `4` of `7` measured cells, `streaming` winning `3`,
+  and `rust` behind in every cell
 - the refreshed architecture bake-off kept MessagePack attractive at the
   contract boundary, while shared memory showed only a small transport-only win
   rather than a compelling end-to-end case
@@ -219,8 +220,8 @@ That recommendation is based on five measured facts from this pass:
 
 | Option | What it could win | What killed it in this pass | Verdict |
 | --- | --- | --- | --- |
-| Keep the current streaming-first Python architecture | Best end-to-end balance of throughput, install simplicity, trader compatibility and workflow breadth | Nothing killed it. It still leads overall on the audited evidence. | Keep and refine |
-| Add lower-copy shared-memory worker transport | Could cut worker payload duplication and some scheduling overhead | The fresh bake-off improved the transport microbenchmark to `0.599s` versus `0.718s`, but that is still only a `1.199x` transport-only result with no end-to-end runtime or RSS proof. | Keep experimental only |
+| Keep the current streaming-first Python architecture | Best end-to-end balance of throughput, install simplicity, trader compatibility and workflow breadth | Nothing killed the overall design, but the backend choice inside it is now more mixed than the earlier proof text claimed. | Keep and refine |
+| Add lower-copy shared-memory worker transport | Could cut worker payload duplication and some scheduling overhead | The fresh bake-off improved the transport microbenchmark to `0.583s` versus `0.631s`, but that is still only a `1.081x` transport-only result with no end-to-end runtime or RSS proof. | Keep experimental only |
 | Add optional binary serialisation or sidecars while keeping JSON canonical | Could reduce retained bytes and serialisation cost without breaking the dashboard contract | MessagePack was materially smaller and faster on the real payload, but it still does not solve the remaining execution RSS problem. A default JSON-plus-sidecar write would also increase retained bytes. | Still alive, but not landing now |
 | Make Rust the default backend | Could improve ceiling throughput if native compute dominated | Same-code reruns kept `rust` slower than both `streaming` and `classic` on every realistic case, while also adding Cargo and subprocess complexity. | Keep explicit only |
 | Targeted C, C++ or Rust acceleration for one kernel | Could help if one pure compute kernel dominated | Current hot spots are still mixed Python control flow, trader boundary calls, execution logic, reporting and write overhead. No isolated kernel was shown to justify crossing the native boundary yet. | Not justified now |
@@ -231,15 +232,15 @@ That recommendation is based on five measured facts from this pass:
 
 The best architecture from here is:
 
-- keep the current streaming-first Python engine
-- keep `classic` as the parity backend
+- keep the current Python engine with `streaming` as the design default
+- keep `classic` as a co-equal parity and performance backend
 - keep `rust` as an explicit experiment rather than a default
 - keep JSON as the canonical dashboard bundle contract
 - do not land optional binary sidecars yet
 - only revisit binary sidecars if retained bytes or load-time matter more than
   ceiling RSS
 - defer shared-memory transport unless an end-to-end rerun shows materially
-  more than the current `1.199x` transport-only gain
+  more than the current `1.081x` transport-only gain
 
 That is a stronger answer than "native code is not needed". The reason is not
 taste. The reason is that the measured bottlenecks are still a mixed system
@@ -252,7 +253,7 @@ The remaining frontier is now narrower:
 
 - lower execution-phase tree RSS in wide-worker Monte Carlo
 - lower the parent-side chunk receive and merge transient that still adds about
-  `37 MB` around the ceiling peak
+  `44 MB` around the ceiling peak
 - lower retained bytes in sampled preview series and exact fill retention
 - lower parent-side sampled-row compaction growth without pretending that it is
   the global peak
