@@ -4,17 +4,18 @@ Result: on the matched same-machine Chris Roberts no-op benchmark, this repo
 wins runtime, retained bytes and retained file count, but still loses
 ceiling-case RSS.
 
-This page records only what the fresh 2026-04-23 local audit could prove
-against the reference repos available in this session.
+This page records only what the 2026-04-23 final audit could prove against the
+reference repos available in this session.
 
 ## Scope note
 
-The strongest fresh external proof in this pass is the same-machine Chris
-Roberts rerun from `analysis/benchmark_chris_reference.py`.
+The strongest available same-machine Chris evidence in this pass is the
+preserved audited report at:
 
-The current local artefact is:
+- `backtests/audited_baseline_2026-04-23_eafb1e4/reference/reference_benchmark.json`
 
-- `backtests/review_2026-04-23_head_refresh/reference/reference_benchmark.json`
+A fresh rerun was not possible because the exact local Chris repo path used in
+the earlier audit was no longer present.
 
 ## Short conclusion
 
@@ -33,9 +34,9 @@ Current honest conclusion:
 Chris Roberts' repo remains the highest-signal narrow Monte Carlo reference
 available locally in this pass.
 
-### What the rerun matched
+### What the audited rerun matched
 
-The same-machine rerun used:
+The preserved same-machine rerun used:
 
 - the same shared no-op trader file in both repos
 - matched `250` ticks per simulated day
@@ -129,7 +130,7 @@ throughput or retained bytes.
 The current evidence supports these claims:
 
 - this repo is ahead on same-machine runtime throughput against the strongest
-  local external reference that was rerun
+  local external reference that was preserved and audited
 - this repo is ahead on retained output bytes on the matched same-machine
   no-op benchmark
 - this repo is ahead on retained file-count efficiency

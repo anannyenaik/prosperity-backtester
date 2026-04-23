@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
         "analysis/benchmark_attribution.py",
         "analysis/benchmark_backends.py",
         "analysis/benchmark_chris_reference.py",
+        "analysis/benchmark_direct_cli.py",
         "analysis/architecture_bakeoff.py",
         "analysis/rss_frontier.py",
         "analysis/research_pack.py",

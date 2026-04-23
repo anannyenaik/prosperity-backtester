@@ -58,7 +58,8 @@ Responsibilities:
   assumptions.
 - Track cash, inventory, realised, unrealised and mark-to-market PnL.
 - Generate synthetic Monte Carlo market days.
-- Provide a default streaming Monte Carlo backend plus a classic parity backend.
+- Provide a default streaming Monte Carlo backend plus a classic parity
+  backend.
 - Emit compact per-session path metrics for Monte Carlo all-session bands
   without returning full non-sample paths.
 
@@ -86,6 +87,7 @@ Files:
 - `prosperity_backtester/__main__.py`
 - `analysis/benchmark_outputs.py`
 - `analysis/benchmark_runtime.py`
+- `analysis/benchmark_direct_cli.py`
 - `analysis/benchmark_attribution.py`
 - `analysis/benchmark_backends.py`
 - `analysis/benchmark_chris_reference.py`
@@ -101,8 +103,8 @@ Responsibilities:
   `--data`, `--merge-pnl`, `--limit`, `--print`, `--vis`, `--mc-backend` and
   `serve --latest-type`.
 - Keep CLI commands thin and reproducible.
-- Provide lightweight, reproducible bundle-size, runtime, attribution, backend,
-  reference and architecture benchmark workflows.
+- Provide lightweight, reproducible bundle-size, runtime, direct CLI,
+  attribution, backend, reference and architecture benchmark workflows.
 
 ### Reporting
 
@@ -135,7 +137,8 @@ Responsibilities:
   notes.
 - Record canonical, sidecar and debug file lists plus total bundle size in
   `manifest.json`.
-- Apply light/full storage profiles and safe retention for auto-generated runs.
+- Apply light and full storage profiles and safe retention for auto-generated
+  runs.
 
 ### Dashboard
 
@@ -191,8 +194,8 @@ one-off report format.
 - Full mode is for local debugging. It writes raw order rows, full series
   sidecars and sampled path files, but child bundles require an explicit
   `--save-child-bundles`.
-- Round 2 is modelled as scenario analysis, not as a claim about hidden website
-  mechanics.
+- Round 2 is modelled as scenario analysis, not as a claim about hidden
+  website mechanics.
 - The React dashboard is the primary review surface. The static dashboard is
   only a fallback.
 
@@ -202,7 +205,9 @@ The best current architecture remains the existing streaming-first Python
 design, not a broad rewrite.
 
 That recommendation is based on the fresh current-local proof root in
-`backtests/review_2026-04-23_head_refresh`:
+`backtests/review_2026-04-23_final_pass` plus the preserved clean external
+reference report in
+`backtests/audited_baseline_2026-04-23_eafb1e4/reference/reference_benchmark.json`:
 
 - the repo kept a strong same-machine runtime lead over the local Chris Roberts
   reference and also kept the retained-byte and retained-file lead on the
@@ -210,28 +215,28 @@ That recommendation is based on the fresh current-local proof root in
 - the remaining hard external gap is ceiling RSS, not throughput or retained
   bytes
 - fresh `5 ms` RSS-frontier reruns put the global tree peak in execution-phase
-  process-tree RSS at `399 MB` to `411 MB`, with `8` live workers contributing
-  `267 MB` to `287 MB` and the parent contributing `124 MB` to `137 MB` at the
-  exact peak
+  process-tree RSS at `413.8 MB` to `421.1 MB`, with `8` live workers
+  contributing `294.4 MB` to `301.6 MB` and the parent contributing
+  `131.7 MB` to `136.2 MB` at the exact peak
 - later parent-only peaks do still happen in `bundle_write`, but they occur
   after workers exit and therefore do not set the global tree peak
-- a Linux or WSL rerun on the same code reduced that wide-worker RSS shape, but
-  only modestly, so it changed deployment guidance rather than the default
-  architecture
+- a Linux or WSL rerun on the same code reduced that wide-worker RSS shape to
+  `390.7 MB` to `391.4 MB`, but that was still not enough to close the
+  external ceiling-RSS gap
 - the fresh realistic-trader backend rerun kept the two Python backends alive,
-  with `streaming` winning `5` of `7` measured cells, `classic` winning `2`,
-  and `rust` behind in every cell
+  with `streaming` winning `5` of `7` measured cases, `classic` winning `2`,
+  and `rust` behind in every case
 
 ## Alternatives Considered
 
 | Option | What it could win | What killed it in this pass | Verdict |
 | --- | --- | --- | --- |
-| Keep the current streaming-first Python architecture | Best end-to-end balance of throughput, install simplicity, trader compatibility and workflow breadth | Nothing killed the overall design. The fresh rerun actually strengthened the default-backend case, with `streaming` beating `classic` `5` wins to `2`. | Keep and refine |
-| Add lower-copy shared-memory worker transport | Could cut worker payload duplication and some scheduling overhead | The fresh bake-off improved the transport microbenchmark only to `0.336s` versus `0.359s`. That is a `1.069x` transport-only result with no end-to-end runtime or RSS proof. | Keep experimental only |
+| Keep the current streaming-first Python architecture | Best end-to-end balance of throughput, install simplicity, trader compatibility and workflow breadth | Nothing killed the overall design. The fresh rerun strengthened the default-backend case, with `streaming` beating `classic` `5` wins to `2`. | Keep and refine |
+| Add lower-copy shared-memory worker transport | Could cut worker payload duplication and some scheduling overhead | The fresh bake-off improved the transport microbenchmark to `0.353s` versus `0.463s`. That is a stronger `1.31x` result, but it is still transport-only evidence with no end-to-end runtime or RSS proof. | Keep experimental only |
 | Add optional binary serialisation or sidecars while keeping JSON canonical | Could reduce retained bytes and serialisation cost without breaking the dashboard contract | MessagePack was materially smaller and faster on the real payload, but it still does not solve the remaining execution RSS problem. A default JSON-plus-sidecar write would also increase retained bytes. | Still alive, but not landing now |
 | Make Rust the default backend | Could improve ceiling throughput if native compute dominated | Same-code reruns kept `rust` slower than both `streaming` and `classic` on every realistic case, while also adding Cargo and subprocess complexity. | Keep explicit only |
 | Targeted C, C++ or Rust acceleration for one kernel | Could help if one pure compute kernel dominated | Current hot spots are still mixed Python control flow, trader boundary calls, execution logic, reporting and write overhead. No isolated kernel was shown to justify crossing the native boundary yet. | Not justified now |
-| Cython or Numba | Could speed up numeric loops with lower toolchain burden than C++ | The hot path is still stateful order execution and trader interaction, not a clean vector or numeric kernel. | Not justified now |
+| Cython or Numba | Could speed up numeric loops with lower toolchain burden than C or C++ | The hot path is still stateful order execution and trader interaction, not a clean vector or numeric kernel. | Not justified now |
 | Vectorised numeric rewrite | Could help if the engine were dominated by array-friendly maths | The engine remains event-driven, branchy and trader-callback-heavy. Profiling did not show an array-shaped bottleneck. | Wrong shape for the bottleneck |
 
 ## Current Best Architecture
@@ -248,7 +253,7 @@ The best architecture from here is:
 - only revisit binary sidecars if retained bytes or load-time matter more than
   ceiling RSS
 - defer shared-memory transport unless an end-to-end rerun shows materially
-  more than the current `1.069x` transport-only gain
+  more than the current `1.31x` transport-only gain and a real RSS win
 
 That is a stronger answer than "native code is not needed". The reason is not
 taste. The reason is that the measured bottlenecks are still a mixed system
@@ -259,11 +264,11 @@ dominate.
 
 The remaining frontier is narrower than it looks:
 
-- live worker processes dominate the tree peak at about `267 MB` to `287 MB`
+- live worker processes dominate the tree peak at about `294 MB` to `302 MB`
   on the fresh `mc_ceiling_light_w8` reruns
-- the parent still contributes a real `124 MB` to `137 MB` at that same
-  moment, so the global peak is not purely "worker floor" either
-- later parent-only peaks rise to `233 MB` to `320 MB` in `bundle_write`, but
+- the parent still contributes a real `132 MB` to `136 MB` at that same
+  moment, so the global peak is not purely a worker floor either
+- later parent-only peaks rise to `234 MB` to `317 MB` in `bundle_write`, but
   those happen after workers exit and therefore do not drive the global tree
   peak
 - retained bytes are already led by sampled preview series and exact fill
@@ -278,7 +283,7 @@ but not enough to close the external gap on its own.
 Materially lowering it would require either:
 
 - a single-process native engine with thread-level parallelism that does not
-  pay a per-tick Python/native IPC cost, or
+  pay a per-tick Python or native IPC cost, or
 - a fork-first design that is not portable to Windows
 
 The current Rust engine does not satisfy the first condition. It still loses to

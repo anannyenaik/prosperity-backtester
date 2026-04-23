@@ -1,38 +1,42 @@
 {
   "audited_on": "2026-04-23",
-  "review_root": "backtests/review_2026-04-23_head_refresh",
+  "review_root": "backtests/review_2026-04-23_final_pass",
   "repo": {
-    "measured_code_commit": "eafb1e48828118334fbda391f4fec33099c39b42",
-    "measured_code_commit_clean": true,
-    "measured_branch": "main"
+    "current_head_commit": "b3f9534a815993867160f7ba247ff5957fb032f4",
+    "current_branch": "main",
+    "windows_rerun_git_commit": "b3f9534a815993867160f7ba247ff5957fb032f4",
+    "windows_rerun_git_dirty": true,
+    "wsl_rerun_git_commit": "eafb1e48828118334fbda391f4fec33099c39b42",
+    "wsl_rerun_git_dirty": true
   },
   "artefacts": {
-    "runtime": "backtests/review_2026-04-23_head_refresh/runtime/benchmark_report.json",
-    "direct_cli": "backtests/review_2026-04-23_head_refresh/direct_cli_checks/direct_cli_summary.json",
-    "storage": "backtests/review_2026-04-23_head_refresh/storage/benchmark_report.json",
-    "attribution": "backtests/review_2026-04-23_head_refresh/attribution/bundle_attribution.json",
+    "runtime": "backtests/review_2026-04-23_final_pass/runtime/benchmark_report.json",
+    "direct_cli": "backtests/review_2026-04-23_final_pass/direct_cli_checks/direct_cli_summary.json",
+    "storage": "backtests/review_2026-04-23_final_pass/storage/benchmark_report.json",
+    "attribution": "backtests/review_2026-04-23_final_pass/attribution/bundle_attribution.json",
     "rss_frontier": [
-      "backtests/review_2026-04-23_head_refresh/rss_frontier/rss_frontier_report.json",
-      "backtests/review_2026-04-23_head_refresh/rss_frontier_rerun_1/rss_frontier_report.json",
-      "backtests/review_2026-04-23_head_refresh/rss_frontier_rerun_2/rss_frontier_report.json"
+      "backtests/review_2026-04-23_final_pass/rss_frontier/rss_frontier_report.json",
+      "backtests/review_2026-04-23_final_pass/rss_frontier_rerun_1/rss_frontier_report.json",
+      "backtests/review_2026-04-23_final_pass/rss_frontier_rerun_2/rss_frontier_report.json"
     ],
-    "backend": "backtests/review_2026-04-23_head_refresh/backend/backend_benchmark.json",
-    "reference": "backtests/review_2026-04-23_head_refresh/reference/reference_benchmark.json",
-    "architecture": "backtests/review_2026-04-23_head_refresh/architecture/architecture_bakeoff.json",
+    "backend": "backtests/review_2026-04-23_final_pass/backend/backend_benchmark.json",
+    "architecture": "backtests/review_2026-04-23_final_pass/architecture/architecture_bakeoff.json",
     "deployment_shape": {
-      "wsl_runtime": "backtests/review_2026-04-23_head_refresh/wsl_runtime/benchmark_report.json",
+      "wsl_runtime": "backtests/review_2026-04-23_final_pass/wsl_runtime/benchmark_report.json",
       "wsl_rss_frontier": [
-        "backtests/review_2026-04-23_head_refresh/wsl_rss_frontier/rss_frontier_report.json",
-        "backtests/review_2026-04-23_head_refresh/wsl_rss_frontier_rerun_1/rss_frontier_report.json",
-        "backtests/review_2026-04-23_head_refresh/wsl_rss_frontier_rerun_2/rss_frontier_report.json"
+        "backtests/review_2026-04-23_final_pass/wsl_rss_frontier/rss_frontier_report.json",
+        "backtests/review_2026-04-23_final_pass/wsl_rss_frontier_rerun_1/rss_frontier_report.json",
+        "backtests/review_2026-04-23_final_pass/wsl_rss_frontier_rerun_2/rss_frontier_report.json"
       ]
-    }
+    },
+    "historical_reference": "backtests/audited_baseline_2026-04-23_eafb1e4/reference/reference_benchmark.json"
   },
   "caveats": [
-    "The measured code state was clean commit eafb1e48828118334fbda391f4fec33099c39b42. Later docs-only cleanup does not change the measured engine code.",
+    "The fresh Windows reruns record git_dirty true because the new direct CLI helper and its test registration were already present. The replay, Monte Carlo, reporting and dashboard runtime code paths still matched HEAD b3f9534a815993867160f7ba247ff5957fb032f4.",
     "The monitored runtime suite includes process-tree sampling and records one warm measured run per cell, so short-case throughput claims should be cross-checked against the direct CLI reruns in the same review root.",
-    "The WSL deployment-shape rerun used a Linux checkout but wrote bundles back to /mnt/d, so replay and compare wall times are confounded by cross-filesystem I/O and should be read as deployment-shape evidence rather than unconditional Linux throughput proof.",
-    "The Chris Roberts comparison is same-machine and matched on a shared no-op trader plus tick budget, but it is not full semantic parity.",
+    "The WSL deployment-shape reruns came from a synced Linux-filesystem checkout whose Git metadata still reported eafb1e48828118334fbda391f4fec33099c39b42 and git_dirty true, so they are deployment-shape evidence rather than clean-commit Git proof.",
+    "WSL tree RSS is still a summed RSS measure. Fork-shared pages can inflate pack-level totals, so use the targeted Monte Carlo cells and the 5 ms frontier probes for the cleanest cross-environment memory reading.",
+    "A fresh same-machine Chris Roberts rerun was not possible in this session because the exact local repo path from the earlier audited run was no longer present. The preserved audited report remains the best local external reference evidence, but it is historical rather than fresh-current.",
     "The shared-memory result is a transport microbenchmark only, not end-to-end Monte Carlo proof."
   ],
   "verdict": {
@@ -42,85 +46,87 @@
   },
   "runtime": {
     "headline_seconds": {
-      "replay_day0_light": 2.8,
-      "compare_day0_light": 2.119,
-      "pack_fast": 5.317,
-      "pack_validation": 18.522,
-      "mc_quick_light_w8": 1.23,
-      "mc_default_light_w8": 1.605,
-      "mc_heavy_light_w8": 1.944,
-      "mc_ceiling_light_w8": 3.664,
-      "mc_default_full_w1": 3.39,
-      "mc_default_full_trimmed_w1": 2.506
+      "replay_day0_light": 2.882,
+      "compare_day0_light": 2.386,
+      "pack_fast": 5.53,
+      "pack_validation": 17.931,
+      "mc_quick_light_w8": 1.252,
+      "mc_default_light_w8": 1.355,
+      "mc_heavy_light_w8": 2.023,
+      "mc_ceiling_light_w8": 3.372,
+      "mc_default_full_w1": 3.112,
+      "mc_default_full_trimmed_w1": 2.436
     },
     "headline_peak_tree_rss_bytes": {
-      "replay_day0_light": 167743488,
-      "compare_day0_light": 185163776,
-      "pack_fast": 402415616,
-      "pack_validation": 748216320,
-      "mc_quick_light_w8": 362647552,
-      "mc_default_light_w8": 372293632,
-      "mc_heavy_light_w8": 387743744,
-      "mc_ceiling_light_w8": 432640000
+      "replay_day0_light": 170729472,
+      "compare_day0_light": 182628352,
+      "pack_fast": 401817600,
+      "pack_validation": 763768832,
+      "mc_quick_light_w8": 365420544,
+      "mc_default_light_w8": 373370880,
+      "mc_heavy_light_w8": 389541888,
+      "mc_ceiling_light_w8": 438550528,
+      "mc_default_full_w1": 137191424,
+      "mc_default_full_trimmed_w1": 136511488
     },
     "monte_carlo_scaling_seconds": {
       "mc_quick_light": {
-        "workers_1": 1.622,
-        "workers_2": 1.342,
-        "workers_4": 1.42,
-        "workers_8": 1.23
+        "workers_1": 1.533,
+        "workers_2": 1.439,
+        "workers_4": 1.325,
+        "workers_8": 1.252
       },
       "mc_default_light": {
-        "workers_1": 1.977,
-        "workers_2": 1.679,
-        "workers_4": 1.507,
-        "workers_8": 1.605
+        "workers_1": 2.096,
+        "workers_2": 1.854,
+        "workers_4": 1.448,
+        "workers_8": 1.355
       },
       "mc_heavy_light": {
-        "workers_1": 3.72,
-        "workers_8": 1.944
+        "workers_1": 3.58,
+        "workers_8": 2.023
       },
       "mc_ceiling_light": {
-        "workers_8": 3.664
+        "workers_8": 3.372
       }
     }
   },
   "harness_sanity": {
     "monitored_elapsed_seconds": {
-      "replay_day0_light": 2.8,
-      "compare_day0_light": 2.119,
-      "pack_fast": 5.317,
-      "pack_validation": 18.522,
-      "mc_default_light_w8": 1.605,
-      "mc_heavy_light_w8": 1.944,
-      "mc_ceiling_light_w8": 3.664
+      "replay_day0_light": 2.882,
+      "compare_day0_light": 2.386,
+      "pack_fast": 5.53,
+      "pack_validation": 17.931,
+      "mc_default_light_w8": 1.355,
+      "mc_heavy_light_w8": 2.023,
+      "mc_ceiling_light_w8": 3.372
     },
     "direct_cli_mean_seconds": {
-      "replay_day0_light": 2.726,
-      "compare_day0_light": 2.335,
-      "pack_fast": 5.637,
-      "pack_validation": 17.156,
-      "mc_default_light_w8": 1.346,
-      "mc_heavy_light_w8": 1.77,
-      "mc_ceiling_light_w8": 3.474
+      "replay_day0_light": 2.6,
+      "compare_day0_light": 2.252,
+      "pack_fast": 5.235,
+      "pack_validation": 16.238,
+      "mc_default_light_w8": 1.323,
+      "mc_heavy_light_w8": 1.702,
+      "mc_ceiling_light_w8": 3.15
     },
     "direct_cli_vs_harness_percent_delta": {
-      "replay_day0_light": -2.6,
-      "compare_day0_light": 10.2,
-      "pack_fast": 6.0,
-      "pack_validation": -7.4,
-      "mc_default_light_w8": -16.1,
-      "mc_heavy_light_w8": -9.0,
-      "mc_ceiling_light_w8": -5.2
+      "replay_day0_light": -9.8,
+      "compare_day0_light": -5.6,
+      "pack_fast": -5.3,
+      "pack_validation": -9.4,
+      "mc_default_light_w8": -2.4,
+      "mc_heavy_light_w8": -15.9,
+      "mc_ceiling_light_w8": -6.6
     },
-    "conclusion": "The monitored harness remains credible for relative regressions, RSS and phase accounting, but the short worker-pool Monte Carlo cells are no longer close enough to treat its elapsed time as a direct CLI equivalent. Use the direct CLI spot checks for throughput headlines."
+    "conclusion": "The monitored harness remains the source of truth for relative regressions, RSS and phase accounting, but the short worker-pool Monte Carlo cells are not close enough to treat its elapsed time as a direct CLI equivalent. Use the direct CLI reruns for throughput headlines."
   },
   "storage": {
     "bundle_size_bytes": {
-      "replay_light": 1364264,
-      "replay_full": 1992955,
-      "mc_light": 819862,
-      "mc_full": 5159267
+      "replay_light": 1364238,
+      "replay_full": 1992929,
+      "mc_light": 819850,
+      "mc_full": 5159249
     },
     "file_count": {
       "replay_light": 6,
@@ -131,7 +137,7 @@
   },
   "retained_output": {
     "mc_default_light_w8": {
-      "bundle_size_bytes": 2900874,
+      "bundle_size_bytes": 2900861,
       "file_count": 6,
       "top_dashboard_sections_bytes": {
         "monteCarlo.sampleRuns": 1243393,
@@ -140,12 +146,12 @@
         "monteCarlo.sampleRuns.orderIntent": 257141
       },
       "top_file_components_bytes": {
-        "dashboard_payload": 1567139,
+        "dashboard_payload": 1567133,
         "fills_csv": 1289324
       }
     },
     "mc_ceiling_light_w8": {
-      "bundle_size_bytes": 6645906,
+      "bundle_size_bytes": 6645898,
       "file_count": 6,
       "top_dashboard_sections_bytes": {
         "monteCarlo.sampleRuns": 2986485,
@@ -154,7 +160,7 @@
         "monteCarlo.sampleRuns.fairValueSeries": 534751
       },
       "top_file_components_bytes": {
-        "dashboard_payload": 3349470,
+        "dashboard_payload": 3349466,
         "fills_csv": 3098231
       }
     },
@@ -165,11 +171,11 @@
     ]
   },
   "memory_frontier": {
-    "runtime_suite_tree_peak_bytes": 432640000,
+    "runtime_suite_tree_peak_bytes": 438550528,
     "high_resolution_tree_peak_bytes": [
-      430563328,
-      430116864,
-      418590720
+      433844224,
+      437182464,
+      441614336
     ],
     "worker_count_at_tree_peak": [
       8,
@@ -177,26 +183,26 @@
       8
     ],
     "worker_total_rss_at_tree_peak_bytes": [
-      301010944,
-      286294016,
-      279846912
+      295788544,
+      294412288,
+      301608960
     ],
     "parent_rss_at_tree_peak_bytes": [
-      129552384,
-      143822848,
-      138743808
+      138055680,
+      142770176,
+      140005376
     ],
     "later_parent_reporting_peak_bytes": [
-      335237120,
-      244617216,
-      296570880
+      245059584,
+      245067776,
+      332324864
     ],
     "top_memory_drivers": [
       "live_worker_processes",
       "parent_root_at_tree_peak",
       "reporting_write_path"
     ],
-    "conclusion": "The global ceiling peak is still execution-phase process-tree RSS, driven first by live workers and second by the parent's resident set at that same moment. Later bundle_write pressure is real but does not set the tree peak."
+    "conclusion": "The global ceiling peak is still execution-phase process-tree RSS, driven first by live workers and second by the parent resident set at that same moment. Later bundle_write pressure is real but does not set the tree peak."
   },
   "backend": {
     "wins": {
@@ -208,9 +214,9 @@
       "live_v9_default_w1": "streaming",
       "live_v9_default_w8": "classic",
       "live_v9_heavy_w8": "streaming",
-      "main_default_w8": "classic",
+      "main_default_w8": "streaming",
       "main_heavy_w8": "streaming",
-      "r2_stateful_default_w8": "streaming",
+      "r2_stateful_default_w8": "classic",
       "r2_stateful_heavy_w8": "streaming"
     },
     "guidance": {
@@ -220,6 +226,7 @@
     }
   },
   "reference": {
+    "source_report": "backtests/audited_baseline_2026-04-23_eafb1e4/reference/reference_benchmark.json",
     "default_100_10_speedup_range": {
       "min": 4.06,
       "max": 15.68
@@ -236,50 +243,64 @@
   },
   "architecture": {
     "serialisation": {
-      "json_size_bytes": 3349470,
-      "msgpack_size_bytes": 2388463,
-      "json_encode_seconds": 0.053724,
-      "msgpack_encode_seconds": 0.008493,
-      "json_decode_seconds": 0.037129,
-      "msgpack_decode_seconds": 0.008908
+      "json_size_bytes": 3349466,
+      "msgpack_size_bytes": 2388457,
+      "json_encode_seconds": 0.056403,
+      "msgpack_encode_seconds": 0.009217,
+      "json_decode_seconds": 0.040905,
+      "msgpack_decode_seconds": 0.010464
     },
     "transport": {
-      "pickle_seconds": 0.359,
-      "shared_memory_seconds": 0.336,
-      "shared_memory_speedup_ratio": 1.069
+      "pickle_seconds": 0.463,
+      "shared_memory_seconds": 0.353,
+      "shared_memory_speedup_ratio": 1.31
     },
     "decision": "Keep JSON canonical and do not land binary sidecars or shared-memory transport yet."
   },
   "deployment_shape": {
-    "recommended_environment": "For memory-sensitive wide-worker Monte Carlo runs, prefer Linux or WSL from a Linux filesystem checkout. Keep native Windows as the ordinary day-to-day development default.",
+    "recommended_environment": "For memory-sensitive or throughput-sensitive wide-worker Monte Carlo runs, prefer Linux or WSL from a Linux filesystem checkout. Keep native Windows as the simpler ordinary day-to-day development default.",
     "windows_runtime_tree_peak_bytes": {
-      "mc_default_light_w8": 372293632,
-      "mc_heavy_light_w8": 387743744,
-      "mc_ceiling_light_w8": 432640000
+      "mc_default_light_w8": 373370880,
+      "mc_heavy_light_w8": 389541888,
+      "mc_ceiling_light_w8": 438550528
     },
     "wsl_runtime_tree_peak_bytes": {
-      "mc_default_light_w8": 295698432,
-      "mc_heavy_light_w8": 318308352,
-      "mc_ceiling_light_w8": 402024448
+      "mc_default_light_w8": 290865152,
+      "mc_heavy_light_w8": 320221184,
+      "mc_ceiling_light_w8": 396349440
+    },
+    "windows_runtime_seconds": {
+      "replay_day0_light": 2.882,
+      "compare_day0_light": 2.386,
+      "mc_default_light_w8": 1.355,
+      "mc_heavy_light_w8": 2.023,
+      "mc_ceiling_light_w8": 3.372
+    },
+    "wsl_runtime_seconds": {
+      "replay_day0_light": 1.997,
+      "compare_day0_light": 1.899,
+      "mc_default_light_w8": 0.675,
+      "mc_heavy_light_w8": 1.202,
+      "mc_ceiling_light_w8": 2.853
     },
     "windows_high_resolution_tree_peak_bytes": [
-      430563328,
-      430116864,
-      418590720
+      433844224,
+      437182464,
+      441614336
     ],
     "wsl_high_resolution_tree_peak_bytes": [
-      415358976,
-      413544448,
-      413065216
+      410341376,
+      410427392,
+      409657344
     ],
-    "conclusion": "The Linux or WSL process model reduced wide-worker tree RSS and later reporting peaks on the same code, but the gain was still modest and did not erase the external ceiling-RSS gap. The cross-filesystem WSL replay and compare timings from this pass should not be read as a clean Linux throughput claim."
+    "conclusion": "The Linux or WSL process model reduced wide-worker tree RSS and improved the key same-machine Monte Carlo runtime cells on the synced code, but the gain was still modest relative to the external ceiling-RSS gap. Treat the WSL pack-level tree totals as noisy because summed Linux RSS overcounts fork-shared pages."
   },
   "decisions": {
     "default_architecture": "streaming_first_python",
     "optional_binary_sidecars": "do_not_land_now",
     "shared_memory_transport": "not_landing",
     "deeper_native_path": "not_justified",
-    "recommended_performance_environment": "linux_or_wsl_on_linux_filesystem_for_memory_sensitive_wide_worker_mc",
+    "recommended_performance_environment": "linux_or_wsl_on_linux_filesystem_for_memory_sensitive_or_throughput_sensitive_wide_worker_mc",
     "remaining_frontier": "wide-worker execution-phase ceiling RSS, especially on Windows spawn"
   }
 }
