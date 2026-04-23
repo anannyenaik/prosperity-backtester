@@ -12,6 +12,11 @@ _DASHBOARD_HTML = Path(__file__).parent.parent / "legacy_dashboard" / "dashboard
 _IGNORED_DIRS = {"node_modules", ".git", ".pytest_cache", "__pycache__", "dist"}
 
 
+def _is_hidden_bundle_path(path: Path) -> bool:
+    parent_name = path.parent.name.lower()
+    return parent_name.startswith("_warmup_") or "__warmup_" in parent_name
+
+
 def _provenance_metadata(manifest: dict) -> dict:
     provenance = manifest.get("provenance") if isinstance(manifest.get("provenance"), dict) else {}
     runtime = provenance.get("runtime") if isinstance(provenance.get("runtime"), dict) else {}
@@ -180,6 +185,8 @@ def _find_bundles(root: Path, max_depth: int = 4) -> list[dict]:
     root = root.resolve()
     candidate_meta = _registry_candidates(root, max_depth)
     for path in _walk_candidates(root, "dashboard.json", max_depth):
+        if _is_hidden_bundle_path(path):
+            continue
         try:
             rel = path.relative_to(root)
         except ValueError:
@@ -189,6 +196,8 @@ def _find_bundles(root: Path, max_depth: int = 4) -> list[dict]:
         candidate_meta.setdefault(str(rel).replace("\\", "/"), {})
     for rel_path, seed in sorted(candidate_meta.items()):
         path = (root / rel_path).resolve()
+        if _is_hidden_bundle_path(path):
+            continue
         if not path.is_file():
             continue
         metadata = _dashboard_metadata(path)

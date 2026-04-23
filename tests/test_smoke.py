@@ -89,6 +89,29 @@ def test_server_bundle_discovery_includes_explicit_child_bundles(tmp_path):
     ]
 
 
+def test_server_bundle_discovery_skips_internal_warmup_bundles(tmp_path):
+    warmup = tmp_path / '_warmup_current'
+    real = tmp_path / '2026-04-23_12-00-00_replay_review'
+    warmup.mkdir()
+    real.mkdir()
+    (warmup / 'dashboard.json').write_text('{}', encoding='utf-8')
+    (warmup / 'manifest.json').write_text(
+        '{"run_type":"replay","run_name":"warmup","created_at":"2026-04-23T12:05:00+00:00"}',
+        encoding='utf-8',
+    )
+    (real / 'dashboard.json').write_text('{}', encoding='utf-8')
+    (real / 'manifest.json').write_text(
+        '{"run_type":"replay","run_name":"review","created_at":"2026-04-23T12:00:00+00:00"}',
+        encoding='utf-8',
+    )
+
+    bundles = _find_bundles(tmp_path)
+
+    assert [bundle['path'] for bundle in bundles] == [
+        '2026-04-23_12-00-00_replay_review/dashboard.json',
+    ]
+
+
 def test_server_bundle_discovery_uses_registry_metadata_when_manifest_is_minimal(tmp_path):
     backtests = tmp_path / 'backtests'
     run_dir = backtests / '2026-04-21_12-00-00_replay_tiny'
@@ -127,6 +150,39 @@ def test_server_bundle_discovery_uses_registry_metadata_when_manifest_is_minimal
     assert bundle['gitDirty'] is True
     assert bundle['profile'] == 'light'
     assert bundle['finalPnl'] == 12.5
+
+
+def test_server_bundle_discovery_skips_registry_seeded_warmup_bundles(tmp_path):
+    backtests = tmp_path / 'backtests'
+    warmup_dir = backtests / '_warmup_current'
+    review_dir = backtests / '2026-04-23_12-00-00_replay_review'
+    warmup_dir.mkdir(parents=True)
+    review_dir.mkdir(parents=True)
+    (warmup_dir / 'dashboard.json').write_text('{}', encoding='utf-8')
+    (review_dir / 'dashboard.json').write_text('{}', encoding='utf-8')
+    (backtests / 'run_registry.jsonl').write_text(
+        '\n'.join([
+            json.dumps({
+                'run_name': 'warmup',
+                'run_type': 'replay',
+                'created_at': '2026-04-23T12:05:00+00:00',
+                'dashboard_json': str((warmup_dir / 'dashboard.json').resolve()),
+            }),
+            json.dumps({
+                'run_name': 'review',
+                'run_type': 'replay',
+                'created_at': '2026-04-23T12:00:00+00:00',
+                'dashboard_json': str((review_dir / 'dashboard.json').resolve()),
+            }),
+        ]) + '\n',
+        encoding='utf-8',
+    )
+
+    bundles = _find_bundles(tmp_path)
+
+    assert [bundle['path'] for bundle in bundles] == [
+        'backtests/2026-04-23_12-00-00_replay_review/dashboard.json',
+    ]
 
 
 def test_prune_old_auto_runs_keeps_named_directories(tmp_path):
