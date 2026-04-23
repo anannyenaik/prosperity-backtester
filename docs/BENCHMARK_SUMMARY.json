@@ -1,96 +1,126 @@
 {
   "audited_on": "2026-04-23",
-  "review_root": "backtests/review_2026-04-23_final",
+  "review_root": "backtests/review_2026-04-23_head_refresh",
   "repo": {
-    "headline_commit": "d041e8bc4e2b94b7fe0664330df142a88f174569",
-    "headline_commit_clean": true,
-    "rss_frontier_reruns_git_dirty": true
+    "measured_code_commit": "eafb1e48828118334fbda391f4fec33099c39b42",
+    "measured_code_commit_clean": true,
+    "measured_branch": "main"
   },
   "artefacts": {
-    "runtime": "backtests/review_2026-04-23_final/runtime/benchmark_report.json",
-    "storage": "backtests/review_2026-04-23_final/storage/benchmark_report.json",
-    "attribution": "backtests/review_2026-04-23_final/attribution/bundle_attribution.json",
+    "runtime": "backtests/review_2026-04-23_head_refresh/runtime/benchmark_report.json",
+    "direct_cli": "backtests/review_2026-04-23_head_refresh/direct_cli_checks/direct_cli_summary.json",
+    "storage": "backtests/review_2026-04-23_head_refresh/storage/benchmark_report.json",
+    "attribution": "backtests/review_2026-04-23_head_refresh/attribution/bundle_attribution.json",
     "rss_frontier": [
-      "backtests/review_2026-04-23_final/rss_frontier/rss_frontier_report.json",
-      "backtests/review_2026-04-23_final/rss_frontier_rerun_1/rss_frontier_report.json",
-      "backtests/review_2026-04-23_final/rss_frontier_rerun_2/rss_frontier_report.json"
+      "backtests/review_2026-04-23_head_refresh/rss_frontier/rss_frontier_report.json",
+      "backtests/review_2026-04-23_head_refresh/rss_frontier_rerun_1/rss_frontier_report.json",
+      "backtests/review_2026-04-23_head_refresh/rss_frontier_rerun_2/rss_frontier_report.json"
     ],
-    "backend": "backtests/review_2026-04-23_final/backend/backend_benchmark.json",
-    "reference": "backtests/review_2026-04-23_final/reference/reference_benchmark.json",
-    "architecture": "backtests/review_2026-04-23_final/architecture/architecture_bakeoff.json"
+    "backend": "backtests/review_2026-04-23_head_refresh/backend/backend_benchmark.json",
+    "reference": "backtests/review_2026-04-23_head_refresh/reference/reference_benchmark.json",
+    "architecture": "backtests/review_2026-04-23_head_refresh/architecture/architecture_bakeoff.json",
+    "deployment_shape": {
+      "wsl_runtime": "backtests/review_2026-04-23_head_refresh/wsl_runtime/benchmark_report.json",
+      "wsl_rss_frontier": [
+        "backtests/review_2026-04-23_head_refresh/wsl_rss_frontier/rss_frontier_report.json",
+        "backtests/review_2026-04-23_head_refresh/wsl_rss_frontier_rerun_1/rss_frontier_report.json",
+        "backtests/review_2026-04-23_head_refresh/wsl_rss_frontier_rerun_2/rss_frontier_report.json"
+      ]
+    }
   },
   "caveats": [
-    "This clone does not retain a separate clean exact-same-worktree historical throughput baseline for the final diagnostics-only state.",
-    "The core runtime, storage, attribution, backend, reference and architecture artefacts were captured on clean commit d041e8bc4e2b94b7fe0664330df142a88f174569.",
-    "The rss_frontier reruns were captured immediately after the parent-versus-reporting RSS wording fix in analysis/rss_frontier.py, so those reports record git_dirty true.",
+    "The measured code state was clean commit eafb1e48828118334fbda391f4fec33099c39b42. Later docs-only cleanup does not change the measured engine code.",
+    "The monitored runtime suite includes process-tree sampling and records one warm measured run per cell, so short-case throughput claims should be cross-checked against the direct CLI reruns in the same review root.",
+    "The WSL deployment-shape rerun used a Linux checkout but wrote bundles back to /mnt/d, so replay and compare wall times are confounded by cross-filesystem I/O and should be read as deployment-shape evidence rather than unconditional Linux throughput proof.",
     "The Chris Roberts comparison is same-machine and matched on a shared no-op trader plus tick budget, but it is not full semantic parity.",
     "The shared-memory result is a transport microbenchmark only, not end-to-end Monte Carlo proof."
   ],
   "verdict": {
-    "overall": "strongest overall local Prosperity research platform on the audited evidence",
+    "overall": "strongest overall local Prosperity research platform on the current local evidence",
     "all_axis_performance_crown": false,
-    "blocking_gap": "wide-worker ceiling RSS still trails the strongest local external reference"
+    "blocking_gap": "wide-worker ceiling RSS still trails the strongest local external reference on the matched 1000/100 cases"
   },
   "runtime": {
     "headline_seconds": {
-      "replay_day0_light": 2.917,
-      "compare_day0_light": 2.207,
-      "pack_fast": 5.203,
-      "pack_validation": 17.646,
-      "mc_quick_light_w8": 1.242,
-      "mc_default_light_w8": 1.417,
-      "mc_heavy_light_w8": 1.769,
-      "mc_ceiling_light_w8": 3.435,
-      "mc_default_full_w1": 3.089,
-      "mc_default_full_trimmed_w1": 2.465
+      "replay_day0_light": 2.8,
+      "compare_day0_light": 2.119,
+      "pack_fast": 5.317,
+      "pack_validation": 18.522,
+      "mc_quick_light_w8": 1.23,
+      "mc_default_light_w8": 1.605,
+      "mc_heavy_light_w8": 1.944,
+      "mc_ceiling_light_w8": 3.664,
+      "mc_default_full_w1": 3.39,
+      "mc_default_full_trimmed_w1": 2.506
     },
     "headline_peak_tree_rss_bytes": {
-      "replay_day0_light": 175542272,
-      "compare_day0_light": 183828480,
-      "pack_fast": 405504000,
-      "pack_validation": 708673536,
-      "mc_quick_light_w8": 360738816,
-      "mc_default_light_w8": 368381952,
-      "mc_heavy_light_w8": 386015232,
-      "mc_ceiling_light_w8": 436101120
+      "replay_day0_light": 167743488,
+      "compare_day0_light": 185163776,
+      "pack_fast": 402415616,
+      "pack_validation": 748216320,
+      "mc_quick_light_w8": 362647552,
+      "mc_default_light_w8": 372293632,
+      "mc_heavy_light_w8": 387743744,
+      "mc_ceiling_light_w8": 432640000
     },
     "monte_carlo_scaling_seconds": {
       "mc_quick_light": {
-        "workers_1": 1.499,
-        "workers_2": 1.366,
-        "workers_4": 1.229,
-        "workers_8": 1.242
+        "workers_1": 1.622,
+        "workers_2": 1.342,
+        "workers_4": 1.42,
+        "workers_8": 1.23
       },
       "mc_default_light": {
-        "workers_1": 1.943,
-        "workers_2": 1.827,
-        "workers_4": 1.432,
-        "workers_8": 1.417
+        "workers_1": 1.977,
+        "workers_2": 1.679,
+        "workers_4": 1.507,
+        "workers_8": 1.605
       },
       "mc_heavy_light": {
-        "workers_1": 3.4,
-        "workers_8": 1.769
+        "workers_1": 3.72,
+        "workers_8": 1.944
       },
       "mc_ceiling_light": {
-        "workers_8": 3.435
+        "workers_8": 3.664
       }
     }
   },
   "harness_sanity": {
-    "direct_cli_vs_harness_percent_delta": {
-      "replay_day0_light": -7.3,
-      "compare_day0_light": 1.4,
-      "mc_default_light_w8": -4.0,
-      "mc_ceiling_light_w8": 3.3
+    "monitored_elapsed_seconds": {
+      "replay_day0_light": 2.8,
+      "compare_day0_light": 2.119,
+      "pack_fast": 5.317,
+      "pack_validation": 18.522,
+      "mc_default_light_w8": 1.605,
+      "mc_heavy_light_w8": 1.944,
+      "mc_ceiling_light_w8": 3.664
     },
-    "conclusion": "The monitored harness stays inside a normal local noise and monitor-overhead band and does not use a materially different timing mode."
+    "direct_cli_mean_seconds": {
+      "replay_day0_light": 2.726,
+      "compare_day0_light": 2.335,
+      "pack_fast": 5.637,
+      "pack_validation": 17.156,
+      "mc_default_light_w8": 1.346,
+      "mc_heavy_light_w8": 1.77,
+      "mc_ceiling_light_w8": 3.474
+    },
+    "direct_cli_vs_harness_percent_delta": {
+      "replay_day0_light": -2.6,
+      "compare_day0_light": 10.2,
+      "pack_fast": 6.0,
+      "pack_validation": -7.4,
+      "mc_default_light_w8": -16.1,
+      "mc_heavy_light_w8": -9.0,
+      "mc_ceiling_light_w8": -5.2
+    },
+    "conclusion": "The monitored harness remains credible for relative regressions, RSS and phase accounting, but the short worker-pool Monte Carlo cells are no longer close enough to treat its elapsed time as a direct CLI equivalent. Use the direct CLI spot checks for throughput headlines."
   },
   "storage": {
     "bundle_size_bytes": {
-      "replay_light": 1364200,
-      "replay_full": 1992891,
-      "mc_light": 819828,
-      "mc_full": 5159241
+      "replay_light": 1364264,
+      "replay_full": 1992955,
+      "mc_light": 819862,
+      "mc_full": 5159267
     },
     "file_count": {
       "replay_light": 6,
@@ -101,7 +131,7 @@
   },
   "retained_output": {
     "mc_default_light_w8": {
-      "bundle_size_bytes": 2900848,
+      "bundle_size_bytes": 2900874,
       "file_count": 6,
       "top_dashboard_sections_bytes": {
         "monteCarlo.sampleRuns": 1243393,
@@ -110,12 +140,12 @@
         "monteCarlo.sampleRuns.orderIntent": 257141
       },
       "top_file_components_bytes": {
-        "dashboard_payload": 1567126,
+        "dashboard_payload": 1567139,
         "fills_csv": 1289324
       }
     },
     "mc_ceiling_light_w8": {
-      "bundle_size_bytes": 6645872,
+      "bundle_size_bytes": 6645906,
       "file_count": 6,
       "top_dashboard_sections_bytes": {
         "monteCarlo.sampleRuns": 2986485,
@@ -124,7 +154,7 @@
         "monteCarlo.sampleRuns.fairValueSeries": 534751
       },
       "top_file_components_bytes": {
-        "dashboard_payload": 3349453,
+        "dashboard_payload": 3349470,
         "fills_csv": 3098231
       }
     },
@@ -135,11 +165,11 @@
     ]
   },
   "memory_frontier": {
-    "runtime_suite_tree_peak_bytes": 436101120,
+    "runtime_suite_tree_peak_bytes": 432640000,
     "high_resolution_tree_peak_bytes": [
-      438374400,
-      443199488,
-      441413632
+      430563328,
+      430116864,
+      418590720
     ],
     "worker_count_at_tree_peak": [
       8,
@@ -147,19 +177,19 @@
       8
     ],
     "worker_total_rss_at_tree_peak_bytes": [
-      303718400,
-      303312896,
-      296501248
+      301010944,
+      286294016,
+      279846912
     ],
     "parent_rss_at_tree_peak_bytes": [
-      134656000,
-      139886592,
-      144912384
+      129552384,
+      143822848,
+      138743808
     ],
     "later_parent_reporting_peak_bytes": [
-      282861568,
-      332066816,
-      331968512
+      335237120,
+      244617216,
+      296570880
     ],
     "top_memory_drivers": [
       "live_worker_processes",
@@ -170,33 +200,33 @@
   },
   "backend": {
     "wins": {
-      "streaming": 4,
-      "classic": 3,
+      "streaming": 5,
+      "classic": 2,
       "rust": 0
     },
     "case_winners": {
       "live_v9_default_w1": "streaming",
       "live_v9_default_w8": "classic",
       "live_v9_heavy_w8": "streaming",
-      "main_default_w8": "streaming",
+      "main_default_w8": "classic",
       "main_heavy_w8": "streaming",
-      "r2_stateful_default_w8": "classic",
-      "r2_stateful_heavy_w8": "classic"
+      "r2_stateful_default_w8": "streaming",
+      "r2_stateful_heavy_w8": "streaming"
     },
     "guidance": {
       "auto": "streaming",
-      "classic": "keep as co-equal parity and performance option",
+      "classic": "keep as a co-equal parity and performance backend",
       "rust": "keep explicit and experimental only"
     }
   },
   "reference": {
     "default_100_10_speedup_range": {
-      "min": 3.78,
-      "max": 15.54
+      "min": 4.06,
+      "max": 15.68
     },
     "ceiling_1000_100_speedup_range": {
-      "min": 9.46,
-      "max": 18.8
+      "min": 9.06,
+      "max": 16.54
     },
     "smaller_retained_bytes_every_case": true,
     "smaller_file_count_every_case": true,
@@ -206,25 +236,50 @@
   },
   "architecture": {
     "serialisation": {
-      "json_size_bytes": 3349453,
-      "msgpack_size_bytes": 2388447,
-      "json_encode_seconds": 0.056794,
-      "msgpack_encode_seconds": 0.00972,
-      "json_decode_seconds": 0.041332,
-      "msgpack_decode_seconds": 0.010357
+      "json_size_bytes": 3349470,
+      "msgpack_size_bytes": 2388463,
+      "json_encode_seconds": 0.053724,
+      "msgpack_encode_seconds": 0.008493,
+      "json_decode_seconds": 0.037129,
+      "msgpack_decode_seconds": 0.008908
     },
     "transport": {
-      "pickle_seconds": 0.44,
-      "shared_memory_seconds": 0.351,
-      "shared_memory_speedup_ratio": 1.253
+      "pickle_seconds": 0.359,
+      "shared_memory_seconds": 0.336,
+      "shared_memory_speedup_ratio": 1.069
     },
     "decision": "Keep JSON canonical and do not land binary sidecars or shared-memory transport yet."
+  },
+  "deployment_shape": {
+    "recommended_environment": "For memory-sensitive wide-worker Monte Carlo runs, prefer Linux or WSL from a Linux filesystem checkout. Keep native Windows as the ordinary day-to-day development default.",
+    "windows_runtime_tree_peak_bytes": {
+      "mc_default_light_w8": 372293632,
+      "mc_heavy_light_w8": 387743744,
+      "mc_ceiling_light_w8": 432640000
+    },
+    "wsl_runtime_tree_peak_bytes": {
+      "mc_default_light_w8": 295698432,
+      "mc_heavy_light_w8": 318308352,
+      "mc_ceiling_light_w8": 402024448
+    },
+    "windows_high_resolution_tree_peak_bytes": [
+      430563328,
+      430116864,
+      418590720
+    ],
+    "wsl_high_resolution_tree_peak_bytes": [
+      415358976,
+      413544448,
+      413065216
+    ],
+    "conclusion": "The Linux or WSL process model reduced wide-worker tree RSS and later reporting peaks on the same code, but the gain was still modest and did not erase the external ceiling-RSS gap. The cross-filesystem WSL replay and compare timings from this pass should not be read as a clean Linux throughput claim."
   },
   "decisions": {
     "default_architecture": "streaming_first_python",
     "optional_binary_sidecars": "do_not_land_now",
     "shared_memory_transport": "not_landing",
     "deeper_native_path": "not_justified",
-    "remaining_frontier": "wide-worker execution-phase ceiling RSS on Windows spawn"
+    "recommended_performance_environment": "linux_or_wsl_on_linux_filesystem_for_memory_sensitive_wide_worker_mc",
+    "remaining_frontier": "wide-worker execution-phase ceiling RSS, especially on Windows spawn"
   }
 }

@@ -201,9 +201,8 @@ one-off report format.
 The best current architecture remains the existing streaming-first Python
 design, not a broad rewrite.
 
-That recommendation is based on five measured facts from the clean current
-review root plus the corrected `rss_frontier*` reruns captured immediately
-after the RSS attribution wording fix:
+That recommendation is based on the fresh current-local proof root in
+`backtests/review_2026-04-23_head_refresh`:
 
 - the repo kept a strong same-machine runtime lead over the local Chris Roberts
   reference and also kept the retained-byte and retained-file lead on the
@@ -211,21 +210,24 @@ after the RSS attribution wording fix:
 - the remaining hard external gap is ceiling RSS, not throughput or retained
   bytes
 - fresh `5 ms` RSS-frontier reruns put the global tree peak in execution-phase
-  process-tree RSS at `418 MB` to `423 MB`, with `8` live workers contributing
-  `283 MB` to `290 MB` and the parent contributing `128 MB` to `138 MB` at the
+  process-tree RSS at `399 MB` to `411 MB`, with `8` live workers contributing
+  `267 MB` to `287 MB` and the parent contributing `124 MB` to `137 MB` at the
   exact peak
 - later parent-only peaks do still happen in `bundle_write`, but they occur
   after workers exit and therefore do not set the global tree peak
+- a Linux or WSL rerun on the same code reduced that wide-worker RSS shape, but
+  only modestly, so it changed deployment guidance rather than the default
+  architecture
 - the fresh realistic-trader backend rerun kept the two Python backends alive,
-  with `streaming` winning `4` of `7` measured cells, `classic` winning `3`,
+  with `streaming` winning `5` of `7` measured cells, `classic` winning `2`,
   and `rust` behind in every cell
 
 ## Alternatives Considered
 
 | Option | What it could win | What killed it in this pass | Verdict |
 | --- | --- | --- | --- |
-| Keep the current streaming-first Python architecture | Best end-to-end balance of throughput, install simplicity, trader compatibility and workflow breadth | Nothing killed the overall design. The clean rerun actually strengthened the default-backend case, with `streaming` edging `classic` `4` wins to `3`. | Keep and refine |
-| Add lower-copy shared-memory worker transport | Could cut worker payload duplication and some scheduling overhead | The fresh bake-off improved the transport microbenchmark to `0.351s` versus `0.440s`, but that is still only a `1.253x` transport-only result with no end-to-end runtime or RSS proof. | Keep experimental only |
+| Keep the current streaming-first Python architecture | Best end-to-end balance of throughput, install simplicity, trader compatibility and workflow breadth | Nothing killed the overall design. The fresh rerun actually strengthened the default-backend case, with `streaming` beating `classic` `5` wins to `2`. | Keep and refine |
+| Add lower-copy shared-memory worker transport | Could cut worker payload duplication and some scheduling overhead | The fresh bake-off improved the transport microbenchmark only to `0.336s` versus `0.359s`. That is a `1.069x` transport-only result with no end-to-end runtime or RSS proof. | Keep experimental only |
 | Add optional binary serialisation or sidecars while keeping JSON canonical | Could reduce retained bytes and serialisation cost without breaking the dashboard contract | MessagePack was materially smaller and faster on the real payload, but it still does not solve the remaining execution RSS problem. A default JSON-plus-sidecar write would also increase retained bytes. | Still alive, but not landing now |
 | Make Rust the default backend | Could improve ceiling throughput if native compute dominated | Same-code reruns kept `rust` slower than both `streaming` and `classic` on every realistic case, while also adding Cargo and subprocess complexity. | Keep explicit only |
 | Targeted C, C++ or Rust acceleration for one kernel | Could help if one pure compute kernel dominated | Current hot spots are still mixed Python control flow, trader boundary calls, execution logic, reporting and write overhead. No isolated kernel was shown to justify crossing the native boundary yet. | Not justified now |
@@ -240,11 +242,13 @@ The best architecture from here is:
 - keep `classic` as a co-equal parity and performance backend
 - keep `rust` as an explicit experiment rather than a default
 - keep JSON as the canonical dashboard bundle contract
+- recommend Linux or WSL on the Linux filesystem for memory-sensitive
+  wide-worker Monte Carlo studies
 - do not land optional binary sidecars yet
 - only revisit binary sidecars if retained bytes or load-time matter more than
   ceiling RSS
 - defer shared-memory transport unless an end-to-end rerun shows materially
-  more than the current `1.253x` transport-only gain
+  more than the current `1.069x` transport-only gain
 
 That is a stronger answer than "native code is not needed". The reason is not
 taste. The reason is that the measured bottlenecks are still a mixed system
@@ -255,11 +259,11 @@ dominate.
 
 The remaining frontier is narrower than it looks:
 
-- live worker processes dominate the tree peak at about `283 MB` to `290 MB`
-  on the clean `mc_ceiling_light_w8` reruns
-- the parent still contributes a real `128 MB` to `138 MB` at that same
+- live worker processes dominate the tree peak at about `267 MB` to `287 MB`
+  on the fresh `mc_ceiling_light_w8` reruns
+- the parent still contributes a real `124 MB` to `137 MB` at that same
   moment, so the global peak is not purely "worker floor" either
-- later parent-only peaks rise to `270 MB` to `317 MB` in `bundle_write`, but
+- later parent-only peaks rise to `233 MB` to `320 MB` in `bundle_write`, but
   those happen after workers exit and therefore do not drive the global tree
   peak
 - retained bytes are already led by sampled preview series and exact fill
@@ -268,7 +272,8 @@ The remaining frontier is narrower than it looks:
 That leaves the remaining ceiling-RSS gap as an architectural cost of
 `spawn`-based multiprocessing on Windows plus Python interpreter overhead per
 worker, with a smaller but still real parent contribution at the exact global
-peak.
+peak. The Linux or WSL rerun confirms that a fork-like deployment shape helps,
+but not enough to close the external gap on its own.
 
 Materially lowering it would require either:
 

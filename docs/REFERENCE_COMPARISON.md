@@ -4,7 +4,7 @@ Result: on the matched same-machine Chris Roberts no-op benchmark, this repo
 wins runtime, retained bytes and retained file count, but still loses
 ceiling-case RSS.
 
-This page records only what the clean 2026-04-23 local audit could prove
+This page records only what the fresh 2026-04-23 local audit could prove
 against the reference repos available in this session.
 
 ## Scope note
@@ -12,9 +12,9 @@ against the reference repos available in this session.
 The strongest fresh external proof in this pass is the same-machine Chris
 Roberts rerun from `analysis/benchmark_chris_reference.py`.
 
-The exact clean artefact is:
+The current local artefact is:
 
-- `backtests/review_2026-04-23_final/reference/reference_benchmark.json`
+- `backtests/review_2026-04-23_head_refresh/reference/reference_benchmark.json`
 
 ## Short conclusion
 
@@ -35,7 +35,7 @@ available locally in this pass.
 
 ### What the rerun matched
 
-The fresh same-machine rerun used:
+The same-machine rerun used:
 
 - the same shared no-op trader file in both repos
 - matched `250` ticks per simulated day
@@ -47,17 +47,17 @@ The fresh same-machine rerun used:
 
 This repo won every measured runtime cell:
 
-- default `100/10`: `3.78x` to `15.54x` faster
-- ceiling `1000/100`: `9.46x` to `18.80x` faster
+- default `100/10`: `4.06x` to `15.68x` faster
+- ceiling `1000/100`: `9.06x` to `16.54x` faster
 
 Representative cells:
 
 | Case | Workers | This repo | Chris Roberts | Speed-up |
 | --- | ---: | ---: | ---: | ---: |
-| default `100/10` | `1` | `1.301s` | `20.220s` | `15.54x` |
-| default `100/10` | `8` | `1.252s` | `4.731s` | `3.78x` |
-| ceiling `1000/100` | `1` | `12.052s` | `226.633s` | `18.80x` |
-| ceiling `1000/100` | `8` | `4.907s` | `46.438s` | `9.46x` |
+| default `100/10` | `1` | `1.271s` | `19.927s` | `15.68x` |
+| default `100/10` | `8` | `1.101s` | `4.469s` | `4.06x` |
+| ceiling `1000/100` | `1` | `11.817s` | `195.428s` | `16.54x` |
+| ceiling `1000/100` | `8` | `4.087s` | `37.041s` | `9.06x` |
 
 ### Memory and retained-output result
 
@@ -78,9 +78,9 @@ Representative ceiling rows:
 
 | Workers | This repo RSS | Chris RSS | This repo bytes | Chris bytes |
 | ---: | ---: | ---: | ---: | ---: |
-| `1` | `328.5 MB` | `132.1 MB` | `6.87 MB` | `9.69 MB` |
-| `4` | `462.2 MB` | `239.9 MB` | `6.87 MB` | `9.69 MB` |
-| `8` | `568.1 MB` | `379.4 MB` | `6.87 MB` | `9.69 MB` |
+| `1` | `328.8 MB` | `132.0 MB` | `6.87 MB` | `9.69 MB` |
+| `4` | `445.9 MB` | `239.3 MB` | `6.87 MB` | `9.69 MB` |
+| `8` | `531.2 MB` | `380.4 MB` | `6.87 MB` | `9.69 MB` |
 
 That means the retained-byte gap really did close on the matched comparison.
 The remaining hard gap is ceiling RSS.

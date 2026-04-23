@@ -29,9 +29,12 @@ python analysis/research_pack.py fast --trader strategies/trader.py --baseline s
 
 Measured on 2026-04-23 on this machine:
 
-- default day-0 replay: about `2.92s`
-- default day-0 compare: about `2.21s`
-- fast pack: about `5.20s`
+- default day-0 replay: about `2.80s` in the monitored suite, `2.73s` on
+  fresh direct CLI reruns
+- default day-0 compare: about `2.12s` in the monitored suite, `2.34s` on
+  fresh direct CLI reruns
+- fast pack: about `5.32s` in the monitored suite, `5.64s` on fresh direct CLI
+  reruns
 
 Useful trust checks during the fast loop:
 
@@ -57,7 +60,8 @@ This gives:
 
 Measured on 2026-04-23 on this machine:
 
-- validation pack: about `17.65s`
+- validation pack: about `18.52s` in the monitored suite, `17.16s` on fresh
+  direct CLI reruns
 
 ## Heavy forensic loop
 
@@ -108,15 +112,18 @@ preview-capped examples for qualitative inspection only in light mode.
 
 Measured on 2026-04-23 on the tracked `250`-tick fixture:
 
-- quick light, `64/8`, `1` worker: about `1.50s`
-- quick light, `64/8`, `4` workers: about `1.23s`
-- quick light, `64/8`, `8` workers: about `1.24s`
-- default light, `100/10`, `1` worker: about `1.94s`
-- default light, `100/10`, `4` workers: about `1.43s`
-- default light, `100/10`, `8` workers: about `1.42s`
-- heavy light, `192/16`, `1` worker: about `3.40s`
-- heavy light, `192/16`, `8` workers: about `1.77s`
-- ceiling light, `768/24`, `8` workers: about `3.44s`
+- quick light, `64/8`, `1` worker: about `1.62s`
+- quick light, `64/8`, `4` workers: about `1.42s`
+- quick light, `64/8`, `8` workers: about `1.23s`
+- default light, `100/10`, `1` worker: about `1.98s`
+- default light, `100/10`, `4` workers: about `1.51s`
+- default light, `100/10`, `8` workers: about `1.61s` in the monitored suite,
+  `1.35s` on fresh direct CLI reruns
+- heavy light, `192/16`, `1` worker: about `3.72s`
+- heavy light, `192/16`, `8` workers: about `1.94s` in the monitored suite,
+  `1.77s` on fresh direct CLI reruns
+- ceiling light, `768/24`, `8` workers: about `3.66s` in the monitored suite,
+  `3.47s` on fresh direct CLI reruns
 
 Backend guidance is now simple:
 
@@ -125,8 +132,25 @@ Backend guidance is now simple:
 - use `rust` only for explicit backend experiments
 
 On the fresh realistic-trader rerun in
-`backtests/review_2026-04-23_final/backend`, `streaming` won `4` of the `7`
-measured cells, `classic` won `3`, and `rust` won none.
+`backtests/review_2026-04-23_head_refresh/backend`, `streaming` won `5` of the
+`7` measured cells, `classic` won `2`, and `rust` won none.
+
+## Recommended environment
+
+Use native Windows for ordinary replay, compare and branch-loop work.
+
+For memory-sensitive wide-worker Monte Carlo studies, prefer Linux or WSL from
+a Linux filesystem checkout rather than `/mnt/d`.
+
+Fresh same-code local reruns showed:
+
+- `mc_default_light_w8`: `355.0 MB` to `282.0 MB` runtime-suite tree RSS
+- `mc_heavy_light_w8`: `369.8 MB` to `303.6 MB`
+- `mc_ceiling_light_w8`: `412.6 MB` to `383.4 MB`
+
+The WSL replay and compare timings from this pass are not a clean Linux
+throughput claim because that checkout wrote bundles back to `/mnt/d`. Treat
+them as deployment-shape evidence only.
 
 ## Sweep
 
@@ -185,7 +209,7 @@ local verification pass.
 ```bash
 npm run build --prefix dashboard
 python -m prosperity_backtester serve --port 5555
-python -m prosperity_backtester serve --dir backtests/review_2026-04-23_final/runtime/cases --port 5555
+python -m prosperity_backtester serve --dir backtests/review_2026-04-23_head_refresh/runtime/cases --port 5555
 python -m prosperity_backtester serve --latest
 python -m prosperity_backtester serve --latest-type replay
 python -m prosperity_backtester serve --latest-type monte-carlo
@@ -193,7 +217,7 @@ python -m prosperity_backtester serve --latest-type monte-carlo
 
 Open `http://127.0.0.1:5555/`, then use the latest-run shortcuts or browse the
 local server directly. For the clean audited proof bundles from this pass,
-prefer serving `backtests/review_2026-04-23_final/runtime/cases` rather than
+prefer serving `backtests/review_2026-04-23_head_refresh/runtime/cases` rather than
 the entire review root. The server now hides the main benchmark scratch
 bundles, but `runtime/cases` is still the cleanest review surface.
 
