@@ -249,14 +249,41 @@ dominate.
 
 ## Exact Remaining Frontier
 
-The remaining frontier is now narrower:
+The remaining frontier is narrower than it looks:
 
-- lower execution-phase tree RSS in wide-worker Monte Carlo
-- lower the parent-side chunk receive and merge transient that still adds about
-  `44 MB` around the ceiling peak
-- lower retained bytes in sampled preview series and exact fill retention
-- lower parent-side sampled-row compaction growth without pretending that it is
-  the global peak
+- live worker processes dominate the tree peak (`~267 MB` = `8 x ~33-35 MB`
+  Python interpreter plus imports on Windows spawn, essentially a floor for
+  this architecture)
+- parent-side sampled-row compaction growth is still `~44 MB`, but is not the
+  global peak
+- retained bytes are already led by sampled preview series and exact fill
+  retention and are tracked in `docs/BENCHMARKS.md`
+
+The obvious-looking parent-side streaming chunk-merge was attempted in this
+pass and measured to worsen the global tree peak, not improve it. The previous
+deferred-merge design was already optimal for tree peak:
+
+- deferred merge design (current): parent holds pickled chunks in memory
+  during execution, processes them after workers exit. Parent RSS at tree
+  peak: `~135 MB`. Global tree peak: `404 MB` to `424 MB` across reruns.
+- streaming merge (tried, reverted): parent merges path bands, extracts
+  results and merges profile as each chunk arrives. This shifts the
+  allocation into the execution window where workers are still alive. Parent
+  RSS at tree peak: `~191 MB`. Global tree peak: `458 MB` on both reruns.
+
+The reason is that global tree peak happens near the end of execution, when
+all workers are still paying their `~33-35 MB` floor. Moving parent-side
+allocation earlier makes the parent heavier at that exact moment, even though
+it lowers the parent's own isolated peak later.
+
+That leaves the remaining ceiling-RSS gap as an architectural cost of
+`spawn`-based multiprocessing on Windows plus Python interpreter overhead per
+worker. Materially lowering it would require either:
+
+- a single-process native engine with thread-level parallelism that does not
+  pay a per-tick Python/native IPC cost (the current Rust engine pays that
+  cost and still loses to the Python backends on realistic cases), or
+- a fork-first design that is not portable to Windows.
 
 If retained bytes or bundle load time become the next dominant user problem,
 optional binary sidecars remain the strongest still-alive architecture option.

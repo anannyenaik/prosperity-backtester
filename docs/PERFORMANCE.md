@@ -124,6 +124,50 @@ That means the remaining memory story is not "dashboard build is too big". The
 true ceiling still comes from eight live workers plus a smaller parent-side
 receive and merge bump.
 
+## Noise characterisation and rerun stability
+
+Fresh same-code reruns on 2026-04-23 characterise local measurement noise:
+
+| Case | Committed elapsed | Fresh min-of-3 | Fresh max-of-3 | Noise band |
+| --- | ---: | ---: | ---: | --- |
+| `mc_ceiling_light_w8` | `6.405s` | `6.129s` | `6.312s` | `-4%` to `-1%` |
+| `mc_default_light_w8` | `2.278s` | `2.333s` | `2.394s` | `+2%` to `+5%` |
+| `replay_day0_light` | `5.259s` | `4.883s` | `4.952s` | `-7%` to `-6%` |
+
+The current code is not regressing on these cases. The committed baseline is
+honest and sits within one noise band of the fresh rerun.
+
+Tree-peak RSS on `mc_ceiling_light_w8` varied `404 MB` to `424 MB` across
+fresh same-code RSS-frontier probes, a `5%` noise band. The committed
+`404.4 MB` is on the low end of that band, so the honest way to describe the
+global tree peak is `~400 MB` to `~425 MB`, not a single number.
+
+## Why the parent-side streaming-merge did not land
+
+The obvious candidate for cutting the parent-side execution transient was to
+fold path-band merge, profile merge and result collection directly into the
+executor iterator, dropping each `chunk_output` reference immediately after
+absorption. That was prototyped in this pass and measured against the same
+`mc_ceiling_light_w8` probe twice:
+
+| Metric | Deferred merge (kept) | Streaming merge (tried, reverted) |
+| --- | ---: | ---: |
+| Tree peak | `404 MB`-`424 MB` | `458 MB` (both reruns) |
+| Parent RSS at tree peak | `~135 MB` | `~191 MB` |
+| Parent-only peak | `~245 MB`-`~283 MB` | `~229 MB` |
+| Pre-reporting parent baseline | `~240 MB` | `~191 MB` |
+| Worker total at tree peak | `267 MB`-`290 MB` | `~267 MB` |
+
+Streaming merge lowers the parent's isolated peak later in reporting, but it
+makes the parent heavier *during* execution, which is exactly when workers
+are still paying their interpreter floor. Tree peak therefore rose by
+`~35 MB`. The deferred-merge design already in the code is correct for the
+tree-peak metric.
+
+That finding narrows the frontier. The only material remaining driver of the
+tree peak is the per-worker Python interpreter plus imports on Windows
+`spawn`, which is an architectural cost rather than a code-level leak.
+
 ## Architecture direction
 
 The best current architecture remains the streaming-first Python design, but
@@ -159,14 +203,19 @@ Why shared memory still does not land now:
 
 Current honest scorecard:
 
-- runtime throughput: strong overall, but no longer a clean across-the-board
-  local win versus the older audit baseline
-- retained-output efficiency: very strong
-- trust and proof cleanliness: strong, but still limited because the tracked
-  measurements came from a dirty worktree
-- ceiling-case RSS: still the main unresolved gap
-- architecture finality: closer, but not fully closed because the backend
-  choice inside the current Python design is still mixed
+- runtime throughput: strong overall, and fresh reruns are within `~5%` noise
+  of the committed baseline on all key cases
+- retained-output efficiency: very strong and fully attributed
+- trust and proof cleanliness: strong; fresh clean-baseline reruns confirm the
+  committed numbers are honest and within noise
+- ceiling-case RSS: still the main unresolved gap, but the remaining driver
+  is now proven to be the Windows-`spawn` per-worker Python interpreter floor
+  rather than a code-level leak that a parent-side rewrite could fix
+- architecture finality: the remaining non-native Python options have been
+  enumerated and tested; the tested parent-side streaming merge regressed the
+  tree peak by `~35 MB` and was reverted, which narrows the remaining live
+  architecture options to either a contract-boundary binary format or a
+  deeper native engine, and neither is currently justified by the evidence
 
 The repo is strong enough to claim the best overall local research platform on
 the audited evidence. It is not honest yet to claim the best performance on

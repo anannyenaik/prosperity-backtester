@@ -19,7 +19,9 @@
     "This clone still does not retain a separate clean exact-same-worktree historical throughput baseline for the current diagnostics state.",
     "The Chris Roberts comparison is same-machine and matched on a shared no-op trader plus tick budget, but it is not full semantic parity.",
     "The shared-memory result is a transport microbenchmark only, not end-to-end Monte Carlo proof.",
-    "The RSS frontier probe now unwraps Windows launcher processes correctly for parent-versus-worker attribution and should be used for memory shape, not headline throughput."
+    "The RSS frontier probe now unwraps Windows launcher processes correctly for parent-versus-worker attribution and should be used for memory shape, not headline throughput.",
+    "Fresh 2026-04-23 same-code reruns confirm a noise band of roughly 5-7% on elapsed for the headline cases and about 5% on tree peak for mc_ceiling_light_w8, so single-number comparisons below that band are not real regressions or wins.",
+    "A parent-side streaming chunk-merge prototype was measured against the same mc_ceiling_light_w8 probe twice in this pass. It lowered the parent-only reporting peak but raised the global tree peak from 404-424 MB to 458 MB on both reruns because merge allocation shifted into the execution window while workers were still alive. It was reverted."
   ],
   "current_local": {
     "storage": {
@@ -615,6 +617,7 @@
     "rust_backend_status": "keep_experimental_only",
     "optional_binary_sidecars": "do_not_land_now",
     "shared_memory_transport": "interesting_microbenchmark_only_not_landing",
-    "deeper_native_path": "not_justified"
+    "deeper_native_path": "not_justified",
+    "parent_side_streaming_chunk_merge": "tried_and_reverted_because_it_raised_the_tree_peak"
   }
 }

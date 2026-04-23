@@ -92,6 +92,26 @@ The RSS frontier probe records:
 - worker lifecycle samples
 - chunk payload and path-band accumulator sizes near the peak
 
+## Rerun noise characterisation
+
+Fresh same-code reruns on 2026-04-23 (no broken state, no extra load) showed
+the following noise bands on the headline cases. This is the frame to use
+when interpreting any single-run number.
+
+| Case | Fresh reruns | Committed headline | Band vs headline |
+| --- | --- | ---: | --- |
+| `mc_ceiling_light_w8` (wall, 3 warm) | `6.129`, `6.305`, `6.312`s | `6.405s` | `-4%` to `-1%` |
+| `mc_default_light_w8` (wall, 3 warm) | `2.333`, `2.382`, `2.394`s | `2.278s` | `+2%` to `+5%` |
+| `replay_day0_light` (wall, 3 warm) | `4.883`, `4.936`, `4.952`s | `5.259s` | `-7%` to `-6%` |
+| `mc_ceiling_light_w8` tree peak (2 RSS-probe reruns) | `~423`, `~424 MB` | `~404 MB` | `+5%` |
+
+Two conclusions fall out of that:
+
+- no committed number is regressing against fresh reruns once you allow for a
+  normal `~5-7%` local noise band
+- single tree-peak numbers below `~425 MB` on `mc_ceiling_light_w8` should be
+  read as "inside the noise band", not as an improvement or regression
+
 ## Comparability notes
 
 The benchmark suite is intentionally split by purpose.
