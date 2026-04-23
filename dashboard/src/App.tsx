@@ -156,7 +156,7 @@ function LandingScreen() {
         </div>
       </section>
 
-      <section className="glass-panel flex w-full flex-col justify-between rounded-lg p-5 lg:max-w-[590px] lg:justify-self-end lg:self-stretch">
+      <section className="glass-panel flex w-full flex-col justify-between overflow-visible rounded-lg p-5 lg:max-w-[590px] lg:justify-self-end lg:self-stretch">
         <div className="mb-4 flex items-start justify-between gap-4 border-b border-border pb-4">
           <div>
             <div className="hud-label text-accent-2">Bundle intake</div>
