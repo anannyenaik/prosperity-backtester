@@ -1,110 +1,111 @@
-# Assumptions And Approximation Boundaries
+# Assumptions
 
-The platform is designed for robust local decisions. It separates exact mechanics from configurable assumptions so strategy rankings are not mistaken for official website PnL.
+Result: the repo is designed for reliable local ranking, not for claiming exact reconstruction of the hidden competition website.
+
+The code separates what is exact relative to the public inputs from what is modelled locally.
 
 ## Exact Relative To Local Inputs
 
-- CSV schema validation.
-- Timestamp ordering and product presence checks.
-- Visible-book aggressive fills.
-- Trader state persistence through `traderData`.
-- Own-trade hand-off between ticks.
-- Cash, inventory, realised, unrealised and MTM accounting.
-- Deterministic replay over provided timestamps.
-- Synthetic latent fair inside Monte Carlo sessions.
+These parts are deterministic and directly grounded in the tracked CSV inputs or the local run configuration:
 
-## Approximate
+- CSV schema validation and dataset loading
+- timestamp ordering and product presence checks
+- visible-book aggressive fills
+- trader state persistence through `traderData`
+- own-trade hand-off between ticks
+- cash, inventory, realised, unrealised, and mark-to-market accounting
+- deterministic replay over the selected historical days
+- manifest and bundle provenance
 
-- Passive queue position.
-- Same-price queue share.
-- Missed passive fills.
-- Adverse-selection penalties.
-- Size-dependent slippage.
-- Latency-like delayed action effects.
-- Historical `analysis_fair`.
-- Synthetic market generation.
-- Calibration and optimisation scores.
+## Modelled Locally
 
-## Fair Value
+These parts are deliberate modelling choices:
 
-Monte Carlo `analysis_fair` is the latent fair path used by the simulator.
+- passive queue position
+- same-price queue share
+- missed passive fills
+- adverse-selection penalties
+- size-dependent slippage
+- latency-like delayed action effects
+- historical `analysis_fair`
+- synthetic market generation for Monte Carlo
+- calibration and optimisation scores
+- Round 2 extra-access quality and fill uplift assumptions
 
-Historical replay `analysis_fair` is an inferred diagnostic proxy from market structure. It is useful for markout and placement analysis, but it is not an official hidden fair value.
+These are useful because they make conservative ranking possible, but they are not claims about hidden exchange mechanics.
+
+## `analysis_fair`
+
+`analysis_fair` means different things in the two main modes:
+
+- historical replay: an inferred diagnostic fair-value proxy
+- Monte Carlo: the latent fair path used by the simulator itself
+
+It is useful for markout and placement analysis. It is not an official hidden fair value.
 
 ## Live-Export Calibration
 
-Calibration compares replay output with fields available in a live export:
+Calibration compares local replay output against whatever fields exist in a tracked live export, such as:
 
 - total profit
-- PnL path RMSE
+- PnL-path error
 - per-product PnL where available
-- final position mismatch
+- final-position mismatch
 - inventory-path mismatch
-- fill count and fill quantity mismatch
-- passive/aggressive fill mismatch
+- fill-count and fill-quantity mismatch
+- passive versus aggressive fill mismatch
 - activity timing mismatch
 
-Only `tradeHistory` rows where `SUBMISSION` is buyer or seller are treated as own fills.
+Calibration can help choose conservative local assumptions. It cannot recover:
 
-Calibration cannot reconstruct rejected passive orders, exact queue priority or hidden website matching. Treat the best calibration candidate as a local setting, not as proof of exact website accuracy.
-
-## Empirical Fill Profiles
-
-Empirical fill-profile derivation uses realised live fills and saves:
-
-- product
-- side
-- quantity
-- visible spread
-- touch distance
-- inferred passive/aggressive label
-- liquidity regime
-
-The following remain configurable assumptions:
-
-- passive fill probability
-- same-price queue share
-- rejected passive order rate
-- size slippage curve
-- passive and aggressive adverse-selection ticks
+- rejected passive orders
+- true queue priority
+- hidden matching details
+- website-only latency or throttling
 
 ## Scenario Analysis
 
-Scenario outputs are decision tools. They are useful for asking:
+Scenario outputs should be read as stress testing, not prediction.
 
-- whether a script still wins under conservative fills
-- whether ranking changes under wider spreads or thinner depth
-- whether downside is acceptable under crash or slippage stress
-- whether an observed gain is larger than live-vs-sim mismatch
+Use them to ask:
 
-Small edges should survive multiple scenario families before they are trusted.
+- does the ranking survive worse fill assumptions?
+- does the strategy stay acceptable under spread or depth stress?
+- is the downside still acceptable under slippage or crash stress?
+- is a small improvement larger than likely modelling error?
 
-## Round 2 MAF And Extra Access
+Small edges should survive several scenario families before they are trusted.
 
-Grounded from the challenge statement:
+## Round 2 Access Assumptions
 
-- Round 2 trades `ASH_COATED_OSMIUM` and `INTARIAN_PEPPER_ROOT`.
-- A Market Access Fee may grant access to an extra 25% of quotes.
-- Only the top 50% of total MAF bids get the contract.
-- Losing bids do not pay and do not get extra quote access.
+Grounded from the public challenge description:
 
-Configurable locally:
+- Round 2 trades `ASH_COATED_OSMIUM` and `INTARIAN_PEPPER_ROOT`
+- a Market Access Fee may grant access to an extra 25% of quotes
+- only the top 50% of MAF bids get the contract
+- losing bids do not pay and do not receive extra access
 
-- whether the contract is assumed won
-- MAF bid deducted from net PnL when the contract is won
-- deterministic or stochastic access
-- access quality
-- visible book volume uplift
-- passive fill-rate uplift
-- missed-fill reduction
-- fill opportunity volume uplift
-
-Unknown website-only mechanics:
+Still unknown:
 
 - exact extra-quote selection
 - exact queue priority
 - same-price matching order
 - other teams' MAF bids
-- official hidden matching path
+- official hidden matching behaviour
 
-Round 2 outputs should be read as sensitivity analysis and ranking evidence.
+Round 2 outputs are therefore sensitivity analysis, not proof of exact realised website PnL.
+
+## How To Read Results Safely
+
+Treat the repo as strong evidence when:
+
+- one strategy beats another by a healthy margin
+- the lead survives several plausible fill assumptions
+- replay, scenario, and Monte Carlo evidence point in the same direction
+
+Treat the result as uncertain when:
+
+- the edge is small
+- the result depends on optimistic passive fills
+- the winner changes under modest scenario stress
+- calibration against live data remains poor

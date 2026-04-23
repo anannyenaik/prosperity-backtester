@@ -1,13 +1,8 @@
-"""
-Dashboard bundle builder.
+"""Legacy standalone dashboard builder kept for compatibility.
 
-Takes a list of SessionResults from the engine and produces:
-  1. dashboard.json - aggregate statistics, histograms, top/bottom sessions
-  2. sample_paths/*.json - per-tick traces for the sample-session runs
-  3. session_summary.csv - machine-readable per-session row
-
-The JSON schema matches (a subset of) the original Prosperity 4 dashboard so the
-same dashboard logic can read both.
+The main submission workflow writes bundles through :mod:`prosperity_backtester.reports`.
+This module remains available for older callers that still build a dashboard
+directly from :class:`SessionResult` rows.
 """
 from __future__ import annotations
 

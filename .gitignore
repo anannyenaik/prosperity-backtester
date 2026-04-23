@@ -10,13 +10,12 @@ venv/
 
 # Node
 dashboard/node_modules/
+dashboard/dist/
 dashboard/.vite/
 
 # Generated research outputs
 backtests/**
 !backtests/.gitkeep
-demo_outputs/**
-!demo_outputs/.gitkeep
 *.log
 
 # Rust build artifacts
