@@ -21,6 +21,8 @@ export function Cursor() {
 
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     const body = document.body
+    const root = document.documentElement
+    root.classList.add('has-custom-cursor')
     body.classList.add('has-custom-cursor')
     body.dataset.cursorState = 'idle'
 
@@ -96,31 +98,42 @@ export function Cursor() {
       return false
     }
 
-    const onMove = (event: PointerEvent) => {
-      if (updateScrollbarMode(event.clientX, event.clientY)) return
+    const updateHoverState = (clientX: number, clientY: number, target?: EventTarget | null) => {
+      if (updateScrollbarMode(clientX, clientY)) return
       clearScrollbarMode()
-      body.dataset.cursorState = resolveCursorState(document.elementFromPoint(event.clientX, event.clientY))
+      body.dataset.cursorState = resolveCursorState((target as Element | null) ?? document.elementFromPoint(clientX, clientY))
       show()
     }
-    const onOver = (event: PointerEvent) => {
-      if (updateScrollbarMode(event.clientX, event.clientY)) return
-      clearScrollbarMode()
-      body.dataset.cursorState = resolveCursorState(event.target as Element | null)
-    }
+
+    const onMove = (event: PointerEvent | MouseEvent) => updateHoverState(event.clientX, event.clientY)
+    const onOver = (event: PointerEvent | MouseEvent) => updateHoverState(event.clientX, event.clientY, event.target)
+
     const onDown = (event: PointerEvent) => {
       body.dataset.cursorPressed = 'true'
       if (updateScrollbarMode(event.clientX, event.clientY)) {
         scrollbarDragAxis = scrollbarAxis
+        show()
         return
       }
+      body.dataset.cursorState = resolveCursorState(event.target as Element | null)
+      show()
     }
     const onUp = (event: PointerEvent) => {
       delete body.dataset.cursorPressed
       scrollbarDragAxis = null
-      if (updateScrollbarMode(event.clientX, event.clientY)) return
-      clearScrollbarMode()
-      body.dataset.cursorState = resolveCursorState(document.elementFromPoint(event.clientX, event.clientY))
-      show()
+      updateHoverState(event.clientX, event.clientY)
+    }
+    const onMouseDown = (event: MouseEvent) => {
+      body.dataset.cursorPressed = 'true'
+      if (updateScrollbarMode(event.clientX, event.clientY)) {
+        scrollbarDragAxis = scrollbarAxis
+        show()
+      }
+    }
+    const onMouseUp = (event: MouseEvent) => {
+      delete body.dataset.cursorPressed
+      scrollbarDragAxis = null
+      updateHoverState(event.clientX, event.clientY)
     }
     const onScroll = () => {
       if (scrollbarMode && scrollbarAxis) {
@@ -154,6 +167,10 @@ export function Cursor() {
     window.addEventListener('pointerover', onOver, { passive: true })
     window.addEventListener('pointerdown', onDown)
     window.addEventListener('pointerup', onUp)
+    window.addEventListener('mousemove', onMove, { passive: true })
+    window.addEventListener('mouseover', onOver, { passive: true })
+    window.addEventListener('mousedown', onMouseDown)
+    window.addEventListener('mouseup', onMouseUp)
     window.addEventListener('scroll', onScroll, true)
     document.addEventListener('pointerleave', onLeaveWindow)
     document.addEventListener('pointerenter', onEnterWindow)
@@ -165,11 +182,16 @@ export function Cursor() {
       window.removeEventListener('pointerover', onOver)
       window.removeEventListener('pointerdown', onDown)
       window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseover', onOver)
+      window.removeEventListener('mousedown', onMouseDown)
+      window.removeEventListener('mouseup', onMouseUp)
       window.removeEventListener('scroll', onScroll, true)
       document.removeEventListener('pointerleave', onLeaveWindow)
       document.removeEventListener('pointerenter', onEnterWindow)
       window.removeEventListener('blur', onBlur)
       window.cancelAnimationFrame(raf)
+      root.classList.remove('has-custom-cursor')
       body.classList.remove('has-custom-cursor')
       delete body.dataset.cursorState
       delete body.dataset.cursorPressed
