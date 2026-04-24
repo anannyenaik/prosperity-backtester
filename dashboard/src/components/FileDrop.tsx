@@ -89,7 +89,7 @@ export function FileDrop() {
           {dragging ? 'Drop dashboard bundles' : 'Drop dashboard.json files'}
         </div>
         <div className="file-drop__copy mt-0.5 truncate text-[11px] leading-[1.35] text-muted">
-          Browse or drag replay, Monte Carlo, calibration and comparison bundles.
+          Browse or drag one workspace bundle, or any replay, Monte Carlo, calibration, comparison or Round 2 bundle.
         </div>
       </div>
       {error && (

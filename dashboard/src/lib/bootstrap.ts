@@ -66,5 +66,9 @@ export function normaliseBootstrapRunType(value: string | null): string | null {
     round2_scenarios: 'round2_scenarios',
     'scenario-compare': 'scenario_compare',
     scenario_compare: 'scenario_compare',
+    workspace: 'workspace',
+    'all-in-one': 'workspace',
+    all_in_one: 'workspace',
+    research_workspace: 'workspace',
   }[value.toLowerCase()] ?? null
 }

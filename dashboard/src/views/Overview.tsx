@@ -1,5 +1,5 @@
 import type React from 'react'
-import { Activity } from 'lucide-react'
+import { Activity, CheckCircle2, CircleDot } from 'lucide-react'
 import { useStore } from '../store'
 import { MetricCard } from '../components/MetricCard'
 import { Card } from '../components/Card'
@@ -11,8 +11,61 @@ import { ProductToggle } from '../components/ProductToggle'
 import { BundleBadge } from '../components/BundleBadge'
 import { PhaseTimings } from '../components/PhaseTimings'
 import { fmtNum, fmtInt, fmtPct, fmtDate, fmtBytes, colorForValue } from '../lib/format'
-import { formatBool, getComparisonRows, interpretBundle, isFiniteNumber, numberOrNull } from '../lib/bundles'
-import { POSITION_LIMIT, PRODUCT_LABELS, type DashboardPayload, type DataContractEntry, type Product } from '../types'
+import { formatBool, getComparisonRows, getTabAvailability, interpretBundle, isFiniteNumber, numberOrNull } from '../lib/bundles'
+import { POSITION_LIMIT, PRODUCT_LABELS, type DashboardPayload, type DataContractEntry, type Product, type WorkspaceIntegrity, type WorkspaceSectionKey, type WorkspaceSourceBundle } from '../types'
+
+const WORKSPACE_SECTION_KEYS: WorkspaceSectionKey[] = [
+  'overview',
+  'replay',
+  'montecarlo',
+  'calibration',
+  'compare',
+  'optimize',
+  'round2',
+  'inspect',
+  'osmium',
+  'pepper',
+  'alpha',
+]
+
+const WORKSPACE_SECTION_LABELS: Record<WorkspaceSectionKey, string> = {
+  overview: 'Overview',
+  replay: 'Replay',
+  montecarlo: 'Monte Carlo',
+  calibration: 'Calibration',
+  compare: 'Comparison',
+  optimize: 'Optimisation',
+  round2: 'Round 2',
+  inspect: 'Inspect',
+  osmium: 'Osmium',
+  pepper: 'Pepper',
+  alpha: 'Alpha Lab',
+}
+
+function workspaceSectionLabel(key: string): string {
+  return WORKSPACE_SECTION_LABELS[key as WorkspaceSectionKey] ?? key
+}
+
+function formatWorkspaceSectionList(value: string[] | WorkspaceSectionKey[] | null | undefined): string {
+  if (!value?.length) return 'None'
+  return value.map((section) => workspaceSectionLabel(section)).join(', ')
+}
+
+function workspaceIntegrityLabel(status: WorkspaceIntegrity['status'] | undefined): string {
+  if (status === 'overlap') return 'Overlap flagged'
+  if (status === 'partial') return 'Partial coverage'
+  return 'Clean assembly'
+}
+
+function workspaceIntegrityTone(status: WorkspaceIntegrity['status'] | undefined): 'good' | 'warn' {
+  return status === 'overlap' || status === 'partial' ? 'warn' : 'good'
+}
+
+function shortSourcePath(value: string | null | undefined): string {
+  if (!value) return 'not recorded'
+  const parts = value.replace(/\\/g, '/').split('/')
+  return parts.slice(-2).join('/')
+}
 
 export function Overview() {
   const { getActiveRun, activeProduct } = useStore()
@@ -224,6 +277,7 @@ export function Overview() {
 function renderBundleOverview(payload: DashboardPayload, activeProduct: Product): React.ReactNode {
   const bundle = interpretBundle(payload)
 
+  if (bundle.isWorkspace) return <WorkspaceOverview payload={payload} activeProduct={activeProduct} />
   if (bundle.type === 'replay') return <ReplayOverview payload={payload} activeProduct={activeProduct} />
   if (bundle.type === 'monte_carlo') return <MonteCarloOverview payload={payload} />
   if (bundle.type === 'comparison') return <ComparisonOverview payload={payload} />
@@ -235,6 +289,237 @@ function renderBundleOverview(payload: DashboardPayload, activeProduct: Product)
     <Card title="Bundle metrics">
       <EmptyState title="Unknown bundle schema" message="The dashboard could not classify this bundle type confidently." />
     </Card>
+  )
+}
+
+function WorkspaceOverview({ payload, activeProduct }: { payload: DashboardPayload; activeProduct: Product }) {
+  const workspace = payload.workspace
+  const bundle = interpretBundle(payload)
+  const integrity = workspace?.integrity
+  const sectionCards = WORKSPACE_SECTION_KEYS.map((key) => {
+    const availability =
+      key === 'overview'
+        ? {
+            supported: true,
+            title: 'Overview available',
+            message: 'Workspace overview is always available.',
+          }
+        : getTabAvailability(payload, key)
+
+    return {
+      key,
+      label: workspaceSectionLabel(key),
+      availability,
+      sourcePath: integrity?.promotedBy?.[key],
+    }
+  })
+  const availableCount = sectionCards.filter((section) => section.availability.supported).length
+  const missingLabels = sectionCards
+    .filter((section) => !section.availability.supported)
+    .map((section) => section.label)
+  const overlapCount = Object.values(integrity?.shadowedBy ?? {}).filter((paths) => Array.isArray(paths) && paths.length > 0).length
+  const promotedRows = (Object.entries(integrity?.promotedBy ?? {}) as Array<[WorkspaceSectionKey, string]>)
+    .sort((left, right) => WORKSPACE_SECTION_KEYS.indexOf(left[0]) - WORKSPACE_SECTION_KEYS.indexOf(right[0]))
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <MetricCard
+          label="Available sections"
+          value={availableCount}
+          sub={`${sectionCards.length} workspace tabs visible`}
+          tone="good"
+        />
+        <MetricCard
+          label="Source bundles"
+          value={workspace?.sources.length ?? 0}
+          sub={workspace?.name ?? 'workspace'}
+          tone="accent"
+        />
+        <MetricCard
+          label="Missing sections"
+          value={sectionCards.length - availableCount}
+          sub={missingLabels.length ? missingLabels.slice(0, 2).join(', ') : 'Full tab coverage'}
+          tone={missingLabels.length > 0 ? 'warn' : 'good'}
+        />
+        <MetricCard
+          label="Integrity"
+          value={workspaceIntegrityLabel(integrity?.status)}
+          sub={overlapCount > 0 ? `${overlapCount} overlapped sections retained as provenance` : 'No overlapping section claims'}
+          tone={workspaceIntegrityTone(integrity?.status)}
+        />
+      </div>
+
+      <Card
+        title="Workspace control tower"
+        subtitle="Every dashboard section stays visible, with honest enablement and source provenance for the data this workspace actually carries."
+      >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
+          {sectionCards.map((section) => {
+            const isPresent = section.availability.supported
+            return (
+              <div
+                key={section.key}
+                className={
+                  isPresent
+                    ? 'rounded-lg border border-good/30 bg-good/10 px-3 py-3'
+                    : 'rounded-lg border border-border bg-white/[0.02] px-3 py-3 opacity-70'
+                }
+                title={section.availability.supported ? section.availability.message : section.availability.title}
+              >
+                <div className="flex items-center gap-2">
+                  {isPresent ? (
+                    <CheckCircle2 className="h-4 w-4 text-good" />
+                  ) : (
+                    <CircleDot className="h-4 w-4 text-muted" />
+                  )}
+                  <span className="font-display text-xs font-semibold uppercase tracking-[0.08em]">{section.label}</span>
+                </div>
+                <div className="hud-label mt-2 text-muted">{isPresent ? 'available' : 'not included in this workspace'}</div>
+                <div className="mt-2 text-xs leading-5 text-txt-soft">{section.availability.message}</div>
+                {section.sourcePath && (
+                  <div className="hud-label mt-3 text-accent-2">from {shortSourcePath(section.sourcePath)}</div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {missingLabels.length > 0 && (
+          <div className="mt-4 rounded-lg border border-border bg-white/[0.02] px-4 py-3 text-sm leading-6 text-txt-soft">
+            Missing sections: {missingLabels.join(', ')}.
+          </div>
+        )}
+
+        {promotedRows.length > 0 && (
+          <div className="mt-4 grid gap-2 lg:grid-cols-2 xl:grid-cols-3">
+            {promotedRows.map(([section, path]) => (
+              <div key={`${section}:${path}`} className="rounded-lg border border-border bg-white/[0.025] px-3 py-3">
+                <div className="hud-label text-muted">Promoted source</div>
+                <div className="mt-2 font-display text-xs font-semibold uppercase tracking-[0.08em] text-txt">
+                  {workspaceSectionLabel(section)}
+                </div>
+                <div className="mt-2 text-sm text-txt-soft">{shortSourcePath(path)}</div>
+                <div className="hud-label mt-2 text-accent-2">{path}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {integrity?.warnings?.length ? (
+          <div className="mt-4 rounded-lg border border-warn/20 bg-warn/10 px-4 py-3">
+            <div className="hud-label text-warn">Integrity notes</div>
+            <div className="mt-2 space-y-2 text-sm leading-6 text-txt-soft">
+              {integrity.warnings.map((warning, index) => (
+                <div key={index}>{warning}</div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </Card>
+
+      <Card
+        title="Workspace provenance"
+        subtitle="Assembly metadata for reproducibility, plus the command and git context recorded when this workspace bundle was built."
+      >
+        <KVGrid
+          cols={2}
+          pairs={[
+            { label: 'Workspace', value: workspace?.name ?? payload.meta?.runName, tone: 'accent' },
+            { label: 'Built', value: fmtDate(workspace?.createdAt ?? payload.meta?.createdAt) },
+            { label: 'Source bundles', value: workspace?.sources.length ?? 0 },
+            { label: 'Integrity status', value: workspaceIntegrityLabel(integrity?.status), tone: workspaceIntegrityTone(integrity?.status) },
+            { label: 'Sections present', value: formatWorkspaceSectionList(workspace?.sections?.present) },
+            { label: 'Sections missing', value: formatWorkspaceSectionList(workspace?.sections?.missing) },
+            { label: 'Git branch', value: workspace?.gitBranch ?? 'not recorded' },
+            { label: 'Git commit', value: workspace?.gitCommit ? String(workspace.gitCommit).slice(0, 12) : 'not recorded' },
+            { label: 'Git dirty', value: formatBool(workspace?.gitDirty) },
+            { label: 'Assembly command', value: workspace?.command ?? 'not recorded' },
+            { label: 'Notes', value: workspace?.notes ?? 'not recorded' },
+          ]}
+        />
+      </Card>
+
+      {workspace && workspace.sources.length > 0 && (
+        <Card
+          title="Source bundles"
+          subtitle="The single-purpose bundles assembled into this workspace, including which sections were promoted and which were retained only as supporting provenance."
+        >
+          <WorkspaceSourceTable sources={workspace.sources} />
+        </Card>
+      )}
+
+      {bundle.hasReplaySummary && <ReplayOverview payload={payload} activeProduct={activeProduct} />}
+      {bundle.hasMonteCarlo && <MonteCarloOverview payload={payload} />}
+      {bundle.hasComparisonRows && !bundle.hasRound2Rows && <ComparisonOverview payload={payload} />}
+      {bundle.hasRound2Rows && <Round2Overview payload={payload} />}
+      {bundle.hasCalibration && <CalibrationOverview payload={payload} />}
+      {bundle.hasOptimization && <OptimizationOverview payload={payload} />}
+    </div>
+  )
+}
+
+function WorkspaceSourceTable({ sources }: { sources: WorkspaceSourceBundle[] }) {
+  const cols: ColDef<WorkspaceSourceBundle>[] = [
+    { key: 'name', header: 'Source', fmt: 'str' },
+    { key: 'type', header: 'Type', fmt: 'str' },
+    {
+      key: 'promotedSections',
+      header: 'Loaded',
+      fmt: 'str',
+      render: (_value, row) => (row.promotedSections?.length ? formatWorkspaceSectionList(row.promotedSections) : 'Provenance only'),
+    },
+    {
+      key: 'sections',
+      header: 'Can power',
+      fmt: 'str',
+      render: (_value, row) => formatWorkspaceSectionList(row.sections),
+    },
+    {
+      key: 'profile',
+      header: 'Trader / profile',
+      fmt: 'str',
+      render: (_value, row) => {
+        const parts = [row.traderName, row.profile].filter((value): value is string => Boolean(value))
+        return parts.length ? parts.join(' / ') : 'not recorded'
+      },
+    },
+    {
+      key: 'mode',
+      header: 'Workflow / git',
+      fmt: 'str',
+      render: (_value, row) => {
+        const parts = [
+          row.mode,
+          row.workflowTier,
+          row.engineBackend,
+          row.monteCarloBackend ? `mc:${row.monteCarloBackend}` : null,
+          row.gitCommit ? String(row.gitCommit).slice(0, 8) : null,
+          row.gitDirty ? 'dirty' : null,
+        ].filter((value): value is string => Boolean(value))
+        return parts.length ? parts.join(' / ') : 'not recorded'
+      },
+    },
+    { key: 'createdAt', header: 'Created', fmt: 'str', render: (_value, row) => fmtDate(row.createdAt) },
+    { key: 'path', header: 'Path', fmt: 'str' },
+  ]
+  const notes = sources.filter((source) => source.note)
+
+  return (
+    <div className="space-y-4">
+      <DataTable rows={sources} cols={cols} striped />
+      {notes.length > 0 && (
+        <div className="grid gap-3 lg:grid-cols-2">
+          {notes.map((source) => (
+            <div key={`${source.path}:note`} className="rounded-lg border border-border bg-white/[0.025] px-4 py-3">
+              <div className="hud-label text-muted">{source.name}</div>
+              <div className="mt-2 text-sm leading-6 text-txt-soft">{source.note}</div>
+              {source.command && <div className="hud-label mt-3 text-accent-2">{source.command}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -293,7 +578,7 @@ function MonteCarloOverview({ payload }: { payload: DashboardPayload }) {
     <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
       <MetricCard label="MC mean" value={fmtNum(summary.mean)} tone={colorForValue(summary.mean)} sub={`Sessions ${fmtInt(summary.session_count)}`} />
       <MetricCard label="MC P05" value={fmtNum(summary.p05)} tone={colorForValue(summary.p05)} sub={`ES05 ${fmtNum(summary.expected_shortfall_05)}`} />
-      <MetricCard label="MC median" value={fmtNum(summary.p50)} tone={colorForValue(summary.p50)} sub={`P95 ${fmtNum(summary.p95)}`} />
+      <MetricCard label="MC median" value={fmtNum(summary.p50)} sub={`P95 ${fmtNum(summary.p95)}`} />
       <MetricCard label="Positive rate" value={fmtPct(summary.positive_rate)} tone={summary.positive_rate > 0.5 ? 'good' : 'warn'} sub={`Std ${fmtNum(summary.std)}`} />
     </div>
   )

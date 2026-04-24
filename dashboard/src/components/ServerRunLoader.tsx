@@ -15,6 +15,7 @@ import {
   FlaskConical,
   GitCompare,
   History,
+  Layers,
   RefreshCw,
   Search,
   Server,
@@ -28,7 +29,7 @@ import type { DashboardPayload } from '../types'
 import { fmtBytes, fmtDate, fmtNum } from '../lib/format'
 import { computeFloatingLayerLayout } from '../lib/floatingLayer'
 
-type RunFilter = 'all' | 'replay' | 'monte_carlo' | 'comparison' | 'calibration' | 'optimization' | 'round2_scenarios'
+type RunFilter = 'all' | 'workspace' | 'replay' | 'monte_carlo' | 'comparison' | 'calibration' | 'optimization' | 'round2_scenarios'
 type QuickLoadKind = Exclude<RunFilter, 'all'>
 
 interface QuickLoadButton {
@@ -77,6 +78,10 @@ const TYPE_BUTTONS: Array<QuickLoadButton & { caption: string; icon: ReactNode }
 ]
 
 const RUN_TYPE_MAP: Record<string, Exclude<RunFilter, 'all'>> = {
+  workspace: 'workspace',
+  research_workspace: 'workspace',
+  all_in_one: 'workspace',
+  all_in_one_bundle: 'workspace',
   replay: 'replay',
   mc: 'monte_carlo',
   montecarlo: 'monte_carlo',
@@ -216,7 +221,9 @@ export function ServerRunLoader() {
         return
       }
 
-      const target = kind ? runs.find((run) => normaliseRunType(run.type) === kind) : runs[0]
+      const target = kind
+        ? runs.find((run) => normaliseRunType(run.type) === kind)
+        : runs.find((run) => normaliseRunType(run.type) !== 'workspace')
       if (!target) {
         setNotice(unavailableNotice(kind))
         return
@@ -273,13 +280,23 @@ export function ServerRunLoader() {
           </div>
         </div>
 
-        <div className="quickload-primary mt-1.5 grid gap-1 sm:grid-cols-2">
+        <div className="quickload-primary mt-1.5 grid gap-1">
+          <LoaderActionButton
+            label="Open Latest Workspace"
+            icon={loadingKey === 'latest:workspace' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Layers className="h-4 w-4" />}
+            onClick={() => void loadLatestFromServer('workspace')}
+            disabled={loadingKey != null}
+            tone="primary"
+            indicator={<ArrowUpRight className="h-3.5 w-3.5" />}
+          />
+        </div>
+
+        <div className="quickload-secondary mt-1.5 grid gap-1 sm:grid-cols-2">
           <LoaderActionButton
             label="Open Latest Bundle"
             icon={loadingKey === 'latest' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Server className="h-4 w-4" />}
             onClick={() => void loadLatestFromServer()}
             disabled={loadingKey != null}
-            tone="primary"
             indicator={<ArrowUpRight className="h-3.5 w-3.5" />}
           />
           <LoaderActionButton
@@ -306,7 +323,7 @@ export function ServerRunLoader() {
         </div>
 
         <div className="quickload-divider mt-2 flex items-center gap-1.5">
-          <span className="hud-label text-muted">Shortcuts</span>
+          <span className="hud-label text-muted">Single-purpose bundles</span>
           <span className="quickload-divider__rule" aria-hidden="true" />
         </div>
 
@@ -395,11 +412,27 @@ export function ServerRunLoader() {
                         className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-accent/5 disabled:cursor-wait disabled:opacity-70"
                       >
                         <span className="min-w-0">
-                          <span className="block truncate font-display text-xs font-semibold uppercase tracking-[0.08em] text-txt">
-                            {run.name}
+                          <span className="flex min-w-0 items-center gap-2">
+                            {normaliseRunType(run.type) === 'workspace' && (
+                              <span
+                                className="hud-label rounded border border-accent/35 bg-accent/12 px-1.5 py-0.5 text-accent"
+                                title={run.workspaceSourceCount ? `Assembled from ${run.workspaceSourceCount} child bundle${run.workspaceSourceCount === 1 ? '' : 's'}` : 'Research workspace bundle'}
+                              >
+                                workspace
+                              </span>
+                            )}
+                            <span className="block truncate font-display text-xs font-semibold uppercase tracking-[0.08em] text-txt">
+                              {run.name}
+                            </span>
                           </span>
                           <span className="hud-label mt-1 flex flex-wrap gap-2 text-muted">
                             <span>{filterLabel(normaliseRunType(run.type))}</span>
+                            {run.workspaceSourceCount != null && run.workspaceSourceCount > 0 && (
+                              <span>{run.workspaceSourceCount} sources</span>
+                            )}
+                            {Array.isArray(run.workspaceSectionsMissing) && run.workspaceSectionsMissing.length > 0 && (
+                              <span>missing {run.workspaceSectionsMissing.length}</span>
+                            )}
                             {run.profile && <span>{run.profile}</span>}
                             {run.workflowTier && <span>{run.workflowTier}</span>}
                             {run.engineBackend && <span>{run.engineBackend}</span>}
@@ -631,6 +664,7 @@ function normaliseRunType(value: string | null | undefined): RunFilter {
 function filterLabel(value: RunFilter) {
   return {
     all: 'All',
+    workspace: 'Workspace',
     replay: 'Replay',
     monte_carlo: 'MC',
     comparison: 'Compare',
@@ -642,6 +676,7 @@ function filterLabel(value: RunFilter) {
 
 function bundleTypeLabel(value: QuickLoadKind): string {
   return {
+    workspace: 'Workspace',
     replay: 'Replay',
     monte_carlo: 'Monte Carlo',
     comparison: 'Comparison',
@@ -655,8 +690,17 @@ function unavailableNotice(kind?: QuickLoadKind): LoaderNotice {
   if (!kind) {
     return {
       variant: 'unavailable',
-      title: 'No bundle is currently available',
-      message: 'The local server did not return any dashboard bundles to open.',
+      title: 'No single-purpose bundle is currently available',
+      message: 'The local server did not return any replay, Monte Carlo, calibration, comparison, optimisation or Round 2 bundles to open.',
+    }
+  }
+  if (kind === 'workspace') {
+    return {
+      variant: 'unavailable',
+      title: 'Workspace bundle unavailable',
+      message:
+        'No workspace bundle is currently available on the local server. ' +
+        'Generate one with `python -m prosperity_backtester workspace-bundle --from-dir <backtests dir>` or browse an individual bundle.',
     }
   }
   const label = bundleTypeLabel(kind)

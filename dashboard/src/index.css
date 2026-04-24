@@ -517,44 +517,42 @@ table {
 }
 
 .landing-grid {
-  align-content: stretch;
-  gap: clamp(18px, 1.8vw, 28px);
-}
-
-.landing-hero,
-.landing-panel {
-  height: 100%;
-  min-height: 0;
+  align-items: stretch;
+  gap: clamp(20px, 2.2vw, 36px);
 }
 
 .landing-hero {
-  justify-content: space-between;
-  padding-top: clamp(6px, 0.8vh, 12px);
-  padding-bottom: clamp(8px, 0.95vh, 14px);
-}
-
-.landing-hero-primary {
   display: flex;
-  flex-direction: column;
+  min-height: 0;
 }
 
-.landing-hero-secondary {
-  margin-top: clamp(12px, 1.4vh, 18px);
+.landing-hero-frame {
+  display: flex;
+  min-height: 0;
+  width: 100%;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(18px, 2vh, 28px) clamp(18px, 1.75vw, 26px);
+  overflow: hidden;
+}
+
+.landing-hero-kicker {
+  margin-bottom: clamp(12px, 1.3vh, 18px);
 }
 
 .landing-hero-title {
-  font-size: clamp(3.45rem, 5.85vw, 5.1rem);
+  font-size: clamp(3.2rem, 5.6vw, 4.7rem);
 }
 
 .landing-hero-copy {
-  margin-top: clamp(14px, 1.55vh, 20px);
-  max-width: 39rem;
-  font-size: clamp(1.06rem, 1.14vw, 1.18rem);
+  margin-top: clamp(16px, 1.7vh, 22px);
+  max-width: 42rem;
+  font-size: clamp(1.02rem, 1.1vw, 1.14rem);
   line-height: 1.52;
 }
 
 .landing-motif-strip {
-  margin-top: clamp(14px, 1.45vh, 18px);
+  margin-top: clamp(22px, 2.4vh, 32px);
   gap: clamp(10px, 0.9vw, 14px);
 }
 
@@ -587,7 +585,11 @@ table {
 }
 
 .landing-panel {
+  align-self: stretch;
+  min-height: 0;
+  height: 100%;
   padding: clamp(14px, 1.7vh, 22px);
+  max-height: 100%;
   overscroll-behavior: contain;
 }
 
@@ -619,6 +621,11 @@ table {
 
 .landing-panel .quickload-primary {
   margin-top: clamp(10px, 1.1vh, 14px);
+  gap: clamp(8px, 0.7vw, 10px);
+}
+
+.landing-panel .quickload-secondary {
+  margin-top: clamp(8px, 0.85vh, 11px);
   gap: clamp(8px, 0.7vw, 10px);
 }
 
@@ -654,7 +661,7 @@ table {
 }
 
 .landing-command-strip {
-  margin-top: clamp(14px, 1.45vh, 18px);
+  margin-top: clamp(20px, 2.2vh, 28px);
   letter-spacing: 0.18em;
 }
 
@@ -699,41 +706,45 @@ table {
 
 @media (min-width: 1024px) and (max-height: 900px) {
   .landing-shell {
-    padding-top: clamp(5px, 0.75vh, 9px);
-    padding-bottom: clamp(6px, 0.8vh, 10px);
+    padding-top: clamp(6px, 0.9vh, 11px);
+    padding-bottom: clamp(6px, 0.9vh, 11px);
   }
 
   .landing-grid {
-    gap: clamp(16px, 1.35vw, 20px);
+    gap: clamp(18px, 1.8vw, 28px);
+  }
+
+  .landing-hero-frame {
+    padding: clamp(16px, 1.65vh, 22px) clamp(16px, 1.45vw, 20px);
   }
 
   .landing-hero-kicker {
-    margin-bottom: 8px;
+    margin-bottom: 10px;
   }
 
   .landing-hero-title {
-    font-size: clamp(3.06rem, 5.45vw, 3.98rem);
+    font-size: clamp(2.85rem, 5.1vw, 3.85rem);
   }
 
   .landing-hero-copy {
-    margin-top: 12px;
-    max-width: 36rem;
-    font-size: clamp(1rem, 1.04vw, 1.06rem);
-    line-height: 1.47;
+    margin-top: 14px;
+    max-width: 38rem;
+    font-size: clamp(0.99rem, 1.02vw, 1.06rem);
+    line-height: 1.5;
   }
 
   .landing-motif-strip {
-    margin-top: 13px;
-    gap: clamp(9px, 0.75vw, 10px);
+    margin-top: 18px;
+    gap: clamp(9px, 0.78vw, 11px);
   }
 
   .landing-motif-card {
-    min-height: 92px;
+    min-height: 96px;
     padding: 12px 13px;
   }
 
   .landing-command-strip {
-    margin-top: 10px;
+    margin-top: 16px;
   }
 
   .landing-panel {
@@ -824,37 +835,41 @@ table {
 
 @media (min-width: 1024px) and (max-height: 820px) {
   .landing-shell {
-    padding-top: clamp(3px, 0.45vh, 6px);
+    padding-top: clamp(4px, 0.55vh, 7px);
     padding-bottom: clamp(4px, 0.55vh, 7px);
   }
 
   .landing-grid {
-    gap: clamp(12px, 0.95vw, 15px);
+    gap: clamp(14px, 1.1vw, 20px);
+  }
+
+  .landing-hero-frame {
+    padding: clamp(14px, 1.35vh, 18px) clamp(14px, 1.2vw, 17px);
   }
 
   .landing-hero-kicker {
-    margin-bottom: 7px;
+    margin-bottom: 8px;
     gap: 10px;
   }
 
   .landing-hero-kicker::after {
-    width: 42px;
+    width: 44px;
   }
 
   .landing-hero-title {
-    font-size: clamp(2.84rem, 4.95vw, 3.48rem);
+    font-size: clamp(2.6rem, 4.6vw, 3.3rem);
   }
 
   .landing-hero-copy {
-    margin-top: 9px;
-    max-width: 35rem;
-    font-size: clamp(0.98rem, 1vw, 1.04rem);
-    line-height: 1.4;
+    margin-top: 11px;
+    max-width: 36rem;
+    font-size: clamp(0.96rem, 0.98vw, 1.02rem);
+    line-height: 1.45;
   }
 
   .landing-motif-strip {
-    margin-top: 12px;
-    max-width: 43rem;
+    margin-top: 15px;
+    max-width: 44rem;
     gap: 9px;
   }
 
@@ -880,7 +895,10 @@ table {
     line-height: 1.25;
   }
 
-  .landing-command-strip,
+  .landing-command-strip {
+    margin-top: 12px;
+  }
+
   .landing-panel .file-drop__copy {
     display: none;
   }

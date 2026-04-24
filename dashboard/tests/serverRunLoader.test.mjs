@@ -175,6 +175,38 @@ test('browse local server opens a fixed floating overlay instead of an in-flow p
   assert.match(JSON.stringify(renderer.toJSON()), /Available bundles/)
 })
 
+test('bundle browser labels workspace bundles clearly with source and missing counts', async (t) => {
+  resetStore()
+  const fetchMock = mockFetch({
+    '/api/runs': {
+      json: [
+        runMeta({
+          path: 'backtests/2026-04-24_09-00-00_workspace/dashboard.json',
+          name: '2026-04-24 workspace',
+          type: 'workspace',
+          workspaceSourceCount: 2,
+          workspaceSectionsMissing: ['montecarlo'],
+        }),
+      ],
+    },
+  })
+  t.after(() => fetchMock.restore())
+
+  let renderer
+  await act(async () => {
+    renderer = create(React.createElement(ServerRunLoader))
+  })
+
+  await act(async () => {
+    await findButton(renderer.root, 'Browse Local Server').props.onClick()
+  })
+
+  const rowText = textOfNode(findButton(renderer.root, '2026-04-24 workspace'))
+  assert.match(rowText, /workspace/i)
+  assert.match(rowText, /2 sources/)
+  assert.match(rowText, /missing 1/)
+})
+
 test('top quick-load actions render title-only labels for a cleaner compact header', async () => {
   resetStore()
 
@@ -184,10 +216,45 @@ test('top quick-load actions render title-only labels for a cleaner compact head
   })
 
   const rendered = JSON.stringify(renderer.toJSON())
+  assert.match(rendered, /Open Latest Workspace/)
   assert.match(rendered, /Open Latest Bundle/)
   assert.match(rendered, /Browse Local Server/)
   assert.doesNotMatch(rendered, /Most recent run on the server/)
   assert.doesNotMatch(rendered, /Inspect available bundles/)
+})
+
+test('workspace quick-load opens the latest workspace bundle directly', async (t) => {
+  resetStore()
+  const workspaceRun = runMeta({
+    path: 'backtests/2026-04-24_09-00-00_workspace/dashboard.json',
+    name: '2026-04-24 workspace',
+    type: 'workspace',
+    workspaceSourceCount: 2,
+    workspaceSectionsMissing: ['montecarlo'],
+  })
+  const fetchMock = mockFetch({
+    '/api/runs': {
+      json: [workspaceRun, runMeta()],
+    },
+    '/api/run/backtests%2F2026-04-24_09-00-00_workspace%2Fdashboard.json': {
+      json: payload('workspace'),
+    },
+  })
+  t.after(() => fetchMock.restore())
+
+  let renderer
+  await act(async () => {
+    renderer = create(React.createElement(ServerRunLoader))
+  })
+
+  await act(async () => {
+    await findButton(renderer.root, 'Open Latest Workspace').props.onClick()
+  })
+
+  assert.deepEqual(fetchMock.calls, [
+    '/api/runs',
+    '/api/run/backtests%2F2026-04-24_09-00-00_workspace%2Fdashboard.json',
+  ])
 })
 
 test('missing quick-loads show an explicit unavailable notice instead of failing silently', async (t) => {
@@ -334,5 +401,43 @@ test('matching quick-loads still fetch and load the selected bundle', async (t) 
   assert.deepEqual(fetchMock.calls, [
     '/api/runs',
     '/api/run/backtests%2F2026-04-23_20-05-00_compare%2Fdashboard.json',
+  ])
+})
+
+test('generic latest bundle skips workspace bundles and opens the latest single-purpose bundle', async (t) => {
+  resetStore()
+  const workspaceRun = runMeta({
+    path: 'backtests/2026-04-24_09-00-00_workspace/dashboard.json',
+    name: '2026-04-24 workspace',
+    type: 'workspace',
+    workspaceSourceCount: 3,
+  })
+  const compareRun = runMeta({
+    path: 'backtests/2026-04-24_08-45-00_compare/dashboard.json',
+    name: '2026-04-24 compare',
+    type: 'comparison',
+  })
+  const fetchMock = mockFetch({
+    '/api/runs': {
+      json: [workspaceRun, compareRun],
+    },
+    '/api/run/backtests%2F2026-04-24_08-45-00_compare%2Fdashboard.json': {
+      json: payload('comparison'),
+    },
+  })
+  t.after(() => fetchMock.restore())
+
+  let renderer
+  await act(async () => {
+    renderer = create(React.createElement(ServerRunLoader))
+  })
+
+  await act(async () => {
+    await findButton(renderer.root, 'Open Latest Bundle').props.onClick()
+  })
+
+  assert.deepEqual(fetchMock.calls, [
+    '/api/runs',
+    '/api/run/backtests%2F2026-04-24_08-45-00_compare%2Fdashboard.json',
   ])
 })

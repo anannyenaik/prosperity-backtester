@@ -46,6 +46,24 @@ def _provenance_metadata(manifest: dict) -> dict:
     }
 
 
+def _workspace_metadata(manifest: dict, payload: dict | None) -> dict:
+    workspace = None
+    if isinstance(manifest.get("workspace"), dict):
+        workspace = manifest["workspace"]
+    elif payload is not None and isinstance(payload.get("workspace"), dict):
+        workspace = payload["workspace"]
+    if not isinstance(workspace, dict):
+        return {}
+    sources = workspace.get("sources") if isinstance(workspace.get("sources"), list) else []
+    sections = workspace.get("sections") if isinstance(workspace.get("sections"), dict) else {}
+    return {
+        "workspaceName": workspace.get("name"),
+        "workspaceSourceCount": len(sources),
+        "workspaceSectionsPresent": sections.get("present"),
+        "workspaceSectionsMissing": sections.get("missing"),
+    }
+
+
 def _registry_seed(row: dict) -> dict:
     return {
         "name": row.get("run_name"),
@@ -110,6 +128,9 @@ def _dashboard_metadata(path: Path) -> dict:
             }
         )
         metadata.update(_provenance_metadata(manifest))
+        metadata.update(_workspace_metadata(manifest, None))
+        if metadata.get("workspaceSourceCount"):
+            metadata["type"] = "workspace"
         return metadata
 
     if metadata["dashboardSizeBytes"] > 5_000_000:
@@ -141,6 +162,9 @@ def _dashboard_metadata(path: Path) -> dict:
             "gitDirty": ((meta.get("provenance") or {}).get("git") or {}).get("dirty") if isinstance((meta.get("provenance") or {}).get("git"), dict) else None,
         }
     )
+    metadata.update(_workspace_metadata({}, payload))
+    if metadata.get("workspaceSourceCount") or str(metadata.get("type")).lower() in {"workspace", "research_workspace", "all_in_one", "all_in_one_bundle"}:
+        metadata["type"] = "workspace"
     return metadata
 
 

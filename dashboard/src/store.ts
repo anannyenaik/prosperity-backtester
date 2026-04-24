@@ -43,6 +43,10 @@ export interface ServerRunMeta {
   gitCommit?: string | null
   gitDirty?: boolean | null
   source?: string | null
+  workspaceName?: string | null
+  workspaceSourceCount?: number | null
+  workspaceSectionsPresent?: string[] | null
+  workspaceSectionsMissing?: string[] | null
 }
 
 export const useStore = create<DashboardStore>((set, get) => ({

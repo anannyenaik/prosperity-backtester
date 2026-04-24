@@ -168,6 +168,18 @@ function runMeta() {
   }
 }
 
+function workspaceRunMeta() {
+  return {
+    path: 'backtests/2026-04-24_09-00-00_workspace/dashboard.json',
+    name: '2026-04-24 workspace',
+    type: 'workspace',
+    createdAt: '2026-04-24T09:00:00Z',
+    finalPnl: null,
+    sizeBytes: 54_321,
+    workspaceSourceCount: 3,
+  }
+}
+
 function textOfNode(node) {
   return node.children
     .map((child) => (typeof child === 'string' ? child : textOfNode(child)))
@@ -234,6 +246,38 @@ test('manually closing the last bootstrap-loaded run returns to landing without 
     '/api/run/backtests%2F2026-04-23_20-15-00_replay%2Fdashboard.json',
   ])
   assert.match(JSON.stringify(renderer.toJSON()), /Bundle intake/)
+})
+
+test('bootstrap latestType=workspace opens the latest workspace bundle', async (t) => {
+  resetStore()
+  const windowMock = mockWindow('?latest=1&latestType=workspace')
+  const fetchMock = mockFetch({
+    '/api/runs': {
+      json: [workspaceRunMeta(), runMeta()],
+    },
+    '/api/run/backtests%2F2026-04-24_09-00-00_workspace%2Fdashboard.json': {
+      json: payload('workspace'),
+    },
+  })
+
+  t.after(() => {
+    fetchMock.restore()
+    windowMock.restore()
+    resetStore()
+  })
+
+  await act(async () => {
+    create(React.createElement(App))
+    await flushAsyncWork()
+  })
+
+  assert.deepEqual(fetchMock.calls, [
+    '/api/runs',
+    '/api/run/backtests%2F2026-04-24_09-00-00_workspace%2Fdashboard.json',
+  ])
+  assert.equal(useStore.getState().runs.length, 1)
+  assert.equal(useStore.getState().getActiveRun().payload.type, 'workspace')
+  assert.equal(globalThis.window.location.search, '')
 })
 
 test('landing main uses a viewport-bounded shell under the measured nav', async (t) => {

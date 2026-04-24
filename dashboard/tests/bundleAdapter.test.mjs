@@ -140,6 +140,57 @@ function round2Payload() {
   }
 }
 
+function workspacePayload() {
+  const replay = replayPayload()
+  return {
+    ...basePayload('workspace', 'workspace'),
+    summary: replay.summary,
+    pnlSeries: replay.pnlSeries,
+    inventorySeries: replay.inventorySeries,
+    fairValueSeries: replay.fairValueSeries,
+    fills: replay.fills,
+    comparison: comparisonPayload().comparison,
+    comparisonDiagnostics: comparisonPayload().comparisonDiagnostics,
+    workspace: {
+      name: 'research workspace',
+      createdAt: '2026-04-23T20:15:00Z',
+      sources: [
+        {
+          path: 'runs/replay/dashboard.json',
+          name: 'replay source',
+          type: 'replay',
+          sections: ['replay', 'inspect', 'osmium', 'pepper', 'alpha'],
+          promotedSections: ['replay', 'inspect', 'osmium', 'pepper', 'alpha'],
+        },
+        {
+          path: 'runs/compare/dashboard.json',
+          name: 'compare source',
+          type: 'comparison',
+          sections: ['compare', 'alpha'],
+          promotedSections: ['compare'],
+        },
+      ],
+      sections: {
+        present: ['overview', 'replay', 'compare', 'inspect', 'osmium', 'pepper', 'alpha'],
+        missing: ['montecarlo', 'calibration', 'optimize', 'round2'],
+      },
+      integrity: {
+        status: 'partial',
+        promotedBy: {
+          replay: 'runs/replay/dashboard.json',
+          inspect: 'runs/replay/dashboard.json',
+          osmium: 'runs/replay/dashboard.json',
+          pepper: 'runs/replay/dashboard.json',
+          alpha: 'runs/replay/dashboard.json',
+          compare: 'runs/compare/dashboard.json',
+        },
+        shadowedBy: {},
+        warnings: [],
+      },
+    },
+  }
+}
+
 test('detects each supported bundle type from explicit metadata', () => {
   assert.equal(detectBundleType(replayPayload()), 'replay')
   assert.equal(detectBundleType(monteCarloPayload()), 'monte_carlo')
@@ -147,6 +198,8 @@ test('detects each supported bundle type from explicit metadata', () => {
   assert.equal(detectBundleType(round2Payload()), 'round2_scenarios')
   assert.equal(detectBundleType({ ...basePayload('calibration'), calibration: { grid: [{ score: 1 }], best: { score: 1 }, diagnostics: { candidate_count: 1 } } }), 'calibration')
   assert.equal(detectBundleType({ ...basePayload('optimisation'), optimization: { rows: [{ variant: 'a', score: 1 }], diagnostics: { variant_count: 1 } } }), 'optimization')
+  assert.equal(detectBundleType(workspacePayload()), 'workspace')
+  assert.equal(detectBundleType({ ...comparisonPayload(), type: 'unknown', workspace: workspacePayload().workspace }), 'workspace')
 })
 
 test('replay bundle supports replay tabs and blocks Monte Carlo without fake zeros', () => {
@@ -185,6 +238,23 @@ test('comparison bundle exposes real comparison rows instead of self-vs-self zer
   assert.equal(rows.length, 2)
   assert.equal(rows[0].trader, 'plus_offset110')
   assert.equal(rows[0].final_pnl, 247719)
+})
+
+test('workspace bundles use feature-based tab availability without pretending missing sections exist', () => {
+  const workspace = workspacePayload()
+  assert.equal(interpretBundle(workspace).isWorkspace, true)
+  assert.equal(getTabAvailability(workspace, 'replay').supported, true)
+  assert.equal(getTabAvailability(workspace, 'inspect').supported, true)
+  assert.equal(getTabAvailability(workspace, 'compare').supported, true)
+  assert.equal(getTabAvailability(workspace, 'alpha').supported, true)
+
+  const mcAvailability = getTabAvailability(workspace, 'montecarlo')
+  assert.equal(mcAvailability.supported, false)
+  assert.match(mcAvailability.title, /not included in this workspace/i)
+
+  const round2Availability = getTabAvailability(workspace, 'round2')
+  assert.equal(round2Availability.supported, false)
+  assert.match(round2Availability.title, /not included in this workspace/i)
 })
 
 test('ad hoc comparison requires two distinct replay summaries', () => {

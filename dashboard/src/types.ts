@@ -549,6 +549,69 @@ export interface Round2Data {
   }
 }
 
+// Workspace (all-in-one) bundle metadata
+
+export type WorkspaceSectionKey =
+  | 'overview'
+  | 'replay'
+  | 'montecarlo'
+  | 'calibration'
+  | 'compare'
+  | 'optimize'
+  | 'round2'
+  | 'inspect'
+  | 'osmium'
+  | 'pepper'
+  | 'alpha'
+
+export interface WorkspaceSourceBundle {
+  path: string
+  name: string
+  runName?: string | null
+  type: string
+  createdAt?: string | null
+  finalPnl?: number | null
+  sections?: WorkspaceSectionKey[]
+  promotedSections?: WorkspaceSectionKey[]
+  shadowedSections?: WorkspaceSectionKey[]
+  profile?: string | null
+  traderName?: string | null
+  mode?: string | null
+  workflowTier?: string | null
+  engineBackend?: string | null
+  monteCarloBackend?: string | null
+  workerCount?: number | null
+  gitCommit?: string | null
+  gitDirty?: boolean | null
+  command?: string | null
+  note?: string | null
+}
+
+export interface WorkspaceSections {
+  present: WorkspaceSectionKey[]
+  missing: WorkspaceSectionKey[]
+}
+
+export interface WorkspaceIntegrity {
+  status: 'clean' | 'partial' | 'overlap'
+  promotedBy: Partial<Record<WorkspaceSectionKey, string>>
+  shadowedBy?: Partial<Record<WorkspaceSectionKey, string[]>>
+  warnings?: string[]
+}
+
+export interface WorkspaceMeta {
+  name: string
+  createdAt: string
+  sources: WorkspaceSourceBundle[]
+  sections: WorkspaceSections
+  integrity?: WorkspaceIntegrity
+  command?: string | null
+  gitCommit?: string | null
+  gitDirty?: boolean | null
+  gitBranch?: string | null
+  notes?: string | null
+}
+
 // Top-level payload
 
 export interface DashboardPayload {
@@ -576,6 +639,7 @@ export interface DashboardPayload {
   calibration?: CalibrationData
   optimization?: OptimizationData
   round2?: Round2Data
+  workspace?: WorkspaceMeta
 }
 
 // App-level

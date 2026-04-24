@@ -7,6 +7,7 @@ export type BundleType =
   | 'comparison'
   | 'optimization'
   | 'round2_scenarios'
+  | 'workspace'
   | 'unknown'
 
 export interface BundleInterpretation {
@@ -22,6 +23,7 @@ export interface BundleInterpretation {
   hasComparisonRows: boolean
   hasOptimization: boolean
   hasRound2Rows: boolean
+  isWorkspace: boolean
 }
 
 export interface TabAvailability {
@@ -42,6 +44,7 @@ const BUNDLE_LABELS: Record<BundleType, string> = {
   comparison: 'Comparison',
   optimization: 'Optimisation',
   round2_scenarios: 'Round 2 scenario',
+  workspace: 'Workspace',
   unknown: 'Unknown',
 }
 
@@ -52,6 +55,7 @@ const BUNDLE_DESCRIPTIONS: Record<BundleType, string> = {
   comparison: 'precomputed trader comparison rows',
   optimization: 'parameter sweep and robustness ranking rows',
   round2_scenarios: 'Round 2 scenario aggregates, MAF sensitivity and ranking diagnostics',
+  workspace: 'an all-in-one research workspace composed of child bundles',
   unknown: 'a schema the dashboard cannot classify confidently',
 }
 
@@ -159,23 +163,32 @@ function normaliseBundleType(value: unknown): BundleType {
   if (key === 'optimisation') return 'optimization'
   if (key === 'optimize' || key === 'optimise') return 'optimization'
   if (key === 'round2' || key === 'round_2' || key === 'round2_scenario') return 'round2_scenarios'
+  if (key === 'research_workspace' || key === 'all_in_one' || key === 'all_in_one_bundle') return 'workspace'
   if (
     key === 'replay' ||
     key === 'monte_carlo' ||
     key === 'calibration' ||
     key === 'comparison' ||
     key === 'optimization' ||
-    key === 'round2_scenarios'
+    key === 'round2_scenarios' ||
+    key === 'workspace'
   ) {
     return key
   }
   return 'unknown'
 }
 
+function hasWorkspaceMeta(payload: DashboardPayload | null | undefined): boolean {
+  const ws = payload?.workspace
+  return Boolean(ws && Array.isArray(ws.sources) && ws.sources.length > 0)
+}
+
 export function detectBundleType(payload: DashboardPayload | null | undefined): BundleType {
   if (!payload) return 'unknown'
 
   const explicitType = normaliseBundleType(payload.type)
+  if (explicitType === 'workspace') return 'workspace'
+  if (hasWorkspaceMeta(payload)) return 'workspace'
   if (explicitType !== 'unknown') return explicitType
 
   if (payload.round2) return 'round2_scenarios'
@@ -193,12 +206,14 @@ export function interpretBundle(payload: DashboardPayload | null | undefined): B
   const type = detectBundleType(payload)
   const comparisonRows = getComparisonRows(payload)
   const hasRound2Rows = hasRows(payload?.round2?.scenarioRows) || hasRows(payload?.round2?.winnerRows)
+  const isWorkspace = type === 'workspace'
+  const badge = isWorkspace ? 'Workspace' : `${BUNDLE_LABELS[type]} bundle`
 
   return {
     type,
     rawType: typeof payload?.type === 'string' && payload.type.trim() ? payload.type : 'unknown',
     label: BUNDLE_LABELS[type],
-    badge: `${BUNDLE_LABELS[type]} bundle`,
+    badge,
     description: BUNDLE_DESCRIPTIONS[type],
     hasReplaySummary: Boolean(payload?.summary),
     hasReplayPath:
@@ -212,6 +227,7 @@ export function interpretBundle(payload: DashboardPayload | null | undefined): B
     hasComparisonRows: comparisonRows.length > 0,
     hasOptimization: Boolean(payload?.optimization?.rows?.length),
     hasRound2Rows,
+    isWorkspace,
   }
 }
 
@@ -261,6 +277,11 @@ export function getTabAvailability(
   }
 
   if (tab === 'replay') {
+    if (bundle.isWorkspace) {
+      return bundle.hasReplayPath
+        ? available('Replay data available', 'Top-level replay series are present in this workspace.')
+        : missing('Replay data is not included in this workspace.', 'No replay child bundle contributed top-level series to this workspace.')
+    }
     if (bundle.type !== 'replay') {
       return incompatible(
         'This tab requires a replay bundle.',
@@ -274,6 +295,11 @@ export function getTabAvailability(
   }
 
   if (tab === 'montecarlo') {
+    if (bundle.isWorkspace) {
+      return bundle.hasMonteCarlo
+        ? available('Monte Carlo data available', 'Monte Carlo data is present in this workspace.')
+        : missing('Monte Carlo data is not included in this workspace.', 'No Monte Carlo child bundle contributed a `monteCarlo.summary` to this workspace.')
+    }
     if (bundle.type !== 'monte_carlo') {
       return incompatible('This Monte Carlo view requires a monte_carlo bundle.', 'Monte Carlo metrics are not available for this bundle type.')
     }
@@ -284,6 +310,11 @@ export function getTabAvailability(
   }
 
   if (tab === 'calibration') {
+    if (bundle.isWorkspace) {
+      return bundle.hasCalibration
+        ? available('Calibration data available', 'Calibration candidates are present in this workspace.')
+        : missing('Calibration data is not included in this workspace.', 'No calibration child bundle contributed grid or best-candidate data to this workspace.')
+    }
     if (bundle.type !== 'calibration') {
       return incompatible('This tab requires a calibration bundle.', 'Calibration metrics are not available for this bundle type.')
     }
@@ -294,6 +325,11 @@ export function getTabAvailability(
   }
 
   if (tab === 'optimize') {
+    if (bundle.isWorkspace) {
+      return bundle.hasOptimization
+        ? available('Optimisation data available', 'Parameter sweep rows are present in this workspace.')
+        : missing('Optimisation data is not included in this workspace.', 'No optimisation child bundle contributed sweep rows to this workspace.')
+    }
     if (bundle.type !== 'optimization') {
       return incompatible('This tab requires an optimisation bundle.', 'Optimisation metrics are not available for this bundle type.')
     }
@@ -304,6 +340,11 @@ export function getTabAvailability(
   }
 
   if (tab === 'round2') {
+    if (bundle.isWorkspace) {
+      return bundle.hasRound2Rows
+        ? available('Round 2 scenario data available', 'Round 2 scenario aggregates are present in this workspace.')
+        : missing('Round 2 scenario data is not included in this workspace.', 'No Round 2 child bundle contributed scenario or winner rows to this workspace.')
+    }
     if (bundle.type !== 'round2_scenarios') {
       return incompatible('This tab requires a round2_scenarios bundle.', `${bundle.badge} contains ${bundle.description}, not scenario aggregates.`)
     }
@@ -315,12 +356,20 @@ export function getTabAvailability(
 
   if (tab === 'inspect' || tab === 'osmium' || tab === 'pepper') {
     if (!bundle.hasReplayPath) {
+      if (bundle.isWorkspace) {
+        return missing('Replay-style time-series data is not included in this workspace.', 'Add a replay child bundle to inspect per-tick data here.')
+      }
       return incompatible('Replay-style time-series data is not present.', 'Load a replay bundle to inspect per-tick data.')
     }
     return available('Replay-style time-series data available', 'Per-tick rows are present.')
   }
 
   if (tab === 'compare') {
+    if (bundle.isWorkspace) {
+      return bundle.hasComparisonRows
+        ? available('Comparison rows available', 'Precomputed comparison rows are present in this workspace.')
+        : missing('Comparison data is not included in this workspace.', 'No comparison or scenario child bundle contributed comparison rows to this workspace.')
+    }
     if ((bundle.type === 'comparison' || bundle.type === 'round2_scenarios') && bundle.hasComparisonRows) {
       return available('Comparison rows available', 'Precomputed comparison rows are present.')
     }

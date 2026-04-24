@@ -42,6 +42,7 @@ SUBCOMMANDS = {
     "round2-scenarios",
     "scenario-compare",
     "derive-fill-profile",
+    "workspace-bundle",
     "clean",
 }
 
@@ -64,6 +65,10 @@ RUN_TYPE_ALIASES = {
     "round2_scenarios": "round2_scenarios",
     "scenario-compare": "scenario_compare",
     "scenario_compare": "scenario_compare",
+    "workspace": "workspace",
+    "workspace-bundle": "workspace",
+    "all-in-one": "workspace",
+    "all_in_one": "workspace",
 }
 
 
@@ -466,7 +471,29 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--port", type=int, default=5555)
     serve.add_argument("--open-browser", action="store_true", help="Open the dashboard in a browser when the server starts")
     serve.add_argument("--latest", action="store_true", help="Open the latest discovered bundle automatically")
-    serve.add_argument("--latest-type", type=_normalise_run_type, default=None, help="Open the latest run of one type: replay, monte-carlo, compare, calibration, optimization, round2-scenarios or scenario-compare")
+    serve.add_argument("--latest-type", type=_normalise_run_type, default=None, help="Open the latest run of one type: workspace, replay, monte-carlo, compare, calibration, optimization, round2-scenarios or scenario-compare")
+
+    workspace = sub.add_parser(
+        "workspace-bundle",
+        help="Assemble a research workspace dashboard bundle from single-purpose child bundles",
+        formatter_class=_CliFormatter,
+        description=(
+            "Build an all-in-one workspace dashboard.json from existing child bundles. The workspace "
+            "bundle keeps per-section provenance so it remains reproducible and auditable."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  python -m prosperity_backtester workspace-bundle --from-dir backtests/final_round2_study_pack --name r2_final\n"
+            "  python -m prosperity_backtester workspace-bundle path/to/replay/dashboard.json path/to/mc/dashboard.json --name focus_study --open\n"
+        ),
+    )
+    workspace.add_argument("sources", nargs="*", default=[], help="Child dashboard.json files or bundle directories to include")
+    workspace.add_argument("--from-dir", dest="from_dir", default=None, help="Discover child dashboard.json files recursively under this directory")
+    workspace.add_argument("--name", default=None, help="Workspace name (defaults to a timestamped label)")
+    workspace.add_argument("--notes", default=None, help="Optional one-line description stored on the workspace")
+    workspace.add_argument("--output-dir", default=None, help="Output directory for the workspace bundle")
+    workspace.add_argument("--open", "--vis", dest="open", action="store_true", help="Serve the written bundle locally and open it in the dashboard")
+    workspace.add_argument("--keep-runs", type=_positive_int, default=30, help="When using the default backtests/ output root, keep this many timestamped runs")
 
     clean = sub.add_parser("clean", help="Prune old timestamped backtest run directories")
     clean.add_argument("--dir", default=str(Path.cwd() / "backtests"))
@@ -764,6 +791,55 @@ def main(argv: List[str] | None = None) -> None:
         else:
             for day, validation in payload.items():
                 print(f"Day {day}: {validation}")
+        return
+
+    if args.command == "workspace-bundle":
+        from .workspace import resolve_sources, write_workspace_bundle
+
+        from_dir = Path(args.from_dir).resolve() if args.from_dir else None
+        source_paths = [Path(p) for p in args.sources]
+        try:
+            sources = resolve_sources(source_paths, from_dir=from_dir)
+        except RuntimeError as exc:
+            parser.error(str(exc))
+            return
+        if not sources:
+            parser.error("no child dashboard.json bundles were found. Pass paths or use --from-dir.")
+            return
+
+        label = args.name or (from_dir.name if from_dir is not None else "research")
+        # Normalise the workspace slug so timestamped directories stay readable.
+        workspace_slug = _slug(label)
+        if args.output_dir:
+            output_dir = Path(args.output_dir).resolve()
+            auto_output = False
+        else:
+            output_dir = _timestamped_dir(Path.cwd() / "backtests", f"workspace_{workspace_slug}")
+            auto_output = True
+
+        dashboard_path, assembly = write_workspace_bundle(
+            sources,
+            output_dir,
+            name=label,
+            notes=args.notes,
+        )
+        print(f"Workspace bundle: {dashboard_path}")
+        print(f"  sources: {len(sources)}")
+        for record in assembly.source_records:
+            contributed = ", ".join(sorted(set(record.get("sections") or []))) or "no sections"
+            print(f"    - {record['path']} ({record['type']}): {contributed}")
+        print(f"  present sections: {', '.join(assembly.present_sections)}")
+        if assembly.missing_sections:
+            print(f"  missing sections: {', '.join(assembly.missing_sections)}")
+        integrity = ((assembly.payload.get("workspace") or {}).get("integrity") or {}) if isinstance(assembly.payload.get("workspace"), dict) else {}
+        warnings = integrity.get("warnings") if isinstance(integrity, dict) else None
+        if isinstance(warnings, list) and warnings:
+            print("  integrity notes:")
+            for warning in warnings:
+                print(f"    - {warning}")
+        _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
+        if args.open:
+            _open_bundle(output_dir)
         return
 
     if args.command == "serve":
