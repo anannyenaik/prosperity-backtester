@@ -620,7 +620,7 @@ table {
 }
 
 .quickload-status--pill {
-  padding: 7px 10px;
+  padding: 4px 7px;
   border-radius: 999px;
   border: 1px solid rgba(228, 219, 201, 0.1);
   background: rgba(255, 255, 255, 0.03);
@@ -676,15 +676,15 @@ table {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
-  gap: 11px;
-  padding: 12px 13px;
+  gap: 9px;
+  padding: 9px 10px;
 }
 
 .qa-button__icon {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 9px;
   border: 1px solid rgba(125, 231, 255, 0.22);
   background:
@@ -709,7 +709,7 @@ table {
 }
 
 .qa-button__label {
-  font-size: 0.86rem;
+  font-size: 0.77rem;
   font-weight: 700;
   letter-spacing: 0.055em;
   text-transform: uppercase;
@@ -719,7 +719,7 @@ table {
 
 .qa-button__caption {
   color: var(--muted);
-  letter-spacing: 0.16em;
+  letter-spacing: 0.15em;
 }
 
 .qa-button__meta {
@@ -732,9 +732,9 @@ table {
 .qa-button__indicator {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 7px;
   border: 1px solid rgba(228, 219, 201, 0.14);
   color: var(--muted);
   transition:
@@ -819,25 +819,25 @@ table {
 }
 
 .qa-button--compact .qa-button__content {
-  padding-top: 11px;
-  padding-bottom: 11px;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .qa-button--compact .qa-button__icon {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   border-radius: 8px;
 }
 
 .qa-button--compact .qa-button__label {
-  font-size: 0.81rem;
+  font-size: 0.74rem;
   line-height: 1.05;
 }
 
 .qa-button--compact .qa-button__indicator {
-  width: 21px;
-  height: 21px;
-  border-radius: 7px;
+  width: 17px;
+  height: 17px;
+  border-radius: 6px;
 }
 
 .qa-button--primary:hover {
@@ -963,8 +963,8 @@ table {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 9px 11px;
+  gap: 2px;
+  padding: 6px 8px;
 }
 
 .qa-chip__top {
@@ -976,9 +976,9 @@ table {
 .qa-chip__icon {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
   border: 1px solid rgba(125, 231, 255, 0.22);
   color: var(--cyan);
   background: rgba(125, 231, 255, 0.06);
@@ -986,7 +986,7 @@ table {
 }
 
 .qa-chip__label {
-  font-size: 0.76rem;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;

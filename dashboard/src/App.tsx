@@ -37,8 +37,10 @@ export function App() {
   const { runs, activeTab, loadRun, setServerRuns } = useStore()
   const View = VIEWS[activeTab] ?? Overview
   const isLanding = runs.length === 0
+  const viewportOffset = 'calc(var(--dashboard-nav-height, 156px) + 16px)'
   const mainStyle = {
-    paddingTop: 'calc(var(--dashboard-nav-height, 156px) + 16px)',
+    paddingTop: viewportOffset,
+    minHeight: 'calc(100dvh - (var(--dashboard-nav-height, 156px) + 16px))',
   }
 
   useEffect(() => {
@@ -89,7 +91,7 @@ export function App() {
       <Cursor />
       <div className="app-atmosphere" aria-hidden="true" />
       <NavBar />
-      <main className="relative z-10 min-h-screen" style={mainStyle}>
+      <main className="relative z-10 flex flex-col" style={mainStyle}>
         {isLanding ? (
           <LandingScreen />
         ) : (
@@ -112,8 +114,7 @@ const CAPABILITY_NODES = [
 function LandingScreen() {
   return (
     <div
-      className="mx-auto grid w-full max-w-[1360px] items-start gap-5 px-4 pb-8 pt-1 md:px-7 md:pb-8 md:pt-2 lg:grid-cols-[minmax(0,1fr)_minmax(340px,520px)] lg:gap-7 lg:py-4 2xl:items-center xl:grid-cols-[minmax(0,1fr)_minmax(360px,540px)] xl:gap-8 xl:py-5"
-      style={{ minHeight: 'calc(100dvh - var(--dashboard-nav-height, 156px) - 16px)' }}
+      className="mx-auto grid w-full max-w-[1360px] flex-1 items-start gap-4 px-4 pb-3 pt-0 md:px-7 md:pb-4 md:pt-1 lg:grid-cols-[minmax(0,1fr)_minmax(340px,500px)] lg:gap-6 lg:py-2.5 2xl:items-center xl:grid-cols-[minmax(0,1fr)_minmax(360px,520px)] xl:gap-7 xl:py-3.5"
     >
       <section className="flex min-w-0 flex-col justify-center lg:pr-2">
         <div className="hud-label chapter-rule mb-3 text-accent">IMC PROSPERITY / RESEARCH PLATFORM</div>
@@ -122,11 +123,11 @@ function LandingScreen() {
           <span className="block">research</span>
           <em className="font-serif mt-1 block text-[0.72em] font-light normal-case leading-[1.05] tracking-normal text-accent-2">decision workspace</em>
         </h1>
-        <p className="mt-4 max-w-[600px] text-[0.98rem] leading-7 text-txt-soft md:text-base md:leading-7">
+        <p className="mt-3.5 max-w-[600px] text-[0.98rem] leading-7 text-txt-soft md:text-base md:leading-7">
           Load replay, Monte Carlo, calibration, comparison, optimisation or scenario bundles to inspect run evidence and drive research decisions.
         </p>
 
-        <div className="motif-strip mt-5 grid max-w-[720px] grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <div className="motif-strip mt-4 grid max-w-[720px] grid-cols-2 gap-2.5 sm:grid-cols-4">
           {CAPABILITY_NODES.map((item) => (
             <div key={item.label} className="motif-card edge-traced edge-traced--soft rounded-lg px-3 py-3">
               <div className="grid h-9 w-9 place-items-center rounded-lg border border-accent/20 bg-accent/10 text-accent shadow-[0_8px_18px_rgba(0,0,0,0.22)]">
@@ -140,17 +141,17 @@ function LandingScreen() {
           ))}
         </div>
 
-        <div className="hud-label mt-5 max-w-[720px] text-muted">
+        <div className="hud-label mt-4 max-w-[720px] text-muted">
           <span className="text-accent-2">~</span>&nbsp;python -m prosperity_backtester replay &middot; monte-carlo &middot; compare &middot; round2-scenarios
         </div>
       </section>
 
-      <section className="glass-panel edge-traced edge-traced--slow self-start flex w-full min-w-0 flex-col justify-between overflow-visible rounded-lg p-4 md:p-5 lg:max-w-[540px] lg:justify-self-end xl:max-w-[560px]">
-        <div className="mb-4 flex items-start justify-between gap-4">
+      <section className="glass-panel edge-traced edge-traced--slow self-start flex w-full min-w-0 flex-col justify-between overflow-visible rounded-lg p-3 md:p-3.5 lg:max-w-[500px] lg:justify-self-end xl:max-w-[520px]">
+        <div className="mb-2.5 flex items-start justify-between gap-2.5">
           <div>
             <div className="hud-label text-accent-2">Bundle intake</div>
-            <h2 className="font-display mt-1.5 text-lg font-bold uppercase tracking-[0.08em]">Load a bundle</h2>
-            <div className="mt-1.5 max-w-[28rem] text-[12px] leading-5 text-muted">
+            <h2 className="font-display mt-0.5 text-[0.98rem] font-bold uppercase tracking-[0.08em]">Load a bundle</h2>
+            <div className="mt-1 max-w-[26rem] text-[11px] leading-[1.35] text-muted">
               Drop a local dashboard.json file or open one from the local bundle server.
             </div>
           </div>

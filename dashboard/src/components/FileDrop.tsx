@@ -65,7 +65,7 @@ export function FileDrop() {
       tabIndex={0}
       data-interactive="true"
       className={clsx(
-        'file-drop group relative flex items-center gap-3 overflow-hidden rounded-lg border border-dashed px-4 py-3 text-left transition-all duration-500 ease-observatory',
+        'file-drop group relative flex items-center gap-2.5 overflow-hidden rounded-lg border border-dashed px-3 py-2.5 text-left transition-all duration-500 ease-observatory',
         dragging
           ? 'border-accent bg-accent/10 shadow-glow'
           : 'border-border-2 bg-white/[0.025] hover:border-accent/45 hover:bg-accent/5',
@@ -81,14 +81,14 @@ export function FileDrop() {
           if (e.target.files) parseFiles(e.target.files)
         }}
       />
-      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-border bg-bg/55 text-accent transition-colors duration-500 group-hover:border-accent/40">
-        {loading ? <div className="h-5 w-5 animate-spin rounded-full border-2 border-accent border-t-transparent" /> : <Upload className="h-5 w-5" />}
+      <div className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-lg border border-border bg-bg/55 text-accent transition-colors duration-500 group-hover:border-accent/40">
+        {loading ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" /> : <Upload className="h-4 w-4" />}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="font-display text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-txt">
+        <div className="font-display text-[0.76rem] font-semibold uppercase tracking-[0.08em] text-txt">
           {dragging ? 'Drop dashboard bundles' : 'Drop dashboard.json files'}
         </div>
-        <div className="mt-1 truncate text-[12px] leading-5 text-muted">
+        <div className="mt-0.5 truncate text-[11px] leading-[1.35] text-muted">
           Browse or drag replay, Monte Carlo, calibration and comparison bundles.
         </div>
       </div>

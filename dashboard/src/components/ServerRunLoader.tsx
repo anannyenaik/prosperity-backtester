@@ -255,15 +255,15 @@ export function ServerRunLoader() {
   const loading = loadingKey != null
 
   return (
-    <div ref={rootRef} className="relative mt-2.5 min-w-0">
-      <div className="quickload-panel edge-traced edge-traced--panel rounded-[12px] p-3 md:p-3.5">
+    <div ref={rootRef} className="relative mt-1.5 min-w-0">
+      <div className="quickload-panel edge-traced edge-traced--panel rounded-[12px] p-2 md:p-2.5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="hud-label text-accent-2">Bundle server</div>
-            <div className="mt-1.5 font-display text-[0.9rem] font-semibold uppercase tracking-[0.08em] text-txt">
+            <div className="mt-0.5 font-display text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-txt">
               Quick load
             </div>
-            <div className="mt-1.5 max-w-[28rem] text-[12px] leading-5 text-muted">
+            <div className="mt-1 max-w-[26rem] text-[11px] leading-[1.35] text-muted">
               Open the latest run immediately or browse every served bundle.
             </div>
           </div>
@@ -273,7 +273,7 @@ export function ServerRunLoader() {
           </div>
         </div>
 
-        <div className="quickload-primary mt-2.5 grid gap-2 sm:grid-cols-2">
+        <div className="quickload-primary mt-1.5 grid gap-1 sm:grid-cols-2">
           <LoaderActionButton
             label="Open Latest Bundle"
             icon={loadingKey === 'latest' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Server className="h-4 w-4" />}
@@ -305,12 +305,12 @@ export function ServerRunLoader() {
           />
         </div>
 
-        <div className="quickload-divider mt-3.5 flex items-center gap-3">
+        <div className="quickload-divider mt-2 flex items-center gap-1.5">
           <span className="hud-label text-muted">Shortcuts</span>
           <span className="quickload-divider__rule" aria-hidden="true" />
         </div>
 
-        <div className="quickload-chips mt-2.5 grid grid-cols-2 gap-1.5 md:grid-cols-3">
+        <div className="quickload-chips mt-1.5 grid grid-cols-2 gap-1 md:grid-cols-3">
           {TYPE_BUTTONS.map(({ type, label, caption, icon }) => (
             <QuickLoadChip
               key={type}
