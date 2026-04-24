@@ -251,7 +251,14 @@ test('landing main uses a viewport-bounded shell under the measured nav', async 
     await flushAsyncWork()
   })
 
+  const shell = renderer.root.find(
+    (node) => node.type === 'div' && node.props['data-layout-shell'] === 'landing',
+  )
   const main = renderer.root.findByType('main')
+  assert.deepEqual(shell.props.style, {
+    height: '100dvh',
+    overflow: 'hidden',
+  })
   assert.equal(main.props['data-page-state'], 'landing')
   assert.deepEqual(main.props.style, {
     boxSizing: 'border-box',
@@ -278,7 +285,11 @@ test('loaded main keeps the scrollable padded layout', async (t) => {
     await flushAsyncWork()
   })
 
+  const shell = renderer.root.find(
+    (node) => node.type === 'div' && node.props['data-layout-shell'] === 'loaded',
+  )
   const main = renderer.root.findByType('main')
+  assert.equal(shell.props.style, undefined)
   assert.equal(main.props['data-page-state'], 'loaded')
   assert.deepEqual(main.props.style, {
     paddingTop: 'calc(var(--dashboard-nav-height, 156px) + 16px)',

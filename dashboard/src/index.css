@@ -523,6 +523,11 @@ table {
   min-height: 0;
 }
 
+.landing-panel-body {
+  min-height: 0;
+  scrollbar-gutter: stable;
+}
+
 .landing-panel {
   overscroll-behavior: contain;
 }
@@ -537,133 +542,6 @@ table {
 
 @media (min-width: 1024px) and (max-height: 900px) {
   .landing-shell {
-    padding-top: 8px;
-    padding-bottom: 8px;
-  }
-
-  .landing-grid {
-    gap: 16px;
-  }
-
-  .landing-hero-kicker {
-    margin-bottom: 10px;
-  }
-
-  .landing-hero-title {
-    font-size: clamp(2.55rem, 4.8vw, 3.15rem);
-  }
-
-  .landing-hero-copy {
-    margin-top: 12px;
-    max-width: 34rem;
-    font-size: 0.95rem;
-    line-height: 1.55;
-  }
-
-  .landing-motif-strip {
-    margin-top: 14px;
-    gap: 8px;
-  }
-
-  .landing-motif-card {
-    padding: 10px 11px;
-  }
-
-  .landing-command-strip {
-    margin-top: 12px;
-  }
-
-  .landing-panel {
-    padding: 10px;
-  }
-
-  .landing-panel-header {
-    margin-bottom: 8px;
-    gap: 8px;
-  }
-
-  .landing-panel-copy {
-    margin-top: 6px;
-    max-width: 22rem;
-  }
-
-  .landing-panel .file-drop {
-    gap: 8px;
-    padding: 8px 9px;
-  }
-
-  .landing-panel .file-drop__icon {
-    width: 30px;
-    height: 30px;
-  }
-
-  .landing-panel .file-drop__title {
-    font-size: 0.72rem;
-    line-height: 1.1;
-  }
-
-  .landing-panel .quickload-panel {
-    padding: 8px;
-  }
-
-  .landing-panel .quickload-header {
-    gap: 10px;
-  }
-
-  .landing-panel .quickload-primary {
-    margin-top: 8px;
-    gap: 6px;
-  }
-
-  .landing-panel .quickload-divider {
-    margin-top: 10px;
-    gap: 6px;
-  }
-
-  .landing-panel .quickload-chips {
-    margin-top: 8px;
-    gap: 6px;
-  }
-
-  .landing-panel .qa-button__content {
-    gap: 8px;
-    padding: 8px 9px;
-  }
-
-  .landing-panel .qa-button__icon {
-    width: 25px;
-    height: 25px;
-    border-radius: 8px;
-  }
-
-  .landing-panel .qa-button__label {
-    font-size: 0.71rem;
-  }
-
-  .landing-panel .qa-button__indicator {
-    width: 16px;
-    height: 16px;
-    border-radius: 6px;
-  }
-
-  .landing-panel .qa-chip__content {
-    gap: 1px;
-    padding: 5px 7px;
-  }
-
-  .landing-panel .qa-chip__icon {
-    width: 18px;
-    height: 18px;
-    border-radius: 6px;
-  }
-
-  .landing-panel .qa-chip__label {
-    font-size: 0.64rem;
-  }
-}
-
-@media (min-width: 1024px) and (max-height: 820px) {
-  .landing-shell {
     padding-top: 6px;
     padding-bottom: 6px;
   }
@@ -673,44 +551,31 @@ table {
   }
 
   .landing-hero-kicker {
-    margin-bottom: 8px;
-    gap: 12px;
-  }
-
-  .landing-hero-kicker::after {
-    width: 48px;
+    margin-bottom: 9px;
   }
 
   .landing-hero-title {
-    font-size: clamp(2.3rem, 4.4vw, 2.95rem);
+    font-size: clamp(2.4rem, 4.55vw, 3rem);
   }
 
   .landing-hero-copy {
     margin-top: 10px;
-    max-width: 33rem;
-    font-size: 0.9rem;
+    max-width: 32rem;
+    font-size: 0.92rem;
     line-height: 1.45;
   }
 
   .landing-motif-strip {
     margin-top: 12px;
-    gap: 7px;
+    gap: 8px;
   }
 
   .landing-motif-card {
     padding: 9px 10px;
   }
 
-  .landing-motif-card .font-display {
-    margin-top: 8px;
-    font-size: 0.74rem;
-  }
-
-  .landing-command-strip,
-  .landing-panel-copy,
-  .landing-panel .quickload-copy,
-  .landing-panel .file-drop__copy {
-    display: none;
+  .landing-command-strip {
+    margin-top: 10px;
   }
 
   .landing-panel {
@@ -719,6 +584,12 @@ table {
 
   .landing-panel-header {
     margin-bottom: 7px;
+    gap: 8px;
+  }
+
+  .landing-panel-copy {
+    margin-top: 5px;
+    max-width: 20rem;
   }
 
   .landing-panel .file-drop {
@@ -727,8 +598,13 @@ table {
   }
 
   .landing-panel .file-drop__icon {
-    width: 28px;
-    height: 28px;
+    width: 29px;
+    height: 29px;
+  }
+
+  .landing-panel .file-drop__title {
+    font-size: 0.7rem;
+    line-height: 1.1;
   }
 
   .landing-panel .quickload-panel {
@@ -737,10 +613,6 @@ table {
 
   .landing-panel .quickload-header {
     gap: 8px;
-  }
-
-  .landing-panel .quickload-status--pill {
-    padding: 3px 6px;
   }
 
   .landing-panel .quickload-primary {
@@ -766,28 +638,184 @@ table {
   .landing-panel .qa-button__icon {
     width: 24px;
     height: 24px;
+    border-radius: 8px;
   }
 
   .landing-panel .qa-button__label {
-    font-size: 0.68rem;
+    font-size: 0.69rem;
   }
 
   .landing-panel .qa-button__indicator {
     width: 15px;
     height: 15px;
+    border-radius: 6px;
   }
 
   .landing-panel .qa-chip__content {
+    gap: 1px;
     padding: 4px 6px;
   }
 
   .landing-panel .qa-chip__icon {
     width: 17px;
     height: 17px;
+    border-radius: 6px;
   }
 
   .landing-panel .qa-chip__label {
     font-size: 0.62rem;
+  }
+}
+
+@media (min-width: 1024px) and (max-height: 820px) {
+  .landing-shell {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+
+  .landing-grid {
+    gap: 12px;
+  }
+
+  .landing-hero-kicker {
+    margin-bottom: 7px;
+    gap: 10px;
+  }
+
+  .landing-hero-kicker::after {
+    width: 42px;
+  }
+
+  .landing-hero-title {
+    font-size: clamp(2.05rem, 4vw, 2.62rem);
+  }
+
+  .landing-hero-copy {
+    margin-top: 8px;
+    max-width: 30rem;
+    font-size: 0.86rem;
+    line-height: 1.35;
+  }
+
+  .landing-motif-strip {
+    margin-top: 10px;
+    max-width: 34rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .landing-motif-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+  }
+
+  .landing-motif-card__iconbox {
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+  }
+
+  .landing-motif-card__label {
+    margin-top: 0;
+    font-size: 0.68rem;
+    line-height: 1.1;
+  }
+
+  .landing-motif-card__value {
+    display: none;
+  }
+
+  .landing-command-strip,
+  .landing-panel-copy,
+  .landing-panel .quickload-copy,
+  .landing-panel .qa-chip__caption,
+  .landing-panel .file-drop__copy {
+    display: none;
+  }
+
+  .landing-panel {
+    padding: 8px;
+  }
+
+  .landing-panel-header {
+    margin-bottom: 6px;
+    gap: 6px;
+  }
+
+  .landing-panel .file-drop {
+    gap: 6px;
+    padding: 6px 7px;
+  }
+
+  .landing-panel .file-drop__icon {
+    width: 26px;
+    height: 26px;
+  }
+
+  .landing-panel .file-drop__title {
+    font-size: 0.66rem;
+  }
+
+  .landing-panel .quickload-panel {
+    padding: 6px;
+  }
+
+  .landing-panel .quickload-header {
+    gap: 7px;
+  }
+
+  .landing-panel .quickload-status--pill {
+    padding: 2px 5px;
+  }
+
+  .landing-panel .quickload-primary {
+    margin-top: 6px;
+    gap: 4px;
+  }
+
+  .landing-panel .quickload-divider {
+    margin-top: 6px;
+    gap: 4px;
+  }
+
+  .landing-panel .quickload-chips {
+    margin-top: 6px;
+    gap: 4px;
+  }
+
+  .landing-panel .qa-button__content {
+    gap: 6px;
+    padding: 6px 7px;
+  }
+
+  .landing-panel .qa-button__icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .landing-panel .qa-button__label {
+    font-size: 0.64rem;
+  }
+
+  .landing-panel .qa-button__indicator {
+    width: 14px;
+    height: 14px;
+  }
+
+  .landing-panel .qa-chip__content {
+    gap: 0;
+    padding: 4px 5px;
+  }
+
+  .landing-panel .qa-chip__icon {
+    width: 15px;
+    height: 15px;
+  }
+
+  .landing-panel .qa-chip__label {
+    font-size: 0.58rem;
   }
 }
 

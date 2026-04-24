@@ -38,6 +38,10 @@ export function App() {
   const View = VIEWS[activeTab] ?? Overview
   const isLanding = runs.length === 0
   const viewportOffset = 'calc(var(--dashboard-nav-height, 156px) + 16px)'
+  const landingShellStyle: React.CSSProperties = {
+    height: '100dvh',
+    overflow: 'hidden',
+  }
   const landingMainStyle: React.CSSProperties = {
     boxSizing: 'border-box',
     height: '100dvh',
@@ -94,7 +98,11 @@ export function App() {
   }, [loadRun, runs.length, setServerRuns])
 
   return (
-    <div className="min-h-screen text-txt">
+    <div
+      className={isLanding ? 'text-txt' : 'min-h-screen text-txt'}
+      data-layout-shell={isLanding ? 'landing' : 'loaded'}
+      style={isLanding ? landingShellStyle : undefined}
+    >
       <Cursor />
       <div className="app-atmosphere" aria-hidden="true" />
       <NavBar />
@@ -136,13 +144,15 @@ function LandingScreen() {
           <div className="landing-motif-strip motif-strip mt-4 grid max-w-[720px] grid-cols-2 gap-2.5 sm:grid-cols-4">
             {CAPABILITY_NODES.map((item) => (
               <div key={item.label} className="landing-motif-card motif-card edge-traced edge-traced--soft rounded-lg px-3 py-3">
-                <div className="grid h-9 w-9 place-items-center rounded-lg border border-accent/20 bg-accent/10 text-accent shadow-[0_8px_18px_rgba(0,0,0,0.22)]">
+                <div className="landing-motif-card__iconbox grid h-9 w-9 place-items-center rounded-lg border border-accent/20 bg-accent/10 text-accent shadow-[0_8px_18px_rgba(0,0,0,0.22)]">
                   {item.icon}
                 </div>
-                <div className="font-display mt-3 text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-txt">
-                  {item.label}
+                <div className="landing-motif-card__body min-w-0">
+                  <div className="landing-motif-card__label font-display mt-3 text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-txt">
+                    {item.label}
+                  </div>
+                  <div className="landing-motif-card__value mt-1 text-[12px] leading-5 text-muted">{item.value}</div>
                 </div>
-                <div className="mt-1 text-[12px] leading-5 text-muted">{item.value}</div>
               </div>
             ))}
           </div>
@@ -163,8 +173,10 @@ function LandingScreen() {
             </div>
             <FolderOpen className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
           </div>
-          <FileDrop />
-          <ServerRunLoader />
+          <div className="landing-panel-body flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden">
+            <FileDrop />
+            <ServerRunLoader />
+          </div>
         </section>
       </div>
     </div>
