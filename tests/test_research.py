@@ -8,7 +8,7 @@ from pathlib import Path
 
 import prosperity_backtester.experiments as experiments_module
 import prosperity_backtester.reports as reports_module
-from prosperity_backtester.__main__ import build_parser
+from prosperity_backtester.__main__ import _days_from_args, build_parser
 from prosperity_backtester.experiments import TraderSpec, _mc_runtime_context, run_monte_carlo
 from prosperity_backtester.mc_backends import (
     ensure_rust_backend_binary,
@@ -120,14 +120,18 @@ def test_profile_replay_suite_writes_day_breakdown_report(tmp_path):
     assert saved["diagnosis"]["dominant_day"] == 0
 
 
-def test_cli_defaults_favour_day_zero_for_routine_replay_and_compare():
+def test_cli_defaults_follow_round_specs_for_routine_replay_and_compare():
     parser = build_parser()
 
     replay_args = parser.parse_args(["replay", "strategies/trader.py"])
     compare_args = parser.parse_args(["compare", "strategies/trader.py", "strategies/starter.py"])
+    round3_replay_args = parser.parse_args(["replay", "tests/fixtures/noop_round3_trader.py", "--round", "3"])
 
-    assert replay_args.days == ["0"]
+    assert replay_args.days is None
     assert compare_args.days == ["0"]
+    assert _days_from_args(replay_args) == (-2, -1, 0)
+    assert _days_from_args(compare_args) == (0,)
+    assert _days_from_args(round3_replay_args) == (0, 1, 2)
 
 
 def test_fast_and_forensic_presets_stay_separate():

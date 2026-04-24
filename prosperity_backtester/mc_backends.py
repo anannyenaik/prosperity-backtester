@@ -17,7 +17,7 @@ from typing import Dict, Mapping, Sequence
 from .datamodel import Listing, Observation, Trade, TradingState
 from .dataset import BookSnapshot, DayDataset, TradePrint
 from .fill_models import FillModel, ProductFillConfig
-from .metadata import CURRENCY, PRODUCTS, TIMESTAMP_STEP
+from .metadata import CURRENCY, PRODUCTS, TIMESTAMP_STEP, RoundSpec, get_round_spec
 from .platform import (
     OrderSchedule,
     PerturbationConfig,
@@ -438,8 +438,11 @@ def run_streaming_synthetic_session(
     access_scenario: AccessScenario | None = None,
     print_trader_output: bool = False,
     simulation_context: StreamingSimulationContext | None = None,
+    round_spec: RoundSpec | None = None,
 ) -> tuple[SessionArtefacts, Dict[str, object]]:
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
+    round_spec = round_spec or get_round_spec(1)
+    products = tuple(round_spec.products)
     context = simulation_context or prepare_streaming_simulation_context(perturb)
     market_rng = random.Random(int(market_seed))
     execution_rng = random.Random(int(execution_seed))
@@ -447,12 +450,12 @@ def run_streaming_synthetic_session(
     timings = new_profile("streaming")
     stdout_sink = _NullWriter()
 
-    ledgers = {product: ProductLedger() for product in PRODUCTS}
+    ledgers = {product: ProductLedger() for product in products}
     trader_data = ""
-    prev_own_trades = {product: [] for product in PRODUCTS}
-    prev_market_trades = {product: [] for product in PRODUCTS}
-    listings = {product: Listing(product, product, CURRENCY) for product in PRODUCTS}
-    schedule = OrderSchedule()
+    prev_own_trades = {product: [] for product in products}
+    prev_market_trades = {product: [] for product in products}
+    listings = {product: Listing(product, product, round_spec.currency) for product in products}
+    schedule = OrderSchedule(products)
     session_rows: list[Dict[str, object]] = []
     total_limit_breaches = 0
     total_order_count = 0
@@ -460,15 +463,15 @@ def run_streaming_synthetic_session(
     global_step = 0
     running_peak = float("-inf")
     max_drawdown = 0.0
-    slippage_accumulator = _new_slippage_accumulator()
+    slippage_accumulator = _new_slippage_accumulator(products)
     tick_timestamps = [tick * TIMESTAMP_STEP for tick in range(context.tick_count)]
     collector_days = [
         DayDataset(day=int(day), timestamps=tick_timestamps, books_by_timestamp={}, trades_by_timestamp={})
         for day in days
     ]
-    path_metric_collector = _StreamingPathMetricCollector(collector_days, max(0, int(path_bucket_count)))
-    final_marks: Dict[str, float | None] = {product: None for product in PRODUCTS}
-    last_latent: Dict[str, float | None] = {product: None for product in PRODUCTS}
+    path_metric_collector = _StreamingPathMetricCollector(collector_days, max(0, int(path_bucket_count)), products)
+    final_marks: Dict[str, float | None] = {product: None for product in products}
+    last_latent: Dict[str, float | None] = {product: None for product in products}
 
     for session_day_index, day in enumerate(days):
         generation_started = time.perf_counter()
@@ -481,7 +484,7 @@ def run_streaming_synthetic_session(
                 continue_from=last_latent[product],
                 tick_count=context.tick_count,
             )
-            for product in PRODUCTS
+            for product in products
         }
         if perturb.shock_tick is not None:
             shock_tick = max(0, int(perturb.shock_tick))
@@ -493,17 +496,17 @@ def run_streaming_synthetic_session(
                     path[tick] += shock
         trade_counts = {
             product: sample_trade_counts(product, context.calibration, market_rng, tick_count=context.tick_count)
-            for product in PRODUCTS
+            for product in products
         }
         timings["market_generation_seconds"] = float(timings["market_generation_seconds"]) + (time.perf_counter() - generation_started)
 
-        day_marks: Dict[str, float | None] = {product: None for product in PRODUCTS}
+        day_marks: Dict[str, float | None] = {product: None for product in products}
         for tick, ts in enumerate(tick_timestamps):
             generation_started = time.perf_counter()
             tick_snapshots: Dict[str, BookSnapshot] = {}
             tick_access_fractions: Dict[str, float] = {}
             tick_trades: Dict[str, list[TradePrint]] = {}
-            for product in PRODUCTS:
+            for product in products:
                 access_extra_fraction = access_scenario.active_extra_fraction(execution_rng)
                 tick_access_fractions[product] = access_extra_fraction
                 latent = float(latent_paths[product][tick])
@@ -557,11 +560,11 @@ def run_streaming_synthetic_session(
                 listings=listings,
                 order_depths={
                     product: snapshot_to_order_depth(tick_snapshots[product])
-                    for product in PRODUCTS
+                    for product in products
                 },
                 own_trades=prev_own_trades,
                 market_trades=prev_market_trades,
-                position={product: ledgers[product].position for product in PRODUCTS},
+                position={product: ledgers[product].position for product in products},
                 observations=Observation({}, {}),
             )
             timings["state_build_seconds"] = float(timings["state_build_seconds"]) + (time.perf_counter() - state_build_started)
@@ -579,18 +582,18 @@ def run_streaming_synthetic_session(
             submitted_orders_raw, _conversions, trader_data = result
             submitted_orders = {
                 product: list(submitted_orders_raw.get(product, [])) if submitted_orders_raw else []
-                for product in PRODUCTS
+                for product in products
             }
             due_step = global_step + max(0, int(perturb.latency_ticks))
             schedule.add(due_step, submitted_orders)
             due_orders = schedule.pop(global_step)
 
             execution_started = time.perf_counter()
-            own_trades_tick = {product: [] for product in PRODUCTS}
-            market_trades_tick = {product: [] for product in PRODUCTS}
+            own_trades_tick = {product: [] for product in products}
+            market_trades_tick = {product: [] for product in products}
             total_mtm_for_tick = 0.0
 
-            for product in PRODUCTS:
+            for product in products:
                 snapshot = tick_snapshots[product]
                 product_orders = due_orders.get(product, [])
                 total_order_count += len(product_orders)
@@ -603,6 +606,7 @@ def run_streaming_synthetic_session(
                     orders=product_orders,
                     fill_model=fill_model,
                     perturb=perturb,
+                    round_spec=round_spec,
                     access_scenario=access_scenario,
                     access_extra_fraction=tick_access_fractions[product],
                     rng=execution_rng,
@@ -642,24 +646,27 @@ def run_streaming_synthetic_session(
             running_peak = max(running_peak, total_mtm_for_tick)
             max_drawdown = max(max_drawdown, running_peak - total_mtm_for_tick)
 
-        for product in PRODUCTS:
+        for product in products:
             last_latent[product] = day_marks[product]
             final_marks[product] = day_marks[product]
-        gross_day_pnl = sum(ledgers[product].mtm(day_marks[product]) for product in PRODUCTS)
+        gross_day_pnl = sum(ledgers[product].mtm(day_marks[product]) for product in products)
         maf_cost_for_row = access_scenario.maf_cost if int(day) == int(days[-1]) else 0.0
-        session_rows.append(
-            {
-                "day": int(day),
-                "final_pnl": gross_day_pnl - maf_cost_for_row,
-                "gross_pnl_before_maf": gross_day_pnl,
-                "maf_cost": maf_cost_for_row,
-                "access_scenario": access_scenario.name,
-                "osmium_pnl": ledgers["ASH_COATED_OSMIUM"].mtm(day_marks["ASH_COATED_OSMIUM"]),
-                "pepper_pnl": ledgers["INTARIAN_PEPPER_ROOT"].mtm(day_marks["INTARIAN_PEPPER_ROOT"]),
-                "osmium_position": ledgers["ASH_COATED_OSMIUM"].position,
-                "pepper_position": ledgers["INTARIAN_PEPPER_ROOT"].position,
-            }
-        )
+        day_row = {
+            "day": int(day),
+            "final_pnl": gross_day_pnl - maf_cost_for_row,
+            "gross_pnl_before_maf": gross_day_pnl,
+            "maf_cost": maf_cost_for_row,
+            "access_scenario": access_scenario.name,
+            "per_product_pnl": {product: ledgers[product].mtm(day_marks[product]) for product in products},
+            "per_product_position": {product: ledgers[product].position for product in products},
+        }
+        if "ASH_COATED_OSMIUM" in products:
+            day_row["osmium_pnl"] = day_row["per_product_pnl"]["ASH_COATED_OSMIUM"]
+            day_row["osmium_position"] = day_row["per_product_position"]["ASH_COATED_OSMIUM"]
+        if "INTARIAN_PEPPER_ROOT" in products:
+            day_row["pepper_pnl"] = day_row["per_product_pnl"]["INTARIAN_PEPPER_ROOT"]
+            day_row["pepper_position"] = day_row["per_product_position"]["INTARIAN_PEPPER_ROOT"]
+        session_rows.append(day_row)
 
     postprocess_started = time.perf_counter()
     slippage_summary = _finalize_slippage_accumulator(slippage_accumulator)
@@ -674,7 +681,7 @@ def run_streaming_synthetic_session(
             "slippage_cost": slippage_summary["per_product"][product]["slippage_cost"],
             "average_slippage_ticks": slippage_summary["per_product"][product]["average_slippage_ticks"],
         }
-        for product in PRODUCTS
+        for product in products
     }
     path_metrics = path_metric_collector.rows()
     timings["postprocess_seconds"] = float(timings["postprocess_seconds"]) + (time.perf_counter() - postprocess_started)
@@ -689,7 +696,7 @@ def run_streaming_synthetic_session(
         "order_count": total_order_count,
         "limit_breaches": total_limit_breaches,
         "max_drawdown": max_drawdown,
-        "final_positions": {product: per_product_summary[product]["final_position"] for product in PRODUCTS},
+        "final_positions": {product: per_product_summary[product]["final_position"] for product in products},
         "per_product": per_product_summary,
         "slippage": slippage_summary,
         "fair_value": {},
@@ -702,6 +709,13 @@ def run_streaming_synthetic_session(
             run_name=run_name,
             trader_name=trader_name,
             mode="monte_carlo",
+            round_number=round_spec.round_number,
+            round_name=round_spec.name,
+            products=products,
+            product_metadata={
+                symbol: meta.to_dict()
+                for symbol, meta in round_spec.product_metadata.items()
+            },
             fill_model=fill_model.to_dict(),
             perturbations=perturb.to_dict(),
             summary=summary,

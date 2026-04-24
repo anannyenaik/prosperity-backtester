@@ -1,0 +1,22 @@
+{
+  "name": "round3_smoke",
+  "round": 3,
+  "data_dir": "data/round3",
+  "days": [0],
+  "fill_model": "base",
+  "traders": [
+    {
+      "name": "noop",
+      "path": "examples/noop_round3_trader.py"
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "baseline",
+      "fill_model": "base",
+      "description": "Historical Round 3 replay smoke with the tracked public day 0 data.",
+      "tags": ["smoke", "historical"]
+    }
+  ],
+  "mc_sessions": 0
+}

@@ -18,8 +18,22 @@ from .dataset import BookSnapshot, DayDataset, TradePrint
 from .behavior import analyse_behaviour
 from .fair_value import infer_market_fair_rows, summarize_fair_rows
 from .fill_models import FillModel, resolve_fill_model
-from .metadata import CURRENCY, DEFAULT_POSITION_LIMIT, PRODUCTS, PRODUCT_METADATA
+from .metadata import (
+    CURRENCY,
+    DEFAULT_POSITION_LIMIT,
+    PRODUCTS,
+    PRODUCT_METADATA,
+    RoundSpec,
+    get_round_spec,
+)
 from .round2 import AccessScenario, NO_ACCESS_SCENARIO
+from .round3 import (
+    ROUND3_HYDROGEL,
+    ROUND3_UNDERLYING,
+    compute_option_diagnostics,
+    generate_round3_day,
+    prepare_round3_synthetic_context,
+)
 from .simulate import build_samplers, load_calibration, make_book, sample_trade_counts, sample_trade_quantity, simulate_latent_fair
 
 
@@ -43,6 +57,16 @@ class PerturbationConfig:
     synthetic_tick_limit: Optional[int] = None
     shock_tick: Optional[int] = None
     shock_by_product: Dict[str, float] = field(default_factory=dict)
+    underlying_shock: float = 0.0
+    hydrogel_shock: float = 0.0
+    vol_shift: float = 0.0
+    vol_scale: float = 1.0
+    skew_shift: float = 0.0
+    option_residual_noise_scale: float = 1.0
+    option_liquidity_scale: float = 1.0
+    voucher_spread_shift_ticks: int = 0
+    underlying_liquidity_scale: float = 1.0
+    hydrogel_liquidity_scale: float = 1.0
     scenario_name: str = "custom"
 
     def to_dict(self) -> Dict[str, object]:
@@ -56,7 +80,12 @@ class PerturbationConfig:
         return max(0.0, value * max(0.0, float(self.latent_noise_scale)))
 
     def shock_for(self, product: str) -> float:
-        return float(self.shock_by_product.get(product, 0.0))
+        shock = float(self.shock_by_product.get(product, 0.0))
+        if product == ROUND3_UNDERLYING:
+            shock += float(self.underlying_shock)
+        if product == ROUND3_HYDROGEL:
+            shock += float(self.hydrogel_shock)
+        return shock
 
     def passive_trade_matching_mode(self) -> str:
         mode = str(self.trade_matching_mode or "all").strip().lower()
@@ -133,6 +162,13 @@ class SessionArtefacts:
     perturbations: Dict[str, object]
     summary: Dict[str, object]
     session_rows: List[Dict[str, object]]
+    round_number: int = 1
+    round_name: str = "Round 1 - Trading groundwork"
+    products: tuple[str, ...] = PRODUCTS
+    product_metadata: Dict[str, Dict[str, object]] = field(default_factory=lambda: {
+        symbol: meta.to_dict()
+        for symbol, meta in PRODUCT_METADATA.items()
+    })
     orders: List[Dict[str, object]] = field(default_factory=list)
     fills: List[Dict[str, object]] = field(default_factory=list)
     inventory_series: List[Dict[str, object]] = field(default_factory=list)
@@ -147,8 +183,9 @@ class SessionArtefacts:
 
 
 class OrderSchedule:
-    def __init__(self):
+    def __init__(self, products: Sequence[str] = PRODUCTS):
         self._pending: Dict[int, Dict[str, List[Order]]] = {}
+        self._products = tuple(products)
 
     def add(self, due_step: int, orders_by_product: Dict[str, List[Order]]) -> None:
         cloned: Dict[str, List[Order]] = {}
@@ -161,7 +198,7 @@ class OrderSchedule:
             self._pending[due_step].setdefault(product, []).extend(orders)
 
     def pop(self, step: int) -> Dict[str, List[Order]]:
-        return self._pending.pop(step, {p: [] for p in PRODUCTS})
+        return self._pending.pop(step, {p: [] for p in self._products})
 
 
 def snapshot_to_order_depth(snapshot: BookSnapshot) -> OrderDepth:
@@ -227,10 +264,10 @@ def _scaled_snapshot(
     )
 
 
-def _position_limit_for(product: str, perturb: PerturbationConfig) -> int:
+def _position_limit_for(product: str, perturb: PerturbationConfig, round_spec: RoundSpec = get_round_spec(1)) -> int:
     if product in perturb.position_limits_by_product:
         return max(1, int(perturb.position_limits_by_product[product]))
-    base = PRODUCT_METADATA[product].position_limit
+    base = round_spec.product_metadata[product].position_limit
     return max(1, int(round(base * perturb.inventory_limit_scale)))
 
 
@@ -382,6 +419,7 @@ def _execute_order_batch(
     orders: List[Order],
     fill_model: FillModel,
     perturb: PerturbationConfig,
+    round_spec: RoundSpec,
     access_scenario: AccessScenario,
     access_extra_fraction: float,
     rng: random.Random,
@@ -395,7 +433,7 @@ def _execute_order_batch(
     bids = [[price, volume] for price, volume in snapshot.bids]
     asks = [[price, volume] for price, volume in snapshot.asks]
     limit_breaches = 0
-    position_limit = _position_limit_for(product, perturb)
+    position_limit = _position_limit_for(product, perturb, round_spec)
     total_buy = sum(max(0, int(order.quantity)) for order in orders)
     total_sell = sum(max(0, -int(order.quantity)) for order in orders)
     if ledger.position + total_buy > position_limit or ledger.position - total_sell < -position_limit:
@@ -578,6 +616,7 @@ def _path_metric_rows(
     pnl_series: Sequence[Dict[str, object]],
     fair_rows: Sequence[Dict[str, object]],
     max_rows_per_product: int,
+    products: Sequence[str] = PRODUCTS,
 ) -> List[Dict[str, object]]:
     pnl_lookup = {(int(row["day"]), str(row["product"]), int(row["timestamp"])): row for row in pnl_series}
     fair_lookup = {(int(row["day"]), str(row["product"]), int(row["timestamp"])): row for row in fair_rows}
@@ -599,12 +638,12 @@ def _path_metric_rows(
         })
 
     output: List[Dict[str, object]] = []
-    bucket_index_by_product = {product: 0 for product in PRODUCTS}
+    bucket_index_by_product = {product: 0 for product in products}
     days_by_product: Dict[str, List[int]] = {}
     for product, day in by_product_day:
         days_by_product.setdefault(product, []).append(day)
 
-    for product in PRODUCTS:
+    for product in products:
         days = sorted(set(days_by_product.get(product, [])))
         if not days:
             continue
@@ -675,7 +714,11 @@ def _apply_fill_markouts(
             row[f"markout_{horizon}"] = value
 
 
-def _summarise_slippage(fills_log: Sequence[Dict[str, object]]) -> Dict[str, object]:
+def _summarise_slippage(
+    fills_log: Sequence[Dict[str, object]],
+    *,
+    products: Sequence[str] = PRODUCTS,
+) -> Dict[str, object]:
     per_product: Dict[str, Dict[str, object]] = {
         product: {
             "slippage_cost": 0.0,
@@ -687,7 +730,7 @@ def _summarise_slippage(fills_log: Sequence[Dict[str, object]]) -> Dict[str, obj
             "aggressive_slippage_cost": 0.0,
             "passive_adverse_cost": 0.0,
         }
-        for product in PRODUCTS
+        for product in products
     }
     total_cost = 0.0
     total_qty = 0
@@ -728,7 +771,7 @@ def _summarise_slippage(fills_log: Sequence[Dict[str, object]]) -> Dict[str, obj
     }
 
 
-def _new_slippage_accumulator() -> Dict[str, object]:
+def _new_slippage_accumulator(products: Sequence[str] = PRODUCTS) -> Dict[str, object]:
     return {
         "per_product": {
             product: {
@@ -741,7 +784,7 @@ def _new_slippage_accumulator() -> Dict[str, object]:
                 "aggressive_slippage_cost": 0.0,
                 "passive_adverse_cost": 0.0,
             }
-            for product in PRODUCTS
+            for product in products
         },
         "total_cost": 0.0,
         "total_qty": 0,
@@ -806,13 +849,14 @@ class _NullWriter:
 
 
 class _StreamingPathMetricCollector:
-    def __init__(self, market_days: Sequence[DayDataset], max_rows_per_product: int):
+    def __init__(self, market_days: Sequence[DayDataset], max_rows_per_product: int, products: Sequence[str] = PRODUCTS):
         self._rows: List[Dict[str, object]] = []
-        self._bucket_index_by_product = {product: 0 for product in PRODUCTS}
+        self._products = tuple(products)
+        self._bucket_index_by_product = {product: 0 for product in self._products}
         self._state: Dict[tuple[str, int], Dict[str, object]] = {}
         day_count = max(1, len(market_days))
         per_day_limit = 0 if max_rows_per_product <= 0 else max(1, max_rows_per_product // day_count)
-        for product in PRODUCTS:
+        for product in self._products:
             for day_dataset in market_days:
                 length = len(day_dataset.timestamps)
                 ranges = (
@@ -910,6 +954,7 @@ def run_market_session(
     rng: random.Random,
     run_name: str,
     mode: str,
+    round_spec: RoundSpec | None = None,
     capture_full_output: bool = True,
     capture_path_metrics: bool = False,
     path_bucket_count: int = 800,
@@ -917,6 +962,8 @@ def run_market_session(
     print_trader_output: bool = False,
     timing_profile: Dict[str, object] | None = None,
 ) -> SessionArtefacts:
+    round_spec = round_spec or get_round_spec(market_days[0].round_number if market_days else 1)
+    products = tuple(round_spec.products)
     session_started = time.perf_counter()
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
     phase_totals = {
@@ -926,11 +973,11 @@ def run_market_session(
         "path_metrics_seconds": 0.0,
         "postprocess_seconds": 0.0,
     }
-    ledgers = {product: ProductLedger() for product in PRODUCTS}
+    ledgers = {product: ProductLedger() for product in products}
     trader_data = ""
-    prev_own_trades = {product: [] for product in PRODUCTS}
-    prev_market_trades = {product: [] for product in PRODUCTS}
-    schedule = OrderSchedule()
+    prev_own_trades = {product: [] for product in products}
+    prev_market_trades = {product: [] for product in products}
+    schedule = OrderSchedule(products)
     orders_log: List[Dict[str, object]] = []
     fills_log: List[Dict[str, object]] = []
     inventory_series: List[Dict[str, object]] = []
@@ -943,9 +990,9 @@ def run_market_session(
     running_peak = float("-inf")
     max_drawdown = 0.0
     stdout_sink = _NullWriter()
-    slippage_accumulator = _new_slippage_accumulator()
+    slippage_accumulator = _new_slippage_accumulator(products)
     path_metric_collector = (
-        _StreamingPathMetricCollector(market_days, max(0, int(path_bucket_count)))
+        _StreamingPathMetricCollector(market_days, max(0, int(path_bucket_count)), products)
         if capture_path_metrics and not capture_full_output
         else None
     )
@@ -955,7 +1002,7 @@ def run_market_session(
             state_build_started = time.perf_counter()
             tick_snapshots: Dict[str, BookSnapshot] = {}
             tick_access_fractions: Dict[str, float] = {}
-            for product in PRODUCTS:
+            for product in products:
                 original_snapshot = day_dataset.books_by_timestamp.get(ts, {}).get(product)
                 access_extra_fraction = access_scenario.active_extra_fraction(rng)
                 tick_access_fractions[product] = access_extra_fraction
@@ -968,14 +1015,14 @@ def run_market_session(
             state = TradingState(
                 traderData=trader_data,
                 timestamp=ts,
-                listings={product: Listing(product, product, CURRENCY) for product in PRODUCTS},
+                listings={product: Listing(product, product, round_spec.currency) for product in products},
                 order_depths={
                     product: snapshot_to_order_depth(tick_snapshots[product])
-                    for product in PRODUCTS
+                    for product in products
                 },
                 own_trades=prev_own_trades,
                 market_trades=prev_market_trades,
-                position={product: ledgers[product].position for product in PRODUCTS},
+                position={product: ledgers[product].position for product in products},
                 observations=Observation({}, {}),
             )
             phase_totals["state_build_seconds"] += time.perf_counter() - state_build_started
@@ -989,18 +1036,18 @@ def run_market_session(
             if not isinstance(result, tuple) or len(result) != 3:
                 raise RuntimeError(f"Trader returned unexpected result at {ts}: {result!r}")
             submitted_orders_raw, conversions, trader_data = result
-            submitted_orders = {product: list(submitted_orders_raw.get(product, [])) if submitted_orders_raw else [] for product in PRODUCTS}
+            submitted_orders = {product: list(submitted_orders_raw.get(product, [])) if submitted_orders_raw else [] for product in products}
             due_step = global_step + max(0, int(perturb.latency_ticks))
             schedule.add(due_step, submitted_orders)
             due_orders = schedule.pop(global_step)
 
             execution_started = time.perf_counter()
-            own_trades_tick = {product: [] for product in PRODUCTS}
-            market_trades_tick = {product: [] for product in PRODUCTS}
+            own_trades_tick = {product: [] for product in products}
+            market_trades_tick = {product: [] for product in products}
             total_mtm_for_tick = 0.0
 
             tick_trades = day_dataset.trades_by_timestamp.get(ts)
-            for product in PRODUCTS:
+            for product in products:
                 snapshot = tick_snapshots[product]
                 access_extra_fraction = tick_access_fractions[product]
                 # _execute_order_batch never mutates the input trades list (the
@@ -1017,6 +1064,7 @@ def run_market_session(
                     orders=due_orders.get(product, []),
                     fill_model=fill_model,
                     perturb=perturb,
+                    round_spec=round_spec,
                     access_scenario=access_scenario,
                     access_extra_fraction=access_extra_fraction,
                     rng=rng,
@@ -1111,26 +1159,53 @@ def run_market_session(
             max_drawdown = max(max_drawdown, running_peak - total_mtm_for_tick)
 
         maf_cost_for_row = access_scenario.maf_cost if day_dataset is market_days[-1] else 0.0
-        gross_day_pnl = sum(ledgers[p].mtm(day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get(p).reference_fair if day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get(p) else None) for p in PRODUCTS)
-        session_rows.append({
+        final_snapshots = day_dataset.books_by_timestamp[day_dataset.timestamps[-1]]
+        gross_day_pnl = sum(
+            ledgers[p].mtm(
+                final_snapshots.get(p).reference_fair
+                if final_snapshots.get(p) is not None
+                else None
+            )
+            for p in products
+        )
+        day_row = {
             "day": day_dataset.day,
             "final_pnl": gross_day_pnl - maf_cost_for_row,
             "gross_pnl_before_maf": gross_day_pnl,
             "maf_cost": maf_cost_for_row,
             "access_scenario": access_scenario.name,
-            "osmium_pnl": ledgers["ASH_COATED_OSMIUM"].mtm(day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get("ASH_COATED_OSMIUM").reference_fair if day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get("ASH_COATED_OSMIUM") else None),
-            "pepper_pnl": ledgers["INTARIAN_PEPPER_ROOT"].mtm(day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get("INTARIAN_PEPPER_ROOT").reference_fair if day_dataset.books_by_timestamp[day_dataset.timestamps[-1]].get("INTARIAN_PEPPER_ROOT") else None),
-            "osmium_position": ledgers["ASH_COATED_OSMIUM"].position,
-            "pepper_position": ledgers["INTARIAN_PEPPER_ROOT"].position,
-        })
+            "per_product_pnl": {
+                product: ledgers[product].mtm(
+                    final_snapshots.get(product).reference_fair
+                    if final_snapshots.get(product) is not None
+                    else None
+                )
+                for product in products
+            },
+            "per_product_position": {
+                product: ledgers[product].position
+                for product in products
+            },
+        }
+        if "ASH_COATED_OSMIUM" in products:
+            day_row["osmium_pnl"] = day_row["per_product_pnl"]["ASH_COATED_OSMIUM"]
+            day_row["osmium_position"] = day_row["per_product_position"]["ASH_COATED_OSMIUM"]
+        if "INTARIAN_PEPPER_ROOT" in products:
+            day_row["pepper_pnl"] = day_row["per_product_pnl"]["INTARIAN_PEPPER_ROOT"]
+            day_row["pepper_position"] = day_row["per_product_position"]["INTARIAN_PEPPER_ROOT"]
+        session_rows.append(day_row)
 
     final_marks: Dict[str, Optional[float]] = {}
     final_day = market_days[-1]
     final_ts = final_day.timestamps[-1]
-    for product in PRODUCTS:
+    for product in products:
         snap = final_day.books_by_timestamp[final_ts].get(product)
         final_marks[product] = None if snap is None else (snap.reference_fair if snap.reference_fair is not None else snap.mid)
-    slippage_summary = _summarise_slippage(fills_log) if capture_full_output else _finalize_slippage_accumulator(slippage_accumulator)
+    slippage_summary = (
+        _summarise_slippage(fills_log, products=products)
+        if capture_full_output
+        else _finalize_slippage_accumulator(slippage_accumulator)
+    )
     per_product_summary = {
         product: {
             "cash": ledgers[product].cash,
@@ -1142,11 +1217,16 @@ def run_market_session(
             "slippage_cost": slippage_summary["per_product"][product]["slippage_cost"],
             "average_slippage_ticks": slippage_summary["per_product"][product]["average_slippage_ticks"],
         }
-        for product in PRODUCTS
+        for product in products
     }
     if capture_full_output:
         postprocess_started = time.perf_counter()
-        fair_rows = infer_market_fair_rows(market_days)
+        fair_rows = infer_market_fair_rows(
+            market_days,
+            products=products,
+            product_metadata=round_spec.product_metadata,
+            round_spec=round_spec,
+        )
         _apply_fill_markouts(fills_log, fair_rows)
         fair_lookup = {(int(row["day"]), str(row["product"]), int(row["timestamp"])): row for row in fair_rows}
         for row in orders_log:
@@ -1172,13 +1252,15 @@ def run_market_session(
             else:
                 row["signed_edge_to_analysis_fair"] = float(row["price"]) - float(analysis_fair)
 
-        fair_summary = summarize_fair_rows(fair_rows)
+        fair_summary = summarize_fair_rows(fair_rows, products=products)
         behaviour = analyse_behaviour(
             orders=orders_log,
             fills=fills_log,
             inventory_series=inventory_series,
             pnl_series=pnl_series,
             fair_value_series=fair_rows,
+            products=products,
+            product_metadata=round_spec.product_metadata,
             include_series=True,
         )
         path_metrics = (
@@ -1187,6 +1269,7 @@ def run_market_session(
                 pnl_series=pnl_series,
                 fair_rows=fair_rows,
                 max_rows_per_product=max(0, int(path_bucket_count)),
+                products=products,
             )
             if capture_path_metrics
             else []
@@ -1210,16 +1293,25 @@ def run_market_session(
         "order_count": total_order_count,
         "limit_breaches": total_limit_breaches,
         "max_drawdown": max_drawdown,
-        "final_positions": {product: per_product_summary[product]["final_position"] for product in PRODUCTS},
+        "final_positions": {product: per_product_summary[product]["final_position"] for product in products},
         "per_product": per_product_summary,
         "slippage": slippage_summary,
         "fair_value": fair_summary,
         "behaviour": behaviour.get("summary", {}),
     }
+    if round_spec.round_number == 3:
+        summary["option_diagnostics"] = compute_option_diagnostics(market_days, round_spec=round_spec)
     artefacts = SessionArtefacts(
         run_name=run_name,
         trader_name=trader_name,
         mode=mode,
+        round_number=round_spec.round_number,
+        round_name=round_spec.name,
+        products=products,
+        product_metadata={
+            symbol: meta.to_dict()
+            for symbol, meta in round_spec.product_metadata.items()
+        },
         fill_model=fill_model.to_dict(),
         perturbations=perturb.to_dict(),
         summary=summary,
@@ -1252,8 +1344,41 @@ def generate_synthetic_market_days(
     days: Sequence[int],
     seed: int,
     perturb: PerturbationConfig,
+    *,
+    round_spec: RoundSpec | None = None,
+    historical_market_days: Sequence[DayDataset] | None = None,
+    round3_context=None,
 ) -> List[DayDataset]:
+    round_spec = round_spec or get_round_spec(1)
     rng = random.Random(seed)
+    tick_limit = None if perturb.synthetic_tick_limit in (None, 0) else max(1, int(perturb.synthetic_tick_limit))
+    if round_spec.round_number == 3:
+        if round3_context is not None:
+            context = round3_context
+        else:
+            if not historical_market_days:
+                raise ValueError("Round 3 synthetic generation requires historical_market_days for calibration")
+            context = prepare_round3_synthetic_context(
+                historical_market_days,
+                round_spec=round_spec,
+                tick_count=tick_limit,
+            )
+        market_days: List[DayDataset] = []
+        last_hydrogel: float | None = None
+        last_underlying: float | None = None
+        for session_day_index, day in enumerate(days):
+            market_day, last_hydrogel, last_underlying = generate_round3_day(
+                context=context,
+                day=int(day),
+                session_day_index=session_day_index,
+                market_rng=rng,
+                perturbation=perturb,
+                last_hydrogel=last_hydrogel,
+                last_underlying=last_underlying,
+            )
+            market_days.append(market_day)
+        return market_days
+
     calib = deepcopy(load_calibration())
     if "INTARIAN_PEPPER_ROOT" in calib:
         calib["INTARIAN_PEPPER_ROOT"]["drift_per_tick"] = calib["INTARIAN_PEPPER_ROOT"]["drift_per_tick"] * perturb.pepper_slope_scale
@@ -1264,7 +1389,6 @@ def generate_synthetic_market_days(
     samplers = build_samplers(calib)
     market_days: List[DayDataset] = []
     last_latent: Dict[str, Optional[float]] = {product: None for product in PRODUCTS}
-    tick_limit = None if perturb.synthetic_tick_limit in (None, 0) else max(1, int(perturb.synthetic_tick_limit))
 
     for session_day_index, day in enumerate(days):
         latent_paths = {
@@ -1318,7 +1442,7 @@ def generate_synthetic_market_days(
                         buyer="BOT_TAKER" if market_buy else "",
                         seller="" if market_buy else "BOT_TAKER",
                         symbol=product,
-                        price=int(trade_price),
+                        price=float(trade_price),
                         quantity=int(quantity),
                         synthetic=True,
                     )
@@ -1332,7 +1456,9 @@ def generate_synthetic_market_days(
                 books_by_timestamp=books_by_timestamp,
                 trades_by_timestamp=trades_by_timestamp,
                 validation={"timestamps": len(timestamps), "source": "synthetic", "price_rows": len(timestamps) * len(PRODUCTS), "trade_rows": sum(len(v) for by_p in trades_by_timestamp.values() for v in by_p.values())},
-                metadata={"source": "synthetic", "seed": seed, "day": day},
+                metadata={"source": "synthetic", "seed": seed, "day": day, "round": round_spec.round_number},
+                round_number=round_spec.round_number,
+                products=tuple(PRODUCTS),
             )
         )
     return market_days
@@ -1360,6 +1486,9 @@ def describe_series(artefact: SessionArtefacts) -> Dict[str, object]:
         "run_name": artefact.run_name,
         "trader_name": artefact.trader_name,
         "mode": artefact.mode,
+        "round": artefact.round_number,
+        "round_name": artefact.round_name,
+        "products": list(artefact.products),
         "final_pnl": artefact.summary["final_pnl"],
         "fill_count": artefact.summary["fill_count"],
         "limit_breaches": artefact.summary["limit_breaches"],
@@ -1379,6 +1508,7 @@ def summarise_monte_carlo_sessions(session_artefacts: List[SessionArtefacts]) ->
     pnl_values = [session.summary["final_pnl"] for session in session_artefacts]
     if not pnl_values:
         return {"session_count": 0}
+    products = session_artefacts[0].products
     pnl_values_sorted = sorted(pnl_values)
 
     def quantile(q: float) -> float:
@@ -1393,7 +1523,7 @@ def summarise_monte_carlo_sessions(session_artefacts: List[SessionArtefacts]) ->
         return pnl_values_sorted[lo] * (1 - w) + pnl_values_sorted[hi] * w
 
     per_product = {}
-    for product in PRODUCTS:
+    for product in products:
         vals = [session.summary["per_product"][product]["final_mtm"] for session in session_artefacts]
         per_product[product] = {
             "mean": statistics.fmean(vals),

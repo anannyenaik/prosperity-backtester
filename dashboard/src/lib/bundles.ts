@@ -1,4 +1,5 @@
 import type { DashboardPayload, TabId } from '../types'
+import { availableProducts } from './products'
 
 export type BundleType =
   | 'replay'
@@ -354,7 +355,24 @@ export function getTabAvailability(
     return available('Round 2 scenario data available', 'Scenario aggregates are present.')
   }
 
-  if (tab === 'inspect' || tab === 'osmium' || tab === 'pepper') {
+  if (tab === 'inspect') {
+    if (!bundle.hasReplayPath) {
+      if (bundle.isWorkspace) {
+        return missing('Replay-style time-series data is not included in this workspace.', 'Add a replay child bundle to inspect per-tick data here.')
+      }
+      return incompatible('Replay-style time-series data is not present.', 'Load a replay bundle to inspect per-tick data.')
+    }
+    return available('Replay-style time-series data available', 'Per-tick rows are present.')
+  }
+
+  if (tab === 'osmium' || tab === 'pepper') {
+    const requiredProduct = tab === 'osmium' ? 'ASH_COATED_OSMIUM' : 'INTARIAN_PEPPER_ROOT'
+    if (!availableProducts(payload).includes(requiredProduct)) {
+      return incompatible(
+        'Legacy product deep dive not available.',
+        `${bundle.badge} does not include ${requiredProduct}. Use the generic replay or inspect views for other products.`,
+      )
+    }
     if (!bundle.hasReplayPath) {
       if (bundle.isWorkspace) {
         return missing('Replay-style time-series data is not included in this workspace.', 'Add a replay child bundle to inspect per-tick data here.')

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { DashboardPayload, LoadedRun, Product, TabId } from './types'
 import { normaliseDashboardPayload } from './lib/bundles'
+import { availableProducts } from './lib/products'
 
 interface DashboardStore {
   runs: LoadedRun[]
@@ -90,15 +91,30 @@ export const useStore = create<DashboardStore>((set, get) => ({
         state.compareRunId === replacedId
           ? id
           : previousCompareId ?? (newRuns.length > 1 && activeRunId !== id ? id : null)
+      const activeRun = newRuns.find((run) => run.id === activeRunId) ?? null
+      const activeProducts = availableProducts(activeRun?.payload)
+      const activeProduct =
+        activeProducts.includes(state.activeProduct)
+          ? state.activeProduct
+          : activeProducts[0] ?? state.activeProduct
       return {
         runs: newRuns,
         activeRunId,
         compareRunId,
+        activeProduct,
       }
     })
   },
 
-  setActiveRun: (id) => set({ activeRunId: id }),
+  setActiveRun: (id) =>
+    set((state) => {
+      const target = state.runs.find((run) => run.id === id) ?? null
+      const products = availableProducts(target?.payload)
+      return {
+        activeRunId: id,
+        activeProduct: products.includes(state.activeProduct) ? state.activeProduct : products[0] ?? state.activeProduct,
+      }
+    }),
   setCompareRun: (id) => set({ compareRunId: id }),
   setActiveTab: (tab) => set({ activeTab: tab }),
   setActiveProduct: (product) => set({ activeProduct: product }),
@@ -109,11 +125,16 @@ export const useStore = create<DashboardStore>((set, get) => ({
   removeRun: (id) =>
     set((state) => {
       const runs = state.runs.filter((r) => r.id !== id)
+      const nextActiveRun =
+        state.activeRunId === id
+          ? (runs[0] ?? null)
+          : (runs.find((run) => run.id === state.activeRunId) ?? runs[0] ?? null)
+      const nextProducts = availableProducts(nextActiveRun?.payload)
       return {
         runs,
-        activeRunId:
-          state.activeRunId === id ? (runs[0]?.id ?? null) : state.activeRunId,
+        activeRunId: state.activeRunId === id ? (runs[0]?.id ?? null) : state.activeRunId,
         compareRunId: state.compareRunId === id ? null : state.compareRunId,
+        activeProduct: nextProducts.includes(state.activeProduct) ? state.activeProduct : nextProducts[0] ?? state.activeProduct,
       }
     }),
 

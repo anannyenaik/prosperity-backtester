@@ -12,6 +12,7 @@ import { BundleBadge } from '../components/BundleBadge'
 import { PhaseTimings } from '../components/PhaseTimings'
 import { fmtNum, fmtInt, fmtPct, fmtDate, fmtBytes, colorForValue } from '../lib/format'
 import { formatBool, getComparisonRows, getTabAvailability, interpretBundle, isFiniteNumber, numberOrNull } from '../lib/bundles'
+import { positionLimit, productLabel } from '../lib/products'
 import { POSITION_LIMIT, PRODUCT_LABELS, type DashboardPayload, type DataContractEntry, type Product, type WorkspaceIntegrity, type WorkspaceSectionKey, type WorkspaceSourceBundle } from '../types'
 
 const WORKSPACE_SECTION_KEYS: WorkspaceSectionKey[] = [
@@ -175,6 +176,20 @@ export function Overview() {
           )}
         </Card>
       </div>
+
+      {Array.isArray(payload.optionDiagnostics?.days) && payload.optionDiagnostics.days.length > 0 && (
+        <Card title="Round 3 option diagnostics">
+          <KVGrid
+            cols={2}
+            pairs={[
+              { label: 'Underlying', value: String(payload.optionDiagnostics.underlying ?? 'not recorded'), tone: 'accent' },
+              { label: 'Days analysed', value: fmtInt(payload.optionDiagnostics.days.length) },
+              { label: 'Surface-fit vouchers', value: Array.isArray(payload.optionDiagnostics.surface_fit_vouchers) ? payload.optionDiagnostics.surface_fit_vouchers.join(', ') : 'not recorded' },
+              { label: 'Final TTE', value: payload.optionDiagnostics.final_tte_days == null ? 'not recorded' : `${payload.optionDiagnostics.final_tte_days} days` },
+            ]}
+          />
+        </Card>
+      )}
 
       {meta?.outputProfile && (
         <Card title="Output policy">
@@ -527,7 +542,8 @@ function ReplayOverview({ payload, activeProduct }: { payload: DashboardPayload;
   const summary = payload.summary
   const productSummary = summary?.per_product?.[activeProduct]
   const behaviour = payload.behaviour?.per_product?.[activeProduct]
-  const productLabel = PRODUCT_LABELS[activeProduct] ?? activeProduct
+  const productLabelText = productLabel(payload, activeProduct)
+  const productCap = positionLimit(payload, activeProduct)
   const cards: React.ReactNode[] = []
 
   if (summary) {
@@ -540,17 +556,17 @@ function ReplayOverview({ payload, activeProduct }: { payload: DashboardPayload;
 
   if (productSummary) {
     const capUsage = isFiniteNumber(productSummary.final_position)
-      ? Math.abs(productSummary.final_position) / POSITION_LIMIT
+      ? Math.abs(productSummary.final_position) / productCap
       : null
     cards.push(
-      <MetricCard key="product-mtm" label={`${productLabel} MTM`} value={fmtNum(productSummary.final_mtm)} tone={colorForValue(productSummary.final_mtm)} sub={`Realised ${fmtNum(productSummary.realised)}`} />,
-      <MetricCard key="product-position" label={`${productLabel} position`} value={fmtInt(productSummary.final_position)} sub={`Cap ${fmtPct(capUsage)}`} tone={capUsage != null && capUsage >= 1 ? 'warn' : 'neutral'} />,
+      <MetricCard key="product-mtm" label={`${productLabelText} MTM`} value={fmtNum(productSummary.final_mtm)} tone={colorForValue(productSummary.final_mtm)} sub={`Realised ${fmtNum(productSummary.realised)}`} />,
+      <MetricCard key="product-position" label={`${productLabelText} position`} value={fmtInt(productSummary.final_position)} sub={`Cap ${fmtPct(capUsage)}`} tone={capUsage != null && capUsage >= 1 ? 'warn' : 'neutral'} />,
     )
   }
 
   if (behaviour) {
     cards.push(
-      <MetricCard key="cap-usage" label="Cap usage ratio" value={fmtPct(behaviour.cap_usage_ratio)} tone={numberOrNull(behaviour.cap_usage_ratio) != null && Number(behaviour.cap_usage_ratio) > 0.6 ? 'warn' : 'neutral'} sub={`Peak pos ${fmtInt(behaviour.peak_abs_position)}`} />,
+      <MetricCard key="cap-usage" label="Cap usage ratio" value={fmtPct(behaviour.cap_usage_ratio)} tone={numberOrNull(behaviour.cap_usage_ratio) != null && Number(behaviour.cap_usage_ratio) > 0.6 ? 'warn' : 'neutral'} sub={`Peak pos ${fmtInt(behaviour.peak_abs_position)}/${fmtInt(productCap)}`} />,
       <MetricCard key="markout" label="Fill markout +5" value={fmtNum(behaviour.average_fill_markout_5)} tone={colorForValue(behaviour.average_fill_markout_5)} sub="Average 5-tick signed edge" />,
     )
   }

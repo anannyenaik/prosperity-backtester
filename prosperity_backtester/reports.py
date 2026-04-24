@@ -7,11 +7,11 @@ import platform as py_platform
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Sequence
+from typing import Dict, List, Mapping, Sequence
 
 from .dashboard_payload import compact_dashboard_payload_for_storage
 from .fair_value import fair_path_bands
-from .metadata import PRODUCTS
+from .metadata import PRODUCTS, get_round_spec
 from .platform import SessionArtefacts, describe_series, summarise_monte_carlo_sessions, write_rows_csv
 from .provenance import capture_provenance
 from .round2 import ASSUMPTION_REGISTRY
@@ -624,7 +624,6 @@ _MC_PATH_BAND_METRIC_KEYS: tuple[tuple[str, str, str, str], ...] = tuple(
     (metric_name, row_key, f"{row_key}_bucket_min", f"{row_key}_bucket_max")
     for metric_name, row_key in _MC_PATH_BAND_METRICS
 )
-_PRODUCTS_SET = frozenset(PRODUCTS)
 
 
 def accumulate_path_band_rows(
@@ -635,11 +634,10 @@ def accumulate_path_band_rows(
     # `_path_metric_rows`) write metric values as native floats or None, so we
     # skip the defensive `_number()` coercion that previously dominated the
     # reporting profile (≈800k isinstance/finite calls per default MC run).
-    products_set = _PRODUCTS_SET
     metric_keys = _MC_PATH_BAND_METRIC_KEYS
     for row in rows:
         product = row.get("product")
-        if product not in products_set:
+        if not isinstance(product, str) or not product:
             continue
         bucket_index = row.get("bucket_index")
         if not isinstance(bucket_index, int):
@@ -712,9 +710,13 @@ def merge_path_band_accumulators(
 
 def finalize_path_band_accumulator(
     accumulator: Dict[tuple[str, str, int], Dict[str, object]],
+    *,
+    products: Sequence[str] | None = None,
 ) -> Dict[str, Dict[str, List[Dict[str, object]]]]:
+    if products is None:
+        products = sorted({product for _metric_name, product, _bucket_index in accumulator})
     output: Dict[str, Dict[str, List[Dict[str, object]]]] = {
-        metric_name: {product: [] for product in PRODUCTS}
+        metric_name: {product: [] for product in products}
         for metric_name, _row_key in _MC_PATH_BAND_METRICS
     }
     for (metric_name, product, bucket_index), state in sorted(accumulator.items(), key=lambda item: (item[0][0], item[0][1], item[0][2])):
@@ -750,7 +752,8 @@ def _aggregate_mc_path_bands(results: Sequence[SessionArtefacts]) -> Dict[str, D
     for result in results:
         if result.path_metrics:
             accumulate_path_band_rows(accumulator, result.path_metrics)
-    return finalize_path_band_accumulator(accumulator)
+    products = results[0].products if results else PRODUCTS
+    return finalize_path_band_accumulator(accumulator, products=products)
 
 
 def all_session_path_band_method(
@@ -983,6 +986,21 @@ def build_dashboard_payload(
     output_options = output_options or DEFAULT_OUTPUT_OPTIONS
     access_scenario = access_scenario or {}
     provenance = provenance or capture_provenance(runtime_context=runtime_context)
+    spec = get_round_spec(round_number)
+    resolved_products = tuple(spec.products)
+    resolved_product_metadata = {
+        symbol: meta.to_dict()
+        for symbol, meta in spec.product_metadata.items()
+    }
+    resolved_round_name = spec.name
+    if replay_result is not None:
+        resolved_products = tuple(replay_result.products)
+        resolved_product_metadata = dict(replay_result.product_metadata)
+        resolved_round_name = replay_result.round_name
+    elif monte_carlo_results:
+        resolved_products = tuple(monte_carlo_results[0].products)
+        resolved_product_metadata = dict(monte_carlo_results[0].product_metadata)
+        resolved_round_name = monte_carlo_results[0].round_name
     assumptions: Dict[str, object] = {
         "exact": [
             "CSV and live-export parsing",
@@ -1017,6 +1035,7 @@ def build_dashboard_payload(
             "traderName": trader_name,
             "mode": mode,
             "round": round_number,
+            "roundName": resolved_round_name,
             "fillModel": fill_model,
             "perturbations": perturbations,
             "accessScenario": access_scenario,
@@ -1024,7 +1043,14 @@ def build_dashboard_payload(
             "createdAt": datetime.now(timezone.utc).isoformat(),
             "provenance": provenance,
         },
-        "products": list(PRODUCTS),
+        "products": list(resolved_products),
+        "productMetadata": resolved_product_metadata,
+        "positionLimits": {
+            product: resolved_product_metadata[product]["position_limit"]
+            for product in resolved_products
+            if product in resolved_product_metadata
+        },
+        "roundSpec": spec.to_dict(),
         "assumptions": assumptions,
         "dataContract": _data_contract(run_type, output_options),
         "datasetReports": dataset_reports or [],
@@ -1033,6 +1059,8 @@ def build_dashboard_payload(
     if replay_result is not None:
         rows = replay_rows or compact_replay_rows(replay_result, output_options)
         payload["summary"] = replay_result.summary
+        if replay_result.summary.get("option_diagnostics") is not None:
+            payload["optionDiagnostics"] = replay_result.summary["option_diagnostics"]
         payload["sessionRows"] = replay_result.session_rows
         if output_options.include_orders:
             payload["orders"] = rows["orders"]
@@ -1072,8 +1100,8 @@ def build_dashboard_payload(
             )
         else:
             fair_value_bands = {
-                "analysisFair": fair_path_bands(sample_runs, "analysis_fair"),
-                "mid": fair_path_bands(sample_runs, "mid"),
+                "analysisFair": fair_path_bands(sample_runs, "analysis_fair", products=resolved_products),
+                "mid": fair_path_bands(sample_runs, "mid", products=resolved_products),
             }
             path_band_method = {
                 "source": "sample_runs",
@@ -1198,6 +1226,13 @@ def write_manifest(
     payload.pop("runtime_context", None)
     if run_type and "data_contract" not in payload:
         payload["data_contract"] = _data_contract(str(run_type), output_options)
+    data_scope = internal_runtime_context.get("data_scope")
+    if isinstance(data_scope, Mapping):
+        data_dir = data_scope.get("data_dir")
+        if data_dir:
+            source_manifest = _load_source_data_manifest(Path(str(data_dir)))
+            if source_manifest is not None:
+                payload["source_data_manifest"] = source_manifest
 
     manifest_path = output_dir / "manifest.json"
     previous_text: str | None = None
@@ -1216,11 +1251,23 @@ def write_manifest(
 
 
 def _manifest_base(artefact: SessionArtefacts) -> Dict[str, object]:
+    spec = get_round_spec(artefact.round_number)
+    position_limits = {
+        product: metadata.get("position_limit")
+        for product, metadata in artefact.product_metadata.items()
+    }
     return {
         "run_type": artefact.mode,
         "run_name": artefact.run_name,
         "trader_name": artefact.trader_name,
         "mode": artefact.mode,
+        "round": artefact.round_number,
+        "round_name": artefact.round_name,
+        "products": list(artefact.products),
+        "product_metadata": artefact.product_metadata,
+        "position_limits": position_limits,
+        "tte_days_by_historical_day": dict(spec.tte_days_by_historical_day),
+        "final_tte_days": spec.final_tte_days,
         "fill_model": artefact.fill_model,
         "perturbations": artefact.perturbations,
         "access_scenario": artefact.access_scenario,
@@ -1235,7 +1282,16 @@ def _manifest_base(artefact: SessionArtefacts) -> Dict[str, object]:
             "noise": "configured or fitted Monte Carlo latent noise profile",
             "historical_fair": "diagnostic inference",
             "synthetic_fair": "exact latent path",
-            "round2_access": "configurable local assumption, not official reconstruction",
+            "option_theory": (
+                "diagnostic and synthetic support only; historical Round 3 replay stays on observed books and mids"
+                if artefact.round_number == 3
+                else "not applicable"
+            ),
+            "round2_access": (
+                "configurable local assumption, not official reconstruction"
+                if artefact.round_number == 2
+                else "not applicable"
+            ),
         },
         "created_at": datetime.now(timezone.utc).isoformat(),
         "python_version": sys.version,
@@ -1292,7 +1348,14 @@ def write_replay_bundle(
         register=register,
         output_options=output_options,
     )
-    write_manifest(output_dir, _manifest_base(artefact), output_options, runtime_context=runtime_context)
+    manifest_payload = {
+        **_manifest_base(artefact),
+        "dataset_reports": dashboard_payload.get("datasetReports", []),
+        "validation": dashboard_payload.get("validation", {}),
+    }
+    if dashboard_payload.get("optionDiagnostics") is not None:
+        manifest_payload["option_diagnostics"] = dashboard_payload.get("optionDiagnostics")
+    write_manifest(output_dir, manifest_payload, output_options, runtime_context=runtime_context)
 
 
 def write_mc_bundle(
@@ -1393,6 +1456,16 @@ def write_mc_bundle(
     )
     write_manifest(output_dir, {
         "run_type": "monte_carlo",
+        "round": results[0].round_number if results else None,
+        "round_name": results[0].round_name if results else None,
+        "products": list(results[0].products) if results else [],
+        "product_metadata": results[0].product_metadata if results else {},
+        "position_limits": {
+            product: metadata.get("position_limit")
+            for product, metadata in (results[0].product_metadata.items() if results else [])
+        },
+        "tte_days_by_historical_day": dict(get_round_spec(results[0].round_number).tte_days_by_historical_day) if results else {},
+        "final_tte_days": get_round_spec(results[0].round_number).final_tte_days if results else None,
         "run_count": len(results),
         "sample_run_count": sum(1 for result in results if result.inventory_series),
         "saved_sample_path_count": sum(1 for result in results if result.inventory_series) if output_options.write_sample_path_files else 0,
@@ -1400,4 +1473,48 @@ def write_mc_bundle(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "python_version": sys.version,
         "platform": py_platform.platform(),
+        "dataset_reports": dashboard_payload.get("datasetReports", []),
+        "validation": dashboard_payload.get("validation", {}),
+        "option_diagnostics": dashboard_payload.get("optionDiagnostics"),
     }, output_options, runtime_context=runtime_context)
+
+
+def _load_source_data_manifest(data_dir: Path) -> Dict[str, object] | None:
+    manifest_path = data_dir / "manifest.json"
+    if not manifest_path.is_file():
+        return None
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, Mapping):
+        return None
+    files = payload.get("files")
+    if not isinstance(files, list):
+        files = []
+    summarised_files = []
+    for entry in files:
+        if not isinstance(entry, Mapping):
+            continue
+        summarised_files.append({
+            "name": entry.get("name"),
+            "size_bytes": entry.get("size_bytes"),
+            "sha256": entry.get("sha256"),
+            "row_count": entry.get("row_count"),
+            "timestamp_min": entry.get("timestamp_min"),
+            "timestamp_max": entry.get("timestamp_max"),
+            "timestamp_count": entry.get("timestamp_count"),
+            "products_seen": entry.get("products_seen"),
+        })
+    return {
+        "path": str(manifest_path),
+        "schema_version": payload.get("schema_version"),
+        "round": payload.get("round"),
+        "source_capsule_name": payload.get("source_capsule_name"),
+        "source_capsule_sha256": payload.get("source_capsule_sha256"),
+        "wiki_capsule_name": payload.get("wiki_capsule_name"),
+        "wiki_capsule_sha256": payload.get("wiki_capsule_sha256"),
+        "import_date": payload.get("import_date"),
+        "currency": payload.get("currency"),
+        "files": summarised_files,
+    }

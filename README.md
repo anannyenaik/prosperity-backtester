@@ -1,15 +1,10 @@
 # Prosperity Backtester
 
-Result: this repository is now centred on the Round 2 submitted baseline and the final optimised candidate.
+Result: this repository is now round-aware and ready for Round 3 historical replay, Round 3 option diagnostics, and coherent Round 3 Monte Carlo, while preserving the existing Round 1 and Round 2 workflows.
 
-The submission-facing strategy pair is:
+No Round 3 alpha strategy is checked in. The tracked `examples/noop_round3_trader.py` file is a smoke fixture only.
 
-- `strategies/r2_algo_v2.py`: frozen submitted baseline
-- `strategies/r2_algo_v2_optimised.py`: improved local candidate
-
-`strategies/trader.py` and `strategies/starter.py` remain only as older Round 1 fixtures. They are not the main review path.
-
-## Quick Start
+## Quick start
 
 Runtime code uses the Python standard library only. Tests use `pytest`.
 
@@ -18,13 +13,7 @@ python -m pip install -e ".[dev]"
 python -m pytest -q
 ```
 
-Install the extra analysis dependencies only if you want the optional research helpers:
-
-```bash
-python -m pip install -e ".[dev,analysis]"
-```
-
-The React dashboard is optional:
+Install the React dashboard dependencies only if you want the optional UI:
 
 ```bash
 npm ci --prefix dashboard
@@ -32,38 +21,30 @@ npm test --prefix dashboard
 npm run build --prefix dashboard
 ```
 
-`python -m prosperity_backtester serve` uses the React build when `dashboard/dist/` exists. Otherwise it falls back to `legacy_dashboard/dashboard.html`.
+## Round 3 path
 
-## Reviewer Path
-
-Inspect the tracked Round 2 data:
+Inspect the tracked Round 3 public data:
 
 ```bash
-python -m prosperity_backtester inspect --round 2 --data-dir data/round2 --days -1 0 1 --json
+python -m prosperity_backtester inspect --round 3 --data-dir data/round3 --days 0 1 2 --json
 ```
 
-Run the direct submitted-versus-optimised compare:
+Run a deterministic Round 3 replay smoke:
 
 ```bash
-python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --merge-pnl
+python -m prosperity_backtester replay examples/noop_round3_trader.py --round 3 --data-dir data/round3 --days 0 1 2 --fill-mode base
 ```
 
-Run the checked-in access and MAF suite:
+Run a coherent Round 3 Monte Carlo smoke:
 
 ```bash
-python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_research.json
+python -m prosperity_backtester monte-carlo examples/noop_round3_trader.py --round 3 --data-dir data/round3 --days 0 --sessions 8 --sample-sessions 2 --synthetic-tick-limit 250
 ```
 
-Run the checked-in conservative stress suite:
+Run the checked-in Round 3 scenario bundle:
 
 ```bash
-python -m prosperity_backtester scenario-compare configs/research_scenarios.json
-```
-
-Run the checked-in pairwise Monte Carlo confirmation:
-
-```bash
-python -m prosperity_backtester round2-scenarios configs/round2_pairwise_mc.json
+python -m prosperity_backtester scenario-compare configs/round3_research_scenarios.json
 ```
 
 Open the latest bundle:
@@ -72,85 +53,43 @@ Open the latest bundle:
 python -m prosperity_backtester serve --latest
 ```
 
-## Submission Surface
+## Historical Round 2 path
 
-The repo is intentionally small at the top level:
+The submitted and optimised Round 2 strategy pair is still tracked:
 
-- `strategies/`: submitted and optimised Round 2 scripts, plus legacy Round 1 fixtures
-- `data/`: tracked Round 1 and Round 2 public CSV fixtures
-- `prosperity_backtester/`: replay, Monte Carlo, reporting, storage, and server code
-- `configs/`: checked-in comparison packs for access, stress, and Monte Carlo review
-- `docs/`: reviewer-facing workflow and architecture notes
-- `tests/`: regression tests for runtime, outputs, and helper scripts
+- `strategies/r2_algo_v2.py`
+- `strategies/r2_algo_v2_optimised.py`
 
-Optional tooling:
-
-- `analysis/`: helper wrappers and benchmark scripts
-- `dashboard/`: React review UI
-- `live_exports/`: tracked live-export fixture for optional historical calibration
-
-Compatibility or experimental areas:
-
-- `legacy_dashboard/`
-- `r1bt/`
-- `rust_mc_engine/`
-
-## Core Commands
-
-Replay the submitted baseline:
+Typical Round 2 commands remain:
 
 ```bash
-python -m prosperity_backtester replay strategies/r2_algo_v2.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base
-```
-
-Replay the optimised candidate:
-
-```bash
-python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base
-```
-
-Run the quick decision grid:
-
-```bash
-python -m prosperity_backtester round2-scenarios configs/round2_scenarios.json
-```
-
-Run the broad replay suite:
-
-```bash
+python -m prosperity_backtester inspect --round 2 --data-dir data/round2 --days -1 0 1 --json
+python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --merge-pnl
 python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_research.json
 ```
 
-Run the no-access stress suite:
+## Repository map
 
-```bash
-python -m prosperity_backtester scenario-compare configs/research_scenarios.json
-```
-
-Run the pairwise Monte Carlo access check:
-
-```bash
-python -m prosperity_backtester round2-scenarios configs/round2_pairwise_mc.json
-```
-
-Prune old auto-generated output directories:
-
-```bash
-python -m prosperity_backtester clean --keep 30
-```
+- `prosperity_backtester/`: replay, Monte Carlo, round registry, reporting, storage, and server code
+- `data/`: tracked Round 1, Round 2, and Round 3 public fixtures
+- `configs/`: checked-in smoke and scenario configs
+- `examples/`: smoke helpers and legacy examples
+- `docs/`: workflow, assumptions, architecture, and output notes
+- `tests/`: regression coverage for runtime, outputs, and bundle contracts
 
 ## Notes
 
-- The strongest local Round 2 evidence lives in `compare`, `round2-scenarios`, and `scenario-compare`.
-- `analysis/research_pack.py` and `analysis/profile_replay.py` now default to the Round 2 submitted-versus-optimised pair.
-- The live-export calibration flow remains available, but it is an optional historical side path rather than the main Round 2 decision workflow.
+- Round 3 historical replay trades the observed books and marks positions to observed mids.
+- Round 3 vouchers are not cash-settled or exercised inside historical replay.
+- Passive fills remain approximate across all rounds.
+- Round 2 access and MAF logic remain available, but are intentionally isolated from Round 3.
 
 ## Documentation
 
-- [docs/WORKFLOWS.md](docs/WORKFLOWS.md): main review loops and checked-in configs
-- [docs/ROUND2.md](docs/ROUND2.md): Round 2 access and MAF workflow
-- [docs/OUTPUTS.md](docs/OUTPUTS.md): bundle structure and output profiles
+- [docs/ROUND3.md](docs/ROUND3.md): Round 3 products, data, TTE mapping, diagnostics, and caveats
+- [docs/WORKFLOWS.md](docs/WORKFLOWS.md): practical replay and Monte Carlo workflows
 - [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md): exact behaviour versus local modelling assumptions
+- [docs/OUTPUTS.md](docs/OUTPUTS.md): bundle structure and metadata
 - [docs/REPOSITORY_GUIDE.md](docs/REPOSITORY_GUIDE.md): file and module map
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): runtime layers and bundle contract
-- [docs/CALIBRATED_RESEARCH.md](docs/CALIBRATED_RESEARCH.md): optional live-export calibration workflow
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): runtime layers and round-aware design
+- [docs/ROUND2.md](docs/ROUND2.md): historical Round 2 access and MAF workflow

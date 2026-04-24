@@ -1,175 +1,58 @@
 # Architecture
 
-Result: the repository is organised around one stable output contract. Historical replay, Monte Carlo, calibration, optimisation, and scenario workflows all produce bundle directories with the same two anchor files:
+Result: the repository is organised around one stable bundle contract and one round-aware runtime registry. Historical replay, Monte Carlo, comparison, and scenario workflows all flow through the same core path.
 
-- `dashboard.json`
-- `manifest.json`
-
-That shared contract keeps the CLI, tests, server, and dashboard aligned.
-
-## Core Flow
+## Core flow
 
 ```text
 trader file
   -> trader_adapter.py
-  -> dataset.py / live_export.py / round2.py
+  -> dataset.py + metadata.py + round2.py + round3.py
   -> platform.py and experiments.py
   -> reports.py + storage.py + provenance.py
   -> dashboard.json + manifest.json + CSV sidecars
   -> server.py + dashboard/
 ```
 
-The main path is:
+## Round-aware design
 
-1. `__main__.py` parses the command and output policy.
-2. `experiments.py` resolves traders, configs, datasets, and workflow-specific options.
-3. `dataset.py`, `live_export.py`, `metadata.py`, and `round2.py` load the required inputs.
-4. `platform.py` runs replay or Monte Carlo sessions using the selected fill model and perturbation settings.
-5. `reports.py` builds the bundle payload and writes canonical files.
-6. `server.py` exposes local bundles to the React dashboard or the legacy HTML fallback.
+The old global-product assumption has been replaced by a round registry:
 
-## Layers
+- `metadata.py` defines `ProductMeta`, `RoundSpec`, and the round registry
+- `get_round_spec()`, `products_for_round()`, and `position_limit_for()` are the normal entry points
+- Round 1 and Round 2 keep the two-product delta-1 setup
+- Round 3 adds `HYDROGEL_PACK`, `VELVETFRUIT_EXTRACT`, and the ten `VEV_*` vouchers
 
-### Input and compatibility
+Round-specific logic is isolated:
 
-- `dataset.py` loads Round 1 and Round 2 CSVs and validates their shape.
-- `live_export.py` loads tracked live-export fixtures for calibration.
-- `datamodel.py` and `trader_adapter.py` let uploaded Prosperity-style traders run without source edits.
-- `metadata.py`, `noise.py`, `round2.py`, and `scenarios.py` provide shared configuration and assumptions.
+- `round2.py`: Round 2 access and MAF assumptions only
+- `round3.py`: voucher metadata, TTE helpers, option diagnostics, and coherent Round 3 synthetic generation
+
+## Main layers
+
+### Inputs
+
+- `dataset.py` loads and validates Round 1, Round 2, and Round 3 CSVs
+- `metadata.py` provides round specs and product metadata
+- `datamodel.py` and `trader_adapter.py` keep trader compatibility stable
 
 ### Execution
 
-- `platform.py` is the main execution engine.
-- `fill_models.py` resolves named fill assumptions and empirical fill profiles.
-- `simulate.py` generates synthetic books and trades for Monte Carlo.
-- `mc_backends.py` chooses the backend for Monte Carlo work.
-- `engine.py` holds lower-level ledger and execution primitives that support the wider runtime and older callers.
+- `platform.py` is the main replay and Monte Carlo engine
+- `fill_models.py` resolves named fill assumptions
+- `round3.py` generates coherent Round 3 synthetic paths from the underlying and voucher chain
+- `round2.py` stays out of Round 3 execution
 
-### Reporting and persistence
+### Reporting
 
-- `reports.py` writes `dashboard.json`, `manifest.json`, and workflow-specific CSVs.
-- `dashboard_payload.py` compacts large retained sections for storage and expands them again on load.
-- `storage.py` controls light versus full output behaviour and retention rules.
-- `provenance.py` records git and runtime metadata in the bundle.
-- `bundle_attribution.py` is optional analysis tooling for explaining bundle size.
+- `reports.py` builds the canonical dashboard payload and manifest
+- `dashboard_payload.py` compacts large retained sections for storage
+- `storage.py` controls light versus full output profiles
+- `provenance.py` records git and runtime metadata
 
-### Review surfaces
+## Design boundaries
 
-- `server.py` serves bundle discovery endpoints and static dashboard assets.
-- `dashboard/` is the primary review UI.
-- `legacy_dashboard/` is the shipped fallback when the React build is absent.
-
-## Design Decisions
-
-### JSON bundle first
-
-`dashboard.json` is the canonical review payload. The dashboard reads that payload rather than reconstructing results from raw CSV inputs.
-
-Why it stays:
-
-- one contract across all workflows
-- easier review and testing
-- clear separation between execution and presentation
-
-### Light output by default
-
-The default output profile is `light`. It keeps the evidence needed for review while omitting the heaviest debug artefacts.
-
-Full mode exists for deliberate forensic work:
-
-- raw submitted orders
-- full chart sidecars
-- Monte Carlo sample-path files
-- per-session manifests
-
-### Compatibility is isolated
-
-Compatibility-only surfaces are still present, but they are intentionally narrow:
-
-- `r1bt/` for former package-name imports
-- `prosperity_backtester.replay` for older direct replay callers
-- `prosperity_backtester.dashboard` for older standalone dashboard code
-- `legacy_dashboard/` for environments without a React build
-
-They remain because they are cheap to keep and clearly separated from the main path.
-
-### Experimental work stays out of the default path
-
-The Rust backend and the benchmark helpers are retained, but they are not the primary architecture:
-
-- `rust_mc_engine/` is optional
-- `mc_backends.py` keeps Python as the normal path
-- `analysis/benchmark_*.py`, `analysis/rss_frontier.py`, and `analysis/architecture_bakeoff.py` are optional analysis tools
-
-## Runtime Surfaces
-
-### Main CLI
-
-`python -m prosperity_backtester ...`
-
-This is the primary interface for:
-
-- replay
-- compare
-- Monte Carlo
-- inspect
-- calibrate
-- optimise
-- scenario compare
-- Round 2 scenario analysis
-- serve
-- clean
-
-### Optional helper scripts
-
-`analysis/research_pack.py` and `analysis/profile_replay.py` are the main optional wrappers around the core runtime. They stay thin on purpose and delegate real work back into `prosperity_backtester/`.
-
-### Dashboard
-
-The dashboard has two layers:
-
-- `dashboard/`: primary React review UI
-- `legacy_dashboard/dashboard.html`: fallback for environments without a local React build
-
-### Tests
-
-`tests/` is part of the core architecture because the bundle contract is a major part of the product. Output shape, provenance, retention, adapter logic, and compatibility shims are all covered there.
-
-## Status Boundaries
-
-Core:
-
-- `prosperity_backtester/`
-- `data/`
-- `strategies/r2_algo_v2.py`
-- `strategies/r2_algo_v2_optimised.py`
-- `tests/`
-
-Optional:
-
-- `dashboard/`
-- `analysis/research_pack.py`
-- `analysis/profile_replay.py`
-- `configs/`
-- `examples/`
-- `live_exports/`
-
-Legacy examples:
-
-- `strategies/trader.py`
-- `strategies/starter.py`
-
-Experimental:
-
-- `rust_mc_engine/`
-- Rust support in `mc_backends.py`
-- benchmark helpers in `analysis/`
-
-Legacy:
-
-- `r1bt/`
-- `legacy_dashboard/`
-- `prosperity_backtester.replay`
-- `prosperity_backtester.dashboard`
-
-For the file-by-file map, see [docs/REPOSITORY_GUIDE.md](REPOSITORY_GUIDE.md).
+- Historical replay trades the observed public books.
+- Passive fills remain approximate.
+- Round 3 option theory is diagnostic and synthetic support only.
+- Round 2 access logic cannot leak into Round 3.

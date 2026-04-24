@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from .dataset import BookSnapshot, DayDataset
-from .metadata import PRODUCT_METADATA, PRODUCTS
+from .metadata import PRODUCT_METADATA, PRODUCTS, ProductMeta, RoundSpec, get_round_spec
+from .round3 import ROUND3_HYDROGEL, ROUND3_UNDERLYING
 
 
 @dataclass
@@ -86,17 +87,26 @@ def _linear_fit(points: Sequence[Tuple[int, float]]) -> Tuple[float, float]:
     return slope, intercept
 
 
-def infer_day_fair_rows(day_dataset: DayDataset) -> List[Dict[str, object]]:
+def infer_day_fair_rows(
+    day_dataset: DayDataset,
+    *,
+    products: Sequence[str] = PRODUCTS,
+    product_metadata: Mapping[str, ProductMeta] = PRODUCT_METADATA,
+    round_spec: RoundSpec | None = None,
+) -> List[Dict[str, object]]:
     rows: List[FairRow] = []
     source = str(day_dataset.metadata.get("source", ""))
     exact_reference = source == "synthetic"
+    round_spec = round_spec or get_round_spec(day_dataset.round_number or 1)
 
-    for product in PRODUCTS:
+    for product in products:
+        meta = product_metadata[product]
         snapshots = [(ts, day_dataset.books_by_timestamp[ts].get(product)) for ts in day_dataset.timestamps]
         valid_mids = [(ts, snap.mid) for ts, snap in snapshots if snap is not None and snap.mid is not None]
         slope, intercept = _linear_fit([(ts, float(mid)) for ts, mid in valid_mids])
-        osmium_anchor = OnlineEwma(alpha=0.02, initial=PRODUCT_METADATA[product].default_fair)
+        osmium_anchor = OnlineEwma(alpha=0.02, initial=meta.default_fair)
         pepper_intercept = OnlineEwma(alpha=0.01)
+        underlying_anchor = OnlineEwma(alpha=0.04, initial=meta.default_fair)
 
         for ts, snapshot in snapshots:
             if snapshot is None:
@@ -104,7 +114,29 @@ def infer_day_fair_rows(day_dataset: DayDataset) -> List[Dict[str, object]]:
             mid = snapshot.mid
             microprice = _micro(snapshot)
             ref = snapshot.reference_fair
-            if product == "ASH_COATED_OSMIUM":
+            if round_spec.round_number == 3 and meta.asset_class == "option":
+                inferred = mid if mid is not None else microprice if microprice is not None else ref
+                fair_method = "exact_latent" if exact_reference and ref is not None else "observed_mid"
+                analysis_fair = ref if exact_reference and ref is not None else inferred
+                trend = 0.0
+            elif round_spec.round_number == 3 and product == ROUND3_HYDROGEL:
+                anchor_input = microprice if microprice is not None else mid
+                anchor = osmium_anchor.update(anchor_input)
+                inferred = anchor if anchor is not None else ref
+                fair_method = "exact_latent" if exact_reference and ref is not None else "hydrogel_anchor_microprice"
+                analysis_fair = ref if exact_reference and ref is not None else inferred
+                trend = 0.0
+            elif round_spec.round_number == 3 and product == ROUND3_UNDERLYING:
+                observed = None
+                if microprice is not None and mid is not None:
+                    observed = 0.6 * microprice + 0.4 * mid
+                else:
+                    observed = microprice if microprice is not None else mid
+                inferred = underlying_anchor.update(observed)
+                fair_method = "exact_latent" if exact_reference and ref is not None else "underlying_mid_micro_ewma"
+                analysis_fair = ref if exact_reference and ref is not None else inferred
+                trend = slope
+            elif product == "ASH_COATED_OSMIUM":
                 anchor_input = mid if mid is not None else microprice
                 anchor = osmium_anchor.update(anchor_input)
                 inferred = None
@@ -121,7 +153,7 @@ def infer_day_fair_rows(day_dataset: DayDataset) -> List[Dict[str, object]]:
                     smoothed_intercept = pepper_intercept.update(observed_intercept)
                     inferred = None if smoothed_intercept is None else smoothed_intercept + slope * ts
                 else:
-                    inferred = ref if ref is not None else PRODUCT_METADATA[product].default_fair
+                    inferred = ref if ref is not None else meta.default_fair
                 fair_method = "exact_latent" if exact_reference and ref is not None else "pepper_trend_fit"
                 analysis_fair = ref if exact_reference and ref is not None else inferred
                 trend = slope
@@ -146,16 +178,29 @@ def infer_day_fair_rows(day_dataset: DayDataset) -> List[Dict[str, object]]:
     return rows
 
 
-def infer_market_fair_rows(market_days: Sequence[DayDataset]) -> List[Dict[str, object]]:
+def infer_market_fair_rows(
+    market_days: Sequence[DayDataset],
+    *,
+    products: Sequence[str] = PRODUCTS,
+    product_metadata: Mapping[str, ProductMeta] = PRODUCT_METADATA,
+    round_spec: RoundSpec | None = None,
+) -> List[Dict[str, object]]:
     rows: List[Dict[str, object]] = []
     for day in market_days:
-        rows.extend(infer_day_fair_rows(day))
+        rows.extend(
+            infer_day_fair_rows(
+                day,
+                products=products,
+                product_metadata=product_metadata,
+                round_spec=round_spec,
+            )
+        )
     return rows
 
 
-def summarize_fair_rows(rows: Sequence[Dict[str, object]]) -> Dict[str, object]:
+def summarize_fair_rows(rows: Sequence[Dict[str, object]], *, products: Sequence[str] = PRODUCTS) -> Dict[str, object]:
     per_product: Dict[str, Dict[str, object]] = {}
-    for product in PRODUCTS:
+    for product in products:
         product_rows = [row for row in rows if row["product"] == product]
         if not product_rows:
             continue
@@ -180,9 +225,14 @@ def build_fair_lookup(rows: Sequence[Dict[str, object]]) -> Dict[tuple[int, str,
     return {(int(row["day"]), str(row["product"]), int(row["timestamp"])): row for row in rows}
 
 
-def fair_path_bands(sample_runs: Sequence[Dict[str, object]], key: str) -> Dict[str, List[Dict[str, object]]]:
-    bands: Dict[str, List[Dict[str, object]]] = {product: [] for product in PRODUCTS}
-    for product in PRODUCTS:
+def fair_path_bands(
+    sample_runs: Sequence[Dict[str, object]],
+    key: str,
+    *,
+    products: Sequence[str] = PRODUCTS,
+) -> Dict[str, List[Dict[str, object]]]:
+    bands: Dict[str, List[Dict[str, object]]] = {product: [] for product in products}
+    for product in products:
         product_runs = []
         for run in sample_runs:
             rows = [row for row in run.get("fairValueSeries", []) if row.get("product") == product and row.get(key) is not None]

@@ -12,6 +12,7 @@ from typing import List, Sequence
 from .experiments import (
     DEFAULT_DATA_DIR,
     DEFAULT_ROUND2_DATA_DIR,
+    DEFAULT_ROUND3_DATA_DIR,
     TraderSpec,
     calibrate_against_live_export,
     default_data_dir_for_round,
@@ -24,6 +25,7 @@ from .experiments import (
     run_sweep_from_config,
 )
 from .fill_models import FILL_MODELS, derive_empirical_fill_profile
+from .metadata import get_round_spec
 from .noise import resolve_noise_profile
 from .platform import PerturbationConfig
 from .round2 import AccessScenario
@@ -157,6 +159,13 @@ def _days_arg(values: Sequence[str]) -> Sequence[int]:
     return tuple(int(v) for v in values)
 
 
+def _days_from_args(args) -> Sequence[int]:
+    raw_days = getattr(args, "days", None)
+    if raw_days:
+        return _days_arg(raw_days)
+    return tuple(int(day) for day in get_round_spec(int(getattr(args, "round", 1))).default_days)
+
+
 def _positive_int(value: str) -> int:
     try:
         parsed = int(value)
@@ -215,6 +224,17 @@ def _perturb_from_args(args) -> PerturbationConfig:
         inventory_limit_scale=args.inventory_limit_scale,
         position_limits_by_product=limit_overrides,
         synthetic_tick_limit=getattr(args, "synthetic_tick_limit", None),
+        shock_tick=getattr(args, "shock_tick", None),
+        underlying_shock=float(getattr(args, "underlying_shock", 0.0)),
+        hydrogel_shock=float(getattr(args, "hydrogel_shock", 0.0)),
+        vol_shift=float(getattr(args, "vol_shift", 0.0)),
+        vol_scale=float(getattr(args, "vol_scale", 1.0)),
+        skew_shift=float(getattr(args, "skew_shift", 0.0)),
+        option_residual_noise_scale=float(getattr(args, "option_residual_noise_scale", 1.0)),
+        option_liquidity_scale=float(getattr(args, "option_liquidity_scale", 1.0)),
+        voucher_spread_shift_ticks=int(getattr(args, "voucher_spread_shift_ticks", 0)),
+        underlying_liquidity_scale=float(getattr(args, "underlying_liquidity_scale", 1.0)),
+        hydrogel_liquidity_scale=float(getattr(args, "hydrogel_liquidity_scale", 1.0)),
         scenario_name=str(getattr(args, "scenario_name", "cli")),
     )
 
@@ -264,22 +284,43 @@ def _access_from_args(args) -> AccessScenario:
     )
 
 
+def _access_requested(args) -> bool:
+    return any(
+        (
+            bool(getattr(args, "with_extra_access", False)),
+            bool(getattr(args, "contract_won", False)),
+            str(getattr(args, "access_mode", "none")) != "none",
+            float(getattr(args, "maf_bid", 0.0) or 0.0) != 0.0,
+            float(getattr(args, "extra_quote_fraction", 0.25) or 0.25) != 0.25,
+            float(getattr(args, "access_quality", 1.0) or 1.0) != 1.0,
+            float(getattr(args, "access_probability", 1.0) or 1.0) != 1.0,
+            float(getattr(args, "access_book_volume_share", 1.0) or 1.0) != 1.0,
+            float(getattr(args, "access_passive_multiplier", 1.0) or 1.0) != 1.0,
+            float(getattr(args, "access_passive_bonus", 0.0) or 0.0) != 0.0,
+            float(getattr(args, "access_missed_reduction", 0.0) or 0.0) != 0.0,
+            float(getattr(args, "access_trade_volume_share", 1.0) or 1.0) != 1.0,
+        )
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Prosperity replay, Monte Carlo and Round 2 research platform",
+        description="Prosperity replay, Monte Carlo and research platform for Rounds 1 to 3",
         formatter_class=_CliFormatter,
         epilog=(
             "Examples:\n"
+            "  python -m prosperity_backtester inspect --round 3 --data-dir data/round3 --days 0 1 2 --json\n"
+            "  python -m prosperity_backtester replay tests/fixtures/noop_round3_trader.py --round 3 --data-dir data/round3 --days 0 1 2 --fill-mode base\n"
+            "  python -m prosperity_backtester monte-carlo tests/fixtures/noop_round3_trader.py --round 3 --data-dir data/round3 --days 0 --sessions 8 --sample-sessions 2 --synthetic-tick-limit 250\n"
             "  python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base\n"
             "  python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --merge-pnl\n"
-            "  python -m prosperity_backtester monte-carlo strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --quick --noise-profile fitted\n"
             "  python -m prosperity_backtester serve --latest-type replay\n"
         ),
     )
     sub = parser.add_subparsers(dest="command")
 
     def add_round_and_access(subparser):
-        subparser.add_argument("--round", type=int, default=1, choices=[1, 2], help="Competition round mode")
+        subparser.add_argument("--round", type=int, default=1, choices=[1, 2, 3], help="Competition round mode")
         subparser.add_argument("--with-extra-access", action="store_true", help="Enable the local Round 2 extra-quote access assumption")
         subparser.add_argument("--contract-won", action="store_true", help="Assume the MAF contract is won and the fee is paid")
         subparser.add_argument("--access-name", default=None, help="Display name for the local access scenario")
@@ -309,8 +350,8 @@ def build_parser() -> argparse.ArgumentParser:
     def add_shared(subparser):
         subparser.add_argument("trader", help="Trader python file")
         subparser.add_argument("--name", default=None, help="Display name for the trader")
-        subparser.add_argument("--data-dir", "--data", dest="data_dir", default=None, help=f"Directory containing CSVs. Defaults: round 1 {DEFAULT_DATA_DIR}, round 2 {DEFAULT_ROUND2_DATA_DIR}")
-        subparser.add_argument("--days", nargs="*", default=["0"], help="Day list, default 0")
+        subparser.add_argument("--data-dir", "--data", dest="data_dir", default=None, help=f"Directory containing CSVs. Defaults: round 1 {DEFAULT_DATA_DIR}, round 2 {DEFAULT_ROUND2_DATA_DIR}, round 3 {DEFAULT_ROUND3_DATA_DIR}")
+        subparser.add_argument("--days", nargs="*", default=None, help="Day list. Defaults follow the chosen round.")
         subparser.add_argument("--fill-mode", default="base", help=f"Fill assumption preset. Built-ins: {', '.join(sorted(FILL_MODELS))}")
         subparser.add_argument("--fill-config", default=None, help="Optional JSON fill-profile config produced by derive-fill-profile")
         subparser.add_argument("--output-dir", default=None, help="Output directory. Default is backtests/<timestamp>_<label>")
@@ -322,7 +363,7 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--noise-profile", default="none", choices=["none", "fitted", "baseline", "stress", "crash"], help="Latent Monte Carlo noise profile")
         subparser.add_argument("--noise-scale", type=float, default=1.0, help="Multiplier around the selected latent noise profile")
         subparser.add_argument("--latent-noise-scale", type=float, default=1.0, help="Extra multiplier applied inside perturbation configs")
-        subparser.add_argument("--pepper-slope-scale", type=float, default=1.0)
+        subparser.add_argument("--pepper-slope-scale", type=float, default=1.0, help="Round 1/2 synthetic Pepper drift multiplier")
         subparser.add_argument("--latency-ticks", type=int, default=0)
         subparser.add_argument("--adverse-selection-ticks", type=int, default=0)
         subparser.add_argument("--slippage-multiplier", type=float, default=1.0, help="Set to 0 for a no-slippage comparison")
@@ -331,6 +372,17 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--inventory-limit-scale", type=float, default=1.0)
         subparser.add_argument("--limit", dest="limit_overrides", action="append", type=_limit_override, default=None, metavar="PRODUCT:LIMIT", help="Override the position limit for one product. Repeat as needed.")
         subparser.add_argument("--synthetic-tick-limit", type=int, default=None, help="Cap synthetic Monte Carlo ticks per day for quick smoke or benchmark runs")
+        subparser.add_argument("--shock-tick", type=int, default=None, help="Apply configured synthetic shocks from this tick onward")
+        subparser.add_argument("--underlying-shock", type=float, default=0.0, help="Round 3 underlying price shock applied from --shock-tick onward")
+        subparser.add_argument("--hydrogel-shock", type=float, default=0.0, help="Round 3 hydrogel price shock applied from --shock-tick onward")
+        subparser.add_argument("--vol-shift", type=float, default=0.0, help="Round 3 option vol shift applied to the voucher surface")
+        subparser.add_argument("--vol-scale", type=float, default=1.0, help="Round 3 option vol scale applied to the voucher surface")
+        subparser.add_argument("--skew-shift", type=float, default=0.0, help="Round 3 option skew shift applied by moneyness")
+        subparser.add_argument("--option-residual-noise-scale", type=float, default=1.0, help="Round 3 voucher residual-noise multiplier")
+        subparser.add_argument("--option-liquidity-scale", type=float, default=1.0, help="Round 3 voucher book-depth multiplier")
+        subparser.add_argument("--voucher-spread-shift-ticks", type=int, default=0, help="Round 3 voucher spread shift in ticks")
+        subparser.add_argument("--underlying-liquidity-scale", type=float, default=1.0, help="Round 3 underlying book-depth multiplier")
+        subparser.add_argument("--hydrogel-liquidity-scale", type=float, default=1.0, help="Round 3 hydrogel book-depth multiplier")
         subparser.add_argument("--scenario-name", default="cli")
         subparser.add_argument("--print-trader-output", "--print", dest="print_trader_output", action="store_true", help="Forward trader stdout directly instead of suppressing it")
         add_output_controls(subparser)
@@ -451,8 +503,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     inspect = sub.add_parser("inspect", help="Print a concise dataset inspection report", formatter_class=_CliFormatter)
     inspect.add_argument("--data-dir", "--data", dest="data_dir", default=None)
-    inspect.add_argument("--days", nargs="*", default=["-2", "-1", "0"])
-    inspect.add_argument("--round", type=int, default=1, choices=[1, 2])
+    inspect.add_argument("--days", nargs="*", default=None)
+    inspect.add_argument("--round", type=int, default=1, choices=[1, 2, 3])
     inspect.add_argument("--json", action="store_true")
 
     serve = sub.add_parser(
@@ -591,13 +643,15 @@ def main(argv: List[str] | None = None) -> None:
 
     parser = build_parser()
     args = parser.parse_args(argv)
+    if hasattr(args, "round") and int(getattr(args, "round", 1)) != 2 and _access_requested(args):
+        parser.error(f"Round {int(args.round)} does not support Round 2 access or MAF flags")
 
     if args.command == "replay":
         output_dir, auto_output = _auto_output_dir(args, "replay")
         output_options = _output_options_from_args(args)
         artefact = run_replay(
             trader_spec=_trader_spec(args.trader, args.name),
-            days=_days_arg(args.days),
+            days=_days_from_args(args),
             data_dir=_data_dir_from_args(args),
             fill_model_name=args.fill_mode,
             perturbation=_perturb_from_args(args),
@@ -633,7 +687,8 @@ def main(argv: List[str] | None = None) -> None:
             trader_spec=_trader_spec(args.trader, args.name),
             sessions=sessions,
             sample_sessions=sample_sessions,
-            days=_days_arg(args.days),
+            days=_days_from_args(args),
+            data_dir=_data_dir_from_args(args),
             fill_model_name=args.fill_mode,
             perturbation=_perturb_from_args(args),
             fill_model_config_path=Path(args.fill_config).resolve() if args.fill_config else None,
@@ -667,7 +722,7 @@ def main(argv: List[str] | None = None) -> None:
         ]
         rows = run_compare(
             trader_specs=trader_specs,
-            days=_days_arg(args.days),
+            days=_days_from_args(args),
             data_dir=_data_dir_from_args(args),
             fill_model_name=args.fill_mode,
             perturbation=_perturb_from_args(args),
@@ -766,7 +821,7 @@ def main(argv: List[str] | None = None) -> None:
         output_options = _output_options_from_args(args)
         best = calibrate_against_live_export(
             trader_spec=_trader_spec(args.trader, args.name),
-            days=_days_arg(args.days),
+            days=_days_from_args(args),
             data_dir=_data_dir_from_args(args),
             live_export_path=Path(args.live_export).resolve(),
             output_dir=output_dir,
@@ -783,14 +838,22 @@ def main(argv: List[str] | None = None) -> None:
         return
 
     if args.command == "inspect":
-        from .dataset import load_round_dataset
-        dataset = load_round_dataset(_data_dir_from_args(args), _days_arg(args.days), round_number=args.round)
-        payload = {day: day_dataset.validation for day, day_dataset in dataset.items()}
+        from .dataset import inspect_dataset_days, load_round_dataset
+        from .round3 import compute_option_diagnostics
+
+        days = _days_from_args(args)
+        dataset = load_round_dataset(_data_dir_from_args(args), days, round_number=args.round)
+        market_days = [dataset[day] for day in days]
+        payload = inspect_dataset_days(market_days, round_number=args.round)
+        if int(args.round) == 3:
+            payload["option_diagnostics"] = compute_option_diagnostics(market_days)
         if args.json:
             print(json.dumps(payload, indent=2))
         else:
-            for day, validation in payload.items():
-                print(f"Day {day}: {validation}")
+            print(f"Round {payload['round']}: {payload['round_name']}")
+            print(f"Products: {', '.join(payload['products'])}")
+            for day_row in payload["days"]:
+                print(f"Day {day_row['day']}: {day_row['validation']}")
         return
 
     if args.command == "workspace-bundle":

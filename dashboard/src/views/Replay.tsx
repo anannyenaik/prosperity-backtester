@@ -19,7 +19,8 @@ import {
 } from '../lib/data'
 import { fmtNum, fmtInt, fmtPct, colorForValue } from '../lib/format'
 import { getTabAvailability, numberOrNull } from '../lib/bundles'
-import { PRODUCT_LABELS, type Product, type FillRow, type BehaviourPerProduct } from '../types'
+import { positionLimit, productLabel, productShortLabel } from '../lib/products'
+import type { Product, FillRow, BehaviourPerProduct } from '../types'
 
 export function Replay() {
   const { getActiveRun, activeProduct, timeWindow } = useStore()
@@ -38,12 +39,14 @@ export function Replay() {
 
   const { payload } = run
   const product = activeProduct as Product
-  const productLabel = PRODUCT_LABELS[product]
+  const productLabelText = productLabel(payload, product)
+  const productShort = productShortLabel(payload, product)
+  const productCap = positionLimit(payload, product)
   const behaviour = payload.behaviour?.per_product?.[product] as Partial<BehaviourPerProduct> | undefined
   const productSummary = payload.summary?.per_product?.[product]
 
   const pnlData = buildPnlData(payload.pnlSeries ?? [], product, timeWindow)
-  const invData = buildInventoryData(payload.inventorySeries ?? [], product)
+  const invData = buildInventoryData(payload.inventorySeries ?? [], product, productCap)
   const { fair, fills } = buildFairFillData(
     payload.fairValueSeries ?? [],
     payload.fills ?? [],
@@ -70,10 +73,20 @@ export function Replay() {
   const sessionCols = [
     { key: 'day', header: 'Day', fmt: 'int' as const },
     { key: 'final_pnl', header: 'PnL', fmt: 'num' as const, tone: (v: unknown) => colorForValue(Number(v)) },
-    { key: 'osmium_pnl', header: 'Osmium', fmt: 'num' as const, tone: (v: unknown) => colorForValue(Number(v)) },
-    { key: 'pepper_pnl', header: 'Pepper', fmt: 'num' as const, tone: (v: unknown) => colorForValue(Number(v)) },
-    { key: 'osmium_position', header: 'Osm pos', fmt: 'int' as const },
-    { key: 'pepper_position', header: 'Pep pos', fmt: 'int' as const },
+    {
+      key: 'selected_product_pnl',
+      header: `${productShort} MTM`,
+      fmt: 'num' as const,
+      render: (_value: unknown, row: Record<string, unknown>) => fmtNum(numberOrNull((row.per_product_pnl as Record<string, unknown> | undefined)?.[product])),
+    },
+    {
+      key: 'selected_product_position',
+      header: `${productShort} pos`,
+      fmt: 'int' as const,
+      render: (_value: unknown, row: Record<string, unknown>) => fmtInt(numberOrNull((row.per_product_position as Record<string, unknown> | undefined)?.[product])),
+    },
+    { key: 'fill_count', header: 'Fills', fmt: 'int' as const },
+    { key: 'limit_breaches', header: 'Breaches', fmt: 'int' as const },
   ]
 
   return (
@@ -89,18 +102,18 @@ export function Replay() {
 
       {productSummary ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <MetricCard label={`${productLabel} MTM`} value={fmtNum(productSummary.final_mtm)} tone={colorForValue(productSummary.final_mtm)} sub={`Realised ${fmtNum(productSummary.realised)}`} />
+          <MetricCard label={`${productLabelText} MTM`} value={fmtNum(productSummary.final_mtm)} tone={colorForValue(productSummary.final_mtm)} sub={`Realised ${fmtNum(productSummary.realised)}`} />
           <MetricCard label="Unrealised" value={fmtNum(productSummary.unrealised)} tone={colorForValue(productSummary.unrealised)} sub={`Pos ${productSummary.final_position}`} />
-          <MetricCard label="Cap usage" value={fmtPct(behaviour?.cap_usage_ratio)} tone={numberOrNull(behaviour?.cap_usage_ratio) != null && Number(behaviour?.cap_usage_ratio) > 0.6 ? 'warn' : 'neutral'} sub={`Peak ${fmtInt(behaviour?.peak_abs_position)}/80`} />
+          <MetricCard label="Cap usage" value={fmtPct(behaviour?.cap_usage_ratio)} tone={numberOrNull(behaviour?.cap_usage_ratio) != null && Number(behaviour?.cap_usage_ratio) > 0.6 ? 'warn' : 'neutral'} sub={`Peak ${fmtInt(behaviour?.peak_abs_position)}/${fmtInt(productCap)}`} />
           <MetricCard label="Markout +5" value={fmtNum(behaviour?.average_fill_markout_5)} tone={colorForValue(behaviour?.average_fill_markout_5)} sub="Avg signed edge" />
         </div>
       ) : (
-        <Card title={`${productLabel} summary`}>
+        <Card title={`${productLabelText} summary`}>
           <EmptyState title="Product summary not present" message="This replay bundle does not include a per-product summary for the selected product." />
         </Card>
       )}
 
-      <Card title={`${productLabel} / PnL over time`} subtitle="MTM and realised P&L per tick">
+      <Card title={`${productLabelText} / PnL over time`} subtitle="MTM and realised P&L per tick">
         {pnlData.length > 0 ? (
           <PnlChart data={pnlData} height={300} />
         ) : (
@@ -109,14 +122,14 @@ export function Replay() {
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <Card title={`${productLabel} / Inventory`} subtitle="Position path with +/-80 cap lines">
+        <Card title={`${productLabelText} / Inventory`} subtitle={`Position path with +/-${productCap} cap lines`}>
           {invData.length > 0 ? (
-            <InventoryChart data={invData} height={260} />
+            <InventoryChart data={invData} height={260} positionLimit={productCap} />
           ) : (
             <EmptyState title="Inventory series not present" message="This replay bundle does not include inventory rows for the selected product." />
           )}
         </Card>
-        <Card title={`${productLabel} / Fair value and fills`} subtitle="Analysis fair, mid price and fill markers">
+        <Card title={`${productLabelText} / Fair value and fills`} subtitle="Analysis fair, mid price and fill markers">
           {fair.length > 0 || fills.length > 0 ? (
             <FairFillChart fair={fair} fills={fills} height={260} />
           ) : (
@@ -132,7 +145,7 @@ export function Replay() {
               cols={2}
               pairs={[
                 { label: 'Cap usage', value: fmtPct(behaviour.cap_usage_ratio), tone: numberOrNull(behaviour.cap_usage_ratio) != null && Number(behaviour.cap_usage_ratio) > 0.6 ? 'warn' : 'neutral' },
-                { label: 'Peak position', value: fmtInt(behaviour.peak_abs_position), tone: numberOrNull(behaviour.peak_abs_position) != null && Number(behaviour.peak_abs_position) >= 80 ? 'bad' : 'neutral' },
+                { label: 'Peak position', value: fmtInt(behaviour.peak_abs_position), tone: numberOrNull(behaviour.peak_abs_position) != null && Number(behaviour.peak_abs_position) >= productCap ? 'bad' : 'neutral' },
                 { label: 'Total fills', value: fmtInt(behaviour.total_fills) },
                 { label: 'Passive fills', value: fmtInt(behaviour.passive_fill_count) },
                 { label: 'Aggressive fills', value: fmtInt(behaviour.aggressive_fill_count) },
@@ -154,7 +167,7 @@ export function Replay() {
         )}
       </div>
 
-      <Card title="Largest fills" subtitle={`${productLabel} / sorted by quantity`}>
+      <Card title="Largest fills" subtitle={`${productLabelText} / sorted by quantity`}>
         <DataTable rows={topFills} cols={fillCols} maxRows={20} striped emptyMsg="Fill rows are not present for this product." />
       </Card>
     </div>

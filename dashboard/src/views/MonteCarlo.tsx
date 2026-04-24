@@ -15,6 +15,7 @@ import { PnlChart } from '../charts/PnlChart'
 import { buildHistogram, buildBands, buildPnlData } from '../lib/data'
 import { fmtNum, fmtInt, fmtPct, colorForValue } from '../lib/format'
 import { getTabAvailability, isFiniteNumber } from '../lib/bundles'
+import { productLabel } from '../lib/products'
 import type { McSession, Product } from '../types'
 
 const PATH_METRICS = [
@@ -44,6 +45,7 @@ export function MonteCarlo() {
 
   const { summary, sessions = [], sampleRuns = [], fairValueBands, pathBands } = mc
   const product = activeProduct as Product
+  const productLabelText = productLabel(run.payload, product)
   const runtime = run.payload.meta?.provenance?.runtime
   const timings = runtime?.phase_timings_seconds
 
@@ -135,7 +137,7 @@ export function MonteCarlo() {
           )}
         </Card>
         <Card
-          title={`${PATH_METRICS.find(([key]) => key === pathMetric)?.[1] ?? 'Path'} bands / ${activeProduct === 'ASH_COATED_OSMIUM' ? 'Osmium' : 'Pepper'}`}
+          title={`${PATH_METRICS.find(([key]) => key === pathMetric)?.[1] ?? 'Path'} bands / ${productLabelText}`}
           subtitle={bandSubtitle}
           action={
             <select
@@ -223,7 +225,7 @@ export function MonteCarlo() {
             {Object.entries(summary.per_product).map(([prod, stats]) => (
               <div key={prod} className="rounded-lg bg-surface-2 border border-border p-4">
                 <div className="text-muted text-xs uppercase tracking-wider mb-3 font-semibold">
-                  {prod === 'ASH_COATED_OSMIUM' ? 'Osmium' : 'Pepper'}
+                  {productLabel(run.payload, prod)}
                 </div>
                 <div className="grid grid-cols-3 gap-3 text-xs">
                   {(['mean', 'min', 'max'] as const).map((k) => (

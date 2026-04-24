@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import statistics
-from typing import Dict, List, Sequence
+from typing import Dict, List, Mapping, Sequence
 
-from .metadata import PRODUCTS, PRODUCT_METADATA
+from .metadata import PRODUCTS, PRODUCT_METADATA, ProductMeta
 
 
 def _mean(values: Sequence[float]) -> float | None:
@@ -17,6 +17,8 @@ def build_behaviour_series(
     inventory_series: Sequence[Dict[str, object]],
     pnl_series: Sequence[Dict[str, object]],
     fair_value_series: Sequence[Dict[str, object]],
+    products: Sequence[str] = PRODUCTS,
+    product_metadata: Mapping[str, ProductMeta] = PRODUCT_METADATA,
 ) -> List[Dict[str, object]]:
     order_counts: Dict[tuple[int, str, int], Dict[str, int]] = {}
     fill_counts: Dict[tuple[int, str, int], Dict[str, int]] = {}
@@ -71,7 +73,7 @@ def build_behaviour_series(
         orders_row = order_counts.get(key, {})
         fills_row = fill_counts.get(key, {})
         product = str(inv_row["product"])
-        limit = PRODUCT_METADATA[product].position_limit
+        limit = product_metadata[product].position_limit
         position = int(inv_row.get("position", 0))
         analysis_fair = fair_row.get("analysis_fair")
         mid = fair_row.get("mid")
@@ -111,6 +113,8 @@ def analyse_behaviour(
     inventory_series: Sequence[Dict[str, object]],
     pnl_series: Sequence[Dict[str, object]],
     fair_value_series: Sequence[Dict[str, object]],
+    products: Sequence[str] = PRODUCTS,
+    product_metadata: Mapping[str, ProductMeta] = PRODUCT_METADATA,
     include_series: bool = True,
 ) -> Dict[str, object]:
     per_product: Dict[str, Dict[str, object]] = {}
@@ -121,18 +125,20 @@ def analyse_behaviour(
             inventory_series=inventory_series,
             pnl_series=pnl_series,
             fair_value_series=fair_value_series,
+            products=products,
+            product_metadata=product_metadata,
         )
         if include_series
         else []
     )
 
-    for product in PRODUCTS:
+    for product in products:
         product_orders = [row for row in orders if row.get("product") == product]
         product_fills = [row for row in fills if row.get("product") == product]
         product_inventory = [row for row in inventory_series if row.get("product") == product]
         product_pnl = [row for row in pnl_series if row.get("product") == product]
         product_behaviour = [row for row in behaviour_series if row.get("product") == product]
-        position_limit = PRODUCT_METADATA[product].position_limit
+        position_limit = product_metadata[product].position_limit
 
         total_order_qty = sum(abs(int(row.get("submitted_quantity", 0))) for row in product_orders)
         total_fill_qty = sum(abs(int(row.get("quantity", 0))) for row in product_fills)
@@ -281,8 +287,8 @@ def analyse_behaviour(
         "per_product": per_product,
         "series": behaviour_series,
         "summary": {
-            "products": list(PRODUCTS),
-            "dominant_risk_product": max(PRODUCTS, key=lambda p: per_product[p]["cap_usage_ratio"] if p in per_product else 0.0),
-            "dominant_turnover_product": max(PRODUCTS, key=lambda p: per_product[p]["turnover_qty"] if p in per_product else 0.0),
+            "products": list(products),
+            "dominant_risk_product": max(products, key=lambda p: per_product[p]["cap_usage_ratio"] if p in per_product else 0.0),
+            "dominant_turnover_product": max(products, key=lambda p: per_product[p]["turnover_qty"] if p in per_product else 0.0),
         },
     }

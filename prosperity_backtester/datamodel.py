@@ -1,12 +1,8 @@
 """
-IMC-Prosperity-compatible datamodel for OSMIUM / PEPPER rounds.
+IMC-Prosperity-compatible datamodel used across Prosperity rounds.
 
 This mirrors the official Prosperity TradingState contract so strategies written
-for the live competition run unmodified here. Products:
-    - ASH_COATED_OSMIUM  (symbol: ASH_COATED_OSMIUM)
-    - INTARIAN_PEPPER_ROOT (symbol: INTARIAN_PEPPER_ROOT)
-
-Position limit for both: 80.
+for the live competition run unmodified here.
 """
 from __future__ import annotations
 
@@ -72,11 +68,11 @@ class OrderDepth:
 
 
 class Trade:
-    def __init__(self, symbol: Symbol, price: int, quantity: int,
+    def __init__(self, symbol: Symbol, price: float, quantity: int,
                  buyer: Optional[UserId] = None, seller: Optional[UserId] = None,
                  timestamp: int = 0):
         self.symbol = symbol
-        self.price = int(price)
+        self.price = float(price)
         self.quantity = int(quantity)
         self.buyer = buyer
         self.seller = seller

@@ -22,6 +22,7 @@ import {
 } from '../lib/data'
 import { colorForValue, fmtInt, fmtNum, fmtPct, fmtPrice, fmtTimestamp } from '../lib/format'
 import { getTabAvailability, numberOrNull } from '../lib/bundles'
+import { positionLimit, productLabel } from '../lib/products'
 import type { FillRow, OrderIntentRow, OrderRow, Product } from '../types'
 
 const RADIUS_OPTIONS = [25, 75, 150, 400]
@@ -62,6 +63,8 @@ export function Inspect() {
 
   const { payload } = run
   const product = activeProduct as Product
+  const productCap = positionLimit(payload, product)
+  const productLabelText = productLabel(payload, product)
 
   const series = useMemo(() => {
     const pnl = sortedByTime(byProduct(payload.pnlSeries ?? [], product))
@@ -91,7 +94,7 @@ export function Inspect() {
     windowFairRows[Math.max(0, Math.floor(windowFairRows.length / 2))]
 
   const pnlData = buildPnlDataFromRows(windowPnlRows)
-  const inventoryData = buildInventoryDataFromRows(windowInventoryRows)
+  const inventoryData = buildInventoryDataFromRows(windowInventoryRows, productCap)
   const fairFillData = buildFairFillDataFromRows(windowFairRows, windowFillRows)
 
   const startPnl = numberOrNull(windowPnlRows[0]?.mtm ?? selected?.mtm)
@@ -103,7 +106,7 @@ export function Inspect() {
   const aggressiveCount = windowFillRows.filter((fill) => fill.kind === 'aggressive_visible').length
   const avgEdge = mean(windowFillRows.map((fill) => fill.signed_edge_to_analysis_fair))
   const avgMarkout5 = mean(windowFillRows.map((fill) => fill.markout_5))
-  const nearCap = windowInventoryRows.filter((row) => Math.abs(row.position) >= 64).length
+  const nearCap = windowInventoryRows.filter((row) => Math.abs(row.position) >= productCap * 0.8).length
   const nearCapRate = windowInventoryRows.length ? nearCap / windowInventoryRows.length : null
 
   const fillCols: ColDef<FillRow>[] = [
@@ -195,6 +198,7 @@ export function Inspect() {
           ))}
           <span className="hud-label ml-auto text-accent">
             {run.name} / {product}
+            {` / ${productLabelText}`}
           </span>
         </div>
       </div>
@@ -228,7 +232,7 @@ export function Inspect() {
                 { label: 'Tick', value: selected?.timestamp },
                 { label: 'Fair', value: fmtPrice(selectedFair?.analysis_fair as number | null | undefined), tone: 'accent' },
                 { label: 'Mid', value: fmtPrice(selectedFair?.mid as number | null | undefined) },
-                { label: 'Position', value: fmtInt(selected?.position), tone: numberOrNull(selected?.position) != null && Math.abs(Number(selected?.position)) >= 80 ? 'warn' : 'neutral' },
+                { label: 'Position', value: fmtInt(selected?.position), tone: numberOrNull(selected?.position) != null && Math.abs(Number(selected?.position)) >= productCap ? 'warn' : 'neutral' },
               ]}
             />
           </Card>
@@ -251,7 +255,7 @@ export function Inspect() {
               <FairFillChart fair={fairFillData.fair} fills={fairFillData.fills} height={265} />
             </Card>
             <Card title="Inventory focus" subtitle="Position path with cap rails">
-              <InventoryChart data={inventoryData} height={265} />
+              <InventoryChart data={inventoryData} height={265} positionLimit={productCap} />
             </Card>
           </div>
         </div>

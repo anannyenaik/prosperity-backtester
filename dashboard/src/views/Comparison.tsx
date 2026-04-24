@@ -10,9 +10,8 @@ import { PageHeader } from '../components/PageHeader'
 import { BundleBadge } from '../components/BundleBadge'
 import { fmtNum, fmtInt, fmtPct, colorForValue } from '../lib/format'
 import { getComparisonRows, getTabAvailability, interpretBundle, numberOrNull } from '../lib/bundles'
-import { PRODUCT_LABELS, type ComparisonRow, type DashboardPayload, type Product } from '../types'
-
-const PRODUCTS: Product[] = ['ASH_COATED_OSMIUM', 'INTARIAN_PEPPER_ROOT']
+import { availableProducts, productLabel } from '../lib/products'
+import type { ComparisonRow, DashboardPayload, Product } from '../types'
 
 export function Comparison() {
   const { getActiveRun, getCompareRun } = useStore()
@@ -71,10 +70,6 @@ function PrecomputedComparison({ payload, rows }: { payload: DashboardPayload; r
     { key: 'max_drawdown', header: 'Max DD', fmt: 'num', tone: () => 'warn' },
     { key: 'fill_count', header: 'Fills', fmt: 'int' },
     { key: 'limit_breaches', header: 'Breaches', fmt: 'int', tone: (v) => (numberOrNull(v) != null && Number(v) > 0 ? 'bad' : 'neutral') },
-    { key: 'osmium_pnl', header: 'Osmium', fmt: 'num', tone: (v) => colorForValue(numberOrNull(v)) },
-    { key: 'pepper_pnl', header: 'Pepper', fmt: 'num', tone: (v) => colorForValue(numberOrNull(v)) },
-    { key: 'osmium_cap_usage', header: 'Osm cap', fmt: 'pct', tone: (v) => (numberOrNull(v) != null && Number(v) > 0.8 ? 'warn' : 'neutral') },
-    { key: 'pepper_cap_usage', header: 'Pep cap', fmt: 'pct', tone: (v) => (numberOrNull(v) != null && Number(v) > 0.8 ? 'warn' : 'neutral') },
   ]
 
   const chartRows = rows
@@ -144,18 +139,19 @@ function SideBySideComparison({ runA, runB }: { runA: { name: string; payload: D
   const b = runB.payload
   const nameA = a.meta?.runName ?? runA.name
   const nameB = b.meta?.runName ?? runB.name
+  const products = Array.from(new Set([...availableProducts(a), ...availableProducts(b)]))
 
   const pnlDelta = delta(a.summary?.final_pnl, b.summary?.final_pnl)
   const ddDelta = delta(a.summary?.max_drawdown, b.summary?.max_drawdown)
   const fillDelta = delta(a.summary?.fill_count, b.summary?.fill_count)
   const breachDelta = delta(a.summary?.limit_breaches, b.summary?.limit_breaches)
 
-  const productRows = PRODUCTS
+  const productRows = products
     .map((prod) => {
       const pa = a.summary?.per_product?.[prod]
       const pb = b.summary?.per_product?.[prod]
       return {
-        product: PRODUCT_LABELS[prod],
+        product: productLabel(a, prod),
         pnl_a: numberOrNull(pa?.final_mtm),
         pnl_b: numberOrNull(pb?.final_mtm),
         pnl_delta: delta(pa?.final_mtm, pb?.final_mtm),
@@ -165,12 +161,12 @@ function SideBySideComparison({ runA, runB }: { runA: { name: string; payload: D
     })
     .filter((row) => row.pnl_a != null || row.pnl_b != null || row.realised_a != null || row.realised_b != null)
 
-  const behaviourRows = PRODUCTS
+  const behaviourRows = products
     .map((prod) => {
       const ba = a.behaviour?.per_product?.[prod]
       const bb = b.behaviour?.per_product?.[prod]
       return {
-        product: PRODUCT_LABELS[prod],
+        product: productLabel(a, prod),
         cap_a: numberOrNull(ba?.cap_usage_ratio),
         cap_b: numberOrNull(bb?.cap_usage_ratio),
         markout5_a: numberOrNull(ba?.average_fill_markout_5),
@@ -185,10 +181,10 @@ function SideBySideComparison({ runA, runB }: { runA: { name: string; payload: D
     ...(numberOrNull(a.summary?.final_pnl) != null && numberOrNull(b.summary?.final_pnl) != null
       ? [{ label: 'Total', a: a.summary?.final_pnl, b: b.summary?.final_pnl }]
       : []),
-    ...PRODUCTS
+    ...products
       .filter((prod) => numberOrNull(a.summary?.per_product?.[prod]?.final_mtm) != null && numberOrNull(b.summary?.per_product?.[prod]?.final_mtm) != null)
       .map((prod) => ({
-        label: PRODUCT_LABELS[prod],
+        label: productLabel(a, prod),
         a: a.summary!.per_product[prod].final_mtm,
         b: b.summary!.per_product[prod].final_mtm,
       })),

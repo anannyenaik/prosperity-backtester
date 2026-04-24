@@ -1,0 +1,28 @@
+{
+  "name": "round3_mc_smoke",
+  "round": 3,
+  "data_dir": "data/round3",
+  "days": [0],
+  "fill_model": "base",
+  "traders": [
+    {
+      "name": "noop",
+      "path": "examples/noop_round3_trader.py"
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "baseline_mc",
+      "fill_model": "base",
+      "description": "Short coherent Round 3 Monte Carlo smoke run.",
+      "tags": ["smoke", "monte_carlo"],
+      "perturbation": {
+        "synthetic_tick_limit": 250
+      }
+    }
+  ],
+  "mc_sessions": 8,
+  "mc_sample_sessions": 2,
+  "mc_seed": 20260424,
+  "mc_workers": 1
+}

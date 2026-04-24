@@ -1,111 +1,67 @@
 # Assumptions
 
-Result: the repo is designed for reliable local ranking, not for claiming exact reconstruction of the hidden competition website.
+Result: the repo is designed for honest local research, not false claims about hidden website mechanics.
 
-The code separates what is exact relative to the public inputs from what is modelled locally.
+## Exact relative to local inputs
 
-## Exact Relative To Local Inputs
-
-These parts are deterministic and directly grounded in the tracked CSV inputs or the local run configuration:
+These parts are deterministic once you choose the command, data, and fill model:
 
 - CSV schema validation and dataset loading
-- timestamp ordering and product presence checks
+- round-aware product and position-limit validation
 - visible-book aggressive fills
 - trader state persistence through `traderData`
 - own-trade hand-off between ticks
 - cash, inventory, realised, unrealised, and mark-to-market accounting
-- deterministic replay over the selected historical days
+- deterministic historical replay over the selected days
 - manifest and bundle provenance
 
-## Modelled Locally
+## Modelled locally
 
-These parts are deliberate modelling choices:
+These parts remain deliberate modelling choices:
 
 - passive queue position
 - same-price queue share
 - missed passive fills
 - adverse-selection penalties
 - size-dependent slippage
-- latency-like delayed action effects
-- historical `analysis_fair`
 - synthetic market generation for Monte Carlo
+- historical `analysis_fair`
 - calibration and optimisation scores
 - Round 2 extra-access quality and fill uplift assumptions
 
-These are useful because they make conservative ranking possible, but they are not claims about hidden exchange mechanics.
+These are useful for ranking and stress testing. They are not official exchange behaviour.
+
+## Round 3 assumptions
+
+Round 3 adds a few important boundaries:
+
+- historical replay uses the observed book for `HYDROGEL_PACK`, `VELVETFRUIT_EXTRACT`, and every `VEV_*` voucher
+- Round 3 positions are marked to the observed market mid, including fractional mids such as `0.5`
+- option theory is diagnostic and synthetic support only
+- historical voucher replay does not override observed prices with Black-Scholes values
+- no voucher exercise or cash settlement is applied during Round 3 replay unless official rules later require it
+- the Ornamental Bio-Pods challenge is separate from the algorithmic replay engine
 
 ## `analysis_fair`
 
-`analysis_fair` means different things in the two main modes:
+`analysis_fair` still means a local diagnostic construct:
 
-- historical replay: an inferred diagnostic fair-value proxy
-- Monte Carlo: the latent fair path used by the simulator itself
+- historical replay: an inferred reference path for diagnostics
+- Monte Carlo: the latent or coherent synthetic path used by the simulator
 
-It is useful for markout and placement analysis. It is not an official hidden fair value.
+It is useful for markouts, stress testing, and attribution. It is not an official hidden fair value.
 
-## Live-Export Calibration
-
-Calibration compares local replay output against whatever fields exist in a tracked live export, such as:
-
-- total profit
-- PnL-path error
-- per-product PnL where available
-- final-position mismatch
-- inventory-path mismatch
-- fill-count and fill-quantity mismatch
-- passive versus aggressive fill mismatch
-- activity timing mismatch
-
-Calibration can help choose conservative local assumptions. It cannot recover:
-
-- rejected passive orders
-- true queue priority
-- hidden matching details
-- website-only latency or throttling
-
-## Scenario Analysis
-
-Scenario outputs should be read as stress testing, not prediction.
-
-Use them to ask:
-
-- does the ranking survive worse fill assumptions?
-- does the strategy stay acceptable under spread or depth stress?
-- is the downside still acceptable under slippage or crash stress?
-- is a small improvement larger than likely modelling error?
-
-Small edges should survive several scenario families before they are trusted.
-
-## Round 2 Access Assumptions
-
-Grounded from the public challenge description:
-
-- Round 2 trades `ASH_COATED_OSMIUM` and `INTARIAN_PEPPER_ROOT`
-- a Market Access Fee may grant access to an extra 25% of quotes
-- only the top 50% of MAF bids get the contract
-- losing bids do not pay and do not receive extra access
-
-Still unknown:
-
-- exact extra-quote selection
-- exact queue priority
-- same-price matching order
-- other teams' MAF bids
-- official hidden matching behaviour
-
-Round 2 outputs are therefore sensitivity analysis, not proof of exact realised website PnL.
-
-## How To Read Results Safely
+## How to read results safely
 
 Treat the repo as strong evidence when:
 
 - one strategy beats another by a healthy margin
 - the lead survives several plausible fill assumptions
-- replay, scenario, and Monte Carlo evidence point in the same direction
+- replay, stress, and Monte Carlo all point in the same direction
 
 Treat the result as uncertain when:
 
 - the edge is small
 - the result depends on optimistic passive fills
-- the winner changes under modest scenario stress
-- calibration against live data remains poor
+- Round 3 voucher diagnostics are unstable at deep ITM or pinned far OTM strikes
+- the winner changes under modest stress

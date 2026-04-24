@@ -83,20 +83,20 @@ export interface InventoryPoint {
   day: number
 }
 
-export function buildInventoryData(rows: InventoryRow[], product: string): InventoryPoint[] {
+export function buildInventoryData(rows: InventoryRow[], product: string, positionLimit = POSITION_LIMIT): InventoryPoint[] {
   return downsample(byProduct(rows, product)).map((r) => ({
     ts: globalTs(r),
     position: r.position,
-    posRatio: (r.position / POSITION_LIMIT) * 100,
+    posRatio: positionLimit > 0 ? (r.position / positionLimit) * 100 : 0,
     day: r.day,
   }))
 }
 
-export function buildInventoryDataFromRows(rows: InventoryRow[]): InventoryPoint[] {
+export function buildInventoryDataFromRows(rows: InventoryRow[], positionLimit = POSITION_LIMIT): InventoryPoint[] {
   return downsample(rows).map((r) => ({
     ts: globalTs(r),
     position: r.position,
-    posRatio: (r.position / POSITION_LIMIT) * 100,
+    posRatio: positionLimit > 0 ? (r.position / positionLimit) * 100 : 0,
     day: r.day,
   }))
 }

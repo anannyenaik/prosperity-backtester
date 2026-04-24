@@ -20,9 +20,10 @@ interface Props {
   height?: number
   showCapZones?: boolean
   product?: string
+  positionLimit?: number
 }
 
-function CustomTooltip({ active, payload }: any) {
+function CustomTooltip({ active, payload, positionLimit }: any) {
   if (!active || !payload?.length) return null
   const pos = payload.find((p: any) => p.dataKey === 'position')
   return (
@@ -40,7 +41,7 @@ function CustomTooltip({ active, payload }: any) {
         <div style={{ color: C.total }}>
           Position: <strong style={{ color: '#e4dbc9' }}>{fmtNum(pos.value, 0)}</strong>
           <span style={{ color: AXIS_TEXT, marginLeft: 8 }}>
-            ({((Math.abs(pos.value) / POSITION_LIMIT) * 100).toFixed(0)}% of cap)
+            ({positionLimit > 0 ? ((Math.abs(pos.value) / positionLimit) * 100).toFixed(0) : '0'}% of cap)
           </span>
         </div>
       )}
@@ -48,7 +49,7 @@ function CustomTooltip({ active, payload }: any) {
   )
 }
 
-export function InventoryChart({ data, height = CHART_HEIGHT, showCapZones = true }: Props) {
+export function InventoryChart({ data, height = CHART_HEIGHT, showCapZones = true, positionLimit = POSITION_LIMIT }: Props) {
   if (!data.length) {
     return (
       <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: AXIS_TEXT, fontSize: 13 }}>
@@ -78,18 +79,18 @@ export function InventoryChart({ data, height = CHART_HEIGHT, showCapZones = tru
           minTickGap={60}
         />
         <YAxis
-          domain={[-(POSITION_LIMIT + 8), POSITION_LIMIT + 8]}
+          domain={[-(positionLimit + 8), positionLimit + 8]}
           tick={{ fill: AXIS_TEXT, fontSize: 10 }}
           tickLine={false}
           axisLine={false}
           tickFormatter={axisTickFmt}
           width={40}
         />
-        <Tooltip content={<CustomTooltip />} />
+        <Tooltip content={<CustomTooltip positionLimit={positionLimit} />} />
         {showCapZones && (
           <>
-            <ReferenceLine y={POSITION_LIMIT} stroke={C.capLine} strokeDasharray="5 3" strokeWidth={1.5} strokeOpacity={0.7} label={{ value: '+80', position: 'right', fill: C.capLine, fontSize: 10 }} />
-            <ReferenceLine y={-POSITION_LIMIT} stroke={C.capLine} strokeDasharray="5 3" strokeWidth={1.5} strokeOpacity={0.7} label={{ value: '-80', position: 'right', fill: C.capLine, fontSize: 10 }} />
+            <ReferenceLine y={positionLimit} stroke={C.capLine} strokeDasharray="5 3" strokeWidth={1.5} strokeOpacity={0.7} label={{ value: `+${positionLimit}`, position: 'right', fill: C.capLine, fontSize: 10 }} />
+            <ReferenceLine y={-positionLimit} stroke={C.capLine} strokeDasharray="5 3" strokeWidth={1.5} strokeOpacity={0.7} label={{ value: `-${positionLimit}`, position: 'right', fill: C.capLine, fontSize: 10 }} />
           </>
         )}
         <ReferenceLine y={0} stroke={C.neutral} strokeOpacity={0.3} />

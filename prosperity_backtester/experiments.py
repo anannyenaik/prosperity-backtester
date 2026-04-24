@@ -44,6 +44,8 @@ from .reports import (
     write_run_bundle,
 )
 from .round2 import AccessScenario, NO_ACCESS_SCENARIO, access_scenario_from_dict, expand_scenarios
+from .round3 import prepare_round3_synthetic_context
+from .metadata import RoundSpec, get_round_spec
 from .scenarios import ResearchScenario, scenario_manifest, scenarios_from_config
 from .storage import OutputOptions
 from .trader_adapter import TraderLoadError, describe_overrides, load_trader_module, make_trader
@@ -58,6 +60,7 @@ class TraderSpec:
 
 DEFAULT_DATA_DIR = Path(__file__).parent.parent / "data" / "round1"
 DEFAULT_ROUND2_DATA_DIR = Path(__file__).parent.parent / "data" / "round2"
+DEFAULT_ROUND3_DATA_DIR = Path(__file__).parent.parent / "data" / "round3"
 DEFAULT_EXPORT_DIR = Path(__file__).parent.parent / "live_exports"
 
 _MC_DIAGNOSTICS_PATH_ENV = "PROSPERITY_MC_DIAGNOSTICS_PATH"
@@ -112,7 +115,17 @@ else:
 
 
 def default_data_dir_for_round(round_number: int) -> Path:
-    return DEFAULT_ROUND2_DATA_DIR if int(round_number) == 2 else DEFAULT_DATA_DIR
+    spec = get_round_spec(round_number)
+    return (Path(__file__).parent.parent / spec.default_data_dir).resolve()
+
+
+def _validate_access_usage(round_spec: RoundSpec, access_scenario: AccessScenario) -> None:
+    if round_spec.has_round2_access:
+        return
+    if access_scenario.enabled or access_scenario.contract_won or access_scenario.maf_bid:
+        raise ValueError(
+            f"Round {round_spec.round_number} does not support Round 2 access or MAF assumptions"
+        )
 
 
 def _current_process_rss_bytes() -> int | None:
@@ -379,7 +392,9 @@ def run_replay(
 ) -> SessionArtefacts:
     output_options = output_options or OutputOptions()
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
-    datasets_map = load_round_dataset(data_dir, days, round_number=round_number)
+    round_spec = get_round_spec(round_number)
+    _validate_access_usage(round_spec, access_scenario)
+    datasets_map = load_round_dataset(data_dir, days, round_number=round_number, round_spec=round_spec)
     datasets = [datasets_map[day] for day in days]
     live_export = load_live_export(live_export_path) if live_export_path is not None else None
     if live_export is not None:
@@ -395,6 +410,7 @@ def run_replay(
         rng=random.Random(20260418),
         run_name=run_name,
         mode="replay",
+        round_spec=round_spec,
         capture_full_output=True,
         access_scenario=access_scenario,
         print_trader_output=print_trader_output,
@@ -468,20 +484,28 @@ def _run_monte_carlo_chunk(task: Dict[str, object]) -> Dict[str, object]:
     assert isinstance(perturbation, PerturbationConfig)
     access_scenario = task.get("access_scenario") or NO_ACCESS_SCENARIO
     assert isinstance(access_scenario, AccessScenario)
+    round_number = int(task.get("round_number", 1) or 1)
+    round_spec = get_round_spec(round_number)
+    _validate_access_usage(round_spec, access_scenario)
     fill_model = task["fill_model"]
     assert isinstance(fill_model, FillModel)
     days = tuple(int(day) for day in task["days"])
     module = load_trader_module(trader_spec.path, trader_spec.overrides)
     if backend == "rust":
         raise RuntimeError("Rust Monte Carlo backend is orchestrated outside the Python chunk runner")
-    streaming_context = prepare_streaming_simulation_context(perturbation) if backend == "streaming" else None
+    streaming_context = (
+        prepare_streaming_simulation_context(perturbation)
+        if backend == "streaming" and round_spec.round_number != 3
+        else None
+    )
+    round3_context = task.get("round3_context")
     results: List[SessionArtefacts] = []
     profile = new_mc_profile(backend)
     path_band_accumulator = new_path_band_accumulator() if bool(task.get("aggregate_path_bands", False)) else None
     for session_idx in session_indices:
         trader = _instantiate_worker_trader(module, trader_spec.path)
         capture_full_output = session_idx < sample_sessions
-        if backend == "streaming" and not capture_full_output:
+        if backend == "streaming" and round_spec.round_number != 3 and not capture_full_output:
             result, session_profile = run_streaming_synthetic_session(
                 trader=trader,
                 trader_name=trader_spec.name,
@@ -495,6 +519,7 @@ def _run_monte_carlo_chunk(task: Dict[str, object]) -> Dict[str, object]:
                 access_scenario=access_scenario,
                 print_trader_output=bool(task.get("print_trader_output", False)),
                 simulation_context=streaming_context,
+                round_spec=round_spec,
             )
             if path_band_accumulator is not None and result.path_metrics:
                 accumulate_path_band_rows(path_band_accumulator, result.path_metrics)
@@ -504,7 +529,13 @@ def _run_monte_carlo_chunk(task: Dict[str, object]) -> Dict[str, object]:
             continue
 
         generation_started = time.perf_counter()
-        market_days = generate_synthetic_market_days(days=days, seed=base_seed + session_idx * 17, perturb=perturbation)
+        market_days = generate_synthetic_market_days(
+            days=days,
+            seed=base_seed + session_idx * 17,
+            perturb=perturbation,
+            round_spec=round_spec,
+            round3_context=round3_context,
+        )
         generation_seconds = time.perf_counter() - generation_started
         session_profile: Dict[str, object] = {}
         result = run_market_session(
@@ -516,6 +547,7 @@ def _run_monte_carlo_chunk(task: Dict[str, object]) -> Dict[str, object]:
             rng=random.Random(base_seed + session_idx * 31),
             run_name=f"{run_name}_session_{session_idx:04d}",
             mode="monte_carlo",
+            round_spec=round_spec,
             capture_full_output=capture_full_output,
             capture_path_metrics=bool(task.get("capture_path_metrics", False)),
             path_bucket_count=int(task.get("path_bucket_count", 800)),
@@ -565,6 +597,7 @@ def _run_monte_carlo_profiled(
     sessions: int,
     sample_sessions: int,
     days: Sequence[int],
+    data_dir: Path | None,
     fill_model_name: str,
     perturbation: PerturbationConfig,
     output_dir: Path,
@@ -585,12 +618,18 @@ def _run_monte_carlo_profiled(
         raise ValueError("Monte Carlo sessions must be at least 1")
     sample_sessions = max(0, min(int(sample_sessions), int(sessions)))
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
+    round_spec = get_round_spec(round_number)
+    _validate_access_usage(round_spec, access_scenario)
     fill_model = resolve_fill_model(fill_model_name, fill_model_config_path)
     resolved_backend = resolve_monte_carlo_backend(
         monte_carlo_backend,
         access_scenario=access_scenario,
         print_trader_output=print_trader_output,
     )
+    if round_spec.round_number == 3 and resolved_backend == "streaming":
+        resolved_backend = "classic"
+    if round_spec.round_number == 3 and resolved_backend == "rust":
+        raise ValueError("Rust Monte Carlo backend does not support Round 3")
     worker_count = max(1, int(workers))
     if worker_count > 1:
         worker_count = min(worker_count, sessions, os.cpu_count() or worker_count)
@@ -598,6 +637,22 @@ def _run_monte_carlo_profiled(
     precomputed_path_bands: Dict[str, Dict[str, List[Dict[str, object]]]] | None = None
     path_band_method: Dict[str, object] | None = None
     results: List[SessionArtefacts]
+    round3_context = None
+    if round_spec.round_number == 3:
+        calibration_data_dir = data_dir or default_data_dir_for_round(round_number)
+        historical_map = load_round_dataset(
+            calibration_data_dir,
+            round_spec.default_days,
+            round_number=round_spec.round_number,
+            round_spec=round_spec,
+        )
+        historical_days = [historical_map[day] for day in round_spec.default_days]
+        tick_limit = None if perturbation.synthetic_tick_limit in (None, 0) else max(1, int(perturbation.synthetic_tick_limit))
+        round3_context = prepare_round3_synthetic_context(
+            historical_days,
+            round_spec=round_spec,
+            tick_count=tick_limit,
+        )
     base_task = {
         "sample_sessions": sample_sessions,
         "base_seed": base_seed,
@@ -612,6 +667,8 @@ def _run_monte_carlo_profiled(
         "print_trader_output": print_trader_output,
         "monte_carlo_backend": resolved_backend,
         "aggregate_path_bands": bool(write_bundle),
+        "round_number": round_number,
+        "round3_context": round3_context,
     }
     execution_started = time.perf_counter()
     diagnostics_enabled = _mc_diagnostics_enabled()
@@ -761,6 +818,7 @@ def _run_monte_carlo_profiled(
         round_number=round_number,
         days=days,
         source="synthetic",
+        data_dir=data_dir if data_dir is not None else None,
     )
     runtime_context = _mc_runtime_context(
         workers=worker_count,
@@ -913,6 +971,7 @@ def run_monte_carlo(
     sessions: int,
     sample_sessions: int,
     days: Sequence[int],
+    data_dir: Path | None = None,
     fill_model_name: str,
     perturbation: PerturbationConfig,
     output_dir: Path,
@@ -933,6 +992,7 @@ def run_monte_carlo(
         sessions=sessions,
         sample_sessions=sample_sessions,
         days=days,
+        data_dir=data_dir,
         fill_model_name=fill_model_name,
         perturbation=perturbation,
         output_dir=output_dir,
@@ -968,6 +1028,9 @@ def run_compare(
 ) -> List[Dict[str, object]]:
     output_options = output_options or OutputOptions()
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
+    round_spec = get_round_spec(round_number)
+    _validate_access_usage(round_spec, access_scenario)
+    fill_model = resolve_fill_model(fill_model_name, fill_model_config_path)
     runtime_context = {
         "engine_backend": "python",
         "parallelism": "single_process",
@@ -1012,12 +1075,25 @@ def run_compare(
             "fill_count": artefact.summary["fill_count"],
             "order_count": artefact.summary.get("order_count"),
             "limit_breaches": artefact.summary["limit_breaches"],
-            "osmium_pnl": artefact.summary["per_product"]["ASH_COATED_OSMIUM"]["final_mtm"],
-            "pepper_pnl": artefact.summary["per_product"]["INTARIAN_PEPPER_ROOT"]["final_mtm"],
-            "osmium_realised": artefact.summary["per_product"]["ASH_COATED_OSMIUM"]["realised"],
-            "pepper_realised": artefact.summary["per_product"]["INTARIAN_PEPPER_ROOT"]["realised"],
-            "osmium_position": artefact.summary["per_product"]["ASH_COATED_OSMIUM"]["final_position"],
-            "pepper_position": artefact.summary["per_product"]["INTARIAN_PEPPER_ROOT"]["final_position"],
+            "per_product_pnl": {
+                product: metrics.get("final_mtm")
+                for product, metrics in artefact.summary.get("per_product", {}).items()
+            },
+            "per_product_positions": dict(artefact.summary.get("final_positions", {})),
+            "per_product_fill_count": {
+                product: metrics.get("total_fills")
+                for product, metrics in artefact.behaviour.get("per_product", {}).items()
+            },
+            "per_product_cap_usage": {
+                product: metrics.get("cap_usage_ratio")
+                for product, metrics in artefact.behaviour.get("per_product", {}).items()
+            },
+            "osmium_pnl": artefact.summary.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("final_mtm"),
+            "pepper_pnl": artefact.summary.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("final_mtm"),
+            "osmium_realised": artefact.summary.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("realised"),
+            "pepper_realised": artefact.summary.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("realised"),
+            "osmium_position": artefact.summary.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("final_position"),
+            "pepper_position": artefact.summary.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("final_position"),
             "osmium_cap_usage": artefact.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("cap_usage_ratio"),
             "pepper_cap_usage": artefact.behaviour.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("cap_usage_ratio"),
             "osmium_fill_count": artefact.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("total_fills"),
@@ -1033,7 +1109,7 @@ def run_compare(
         run_name=run_name,
         trader_name="multiple",
         mode="replay",
-        fill_model=resolve_fill_model(fill_model_name, fill_model_config_path).to_dict(),
+        fill_model=fill_model.to_dict(),
         perturbations=perturbation.to_dict(),
         round_number=round_number,
         access_scenario=access_scenario.to_dict(),
@@ -1266,8 +1342,20 @@ def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path,
                 "fill_count": replay.summary["fill_count"],
                 "order_count": replay.summary.get("order_count"),
                 "limit_breaches": replay.summary["limit_breaches"],
-                "osmium_pnl": replay.summary["per_product"]["ASH_COATED_OSMIUM"]["final_mtm"],
-                "pepper_pnl": replay.summary["per_product"]["INTARIAN_PEPPER_ROOT"]["final_mtm"],
+                "per_product_pnl": {
+                    product: metrics.get("final_mtm")
+                    for product, metrics in replay.summary.get("per_product", {}).items()
+                },
+                "per_product_fill_count": {
+                    product: metrics.get("total_fills")
+                    for product, metrics in replay.behaviour.get("per_product", {}).items()
+                },
+                "per_product_cap_usage": {
+                    product: metrics.get("cap_usage_ratio")
+                    for product, metrics in replay.behaviour.get("per_product", {}).items()
+                },
+                "osmium_pnl": replay.summary.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("final_mtm"),
+                "pepper_pnl": replay.summary.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("final_mtm"),
                 "osmium_fill_count": replay.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("total_fills"),
                 "pepper_fill_count": replay.behaviour.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("total_fills"),
                 "osmium_cap_usage": replay.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("cap_usage_ratio"),
@@ -1282,6 +1370,7 @@ def run_round2_scenario_compare_from_config(config_path: Path, output_dir: Path,
                     sessions=mc_sessions,
                     sample_sessions=mc_sample_sessions,
                     days=days,
+                    data_dir=data_dir,
                     fill_model_name=fill_model_name,
                     perturbation=perturbation,
                     fill_model_config_path=fill_model_config_path,
@@ -1494,10 +1583,26 @@ def run_scenario_compare_from_config(config_path: Path, output_dir: Path, output
                 "limit_breaches": replay.summary["limit_breaches"],
                 "slippage_cost": replay.summary.get("slippage", {}).get("total_slippage_cost"),
                 "average_slippage_ticks": replay.summary.get("slippage", {}).get("average_slippage_ticks"),
-                "osmium_pnl": replay.summary["per_product"]["ASH_COATED_OSMIUM"]["final_mtm"],
-                "pepper_pnl": replay.summary["per_product"]["INTARIAN_PEPPER_ROOT"]["final_mtm"],
-                "osmium_slippage_cost": replay.summary["per_product"]["ASH_COATED_OSMIUM"].get("slippage_cost"),
-                "pepper_slippage_cost": replay.summary["per_product"]["INTARIAN_PEPPER_ROOT"].get("slippage_cost"),
+                "per_product_pnl": {
+                    product: metrics.get("final_mtm")
+                    for product, metrics in replay.summary.get("per_product", {}).items()
+                },
+                "per_product_slippage_cost": {
+                    product: metrics.get("slippage_cost")
+                    for product, metrics in replay.summary.get("per_product", {}).items()
+                },
+                "per_product_fill_count": {
+                    product: metrics.get("total_fills")
+                    for product, metrics in replay.behaviour.get("per_product", {}).items()
+                },
+                "per_product_cap_usage": {
+                    product: metrics.get("cap_usage_ratio")
+                    for product, metrics in replay.behaviour.get("per_product", {}).items()
+                },
+                "osmium_pnl": replay.summary.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("final_mtm"),
+                "pepper_pnl": replay.summary.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("final_mtm"),
+                "osmium_slippage_cost": replay.summary.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("slippage_cost"),
+                "pepper_slippage_cost": replay.summary.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("slippage_cost"),
                 "osmium_fill_count": replay.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("total_fills"),
                 "pepper_fill_count": replay.behaviour.get("per_product", {}).get("INTARIAN_PEPPER_ROOT", {}).get("total_fills"),
                 "osmium_cap_usage": replay.behaviour.get("per_product", {}).get("ASH_COATED_OSMIUM", {}).get("cap_usage_ratio"),
@@ -1515,6 +1620,7 @@ def run_scenario_compare_from_config(config_path: Path, output_dir: Path, output
                     sessions=mc_sessions,
                     sample_sessions=mc_sample_sessions,
                     days=days,
+                    data_dir=data_dir,
                     fill_model_name=fill_model_name,
                     fill_model_config_path=fill_model_config_path,
                     perturbation=scenario.perturbation,
@@ -1833,6 +1939,7 @@ def run_optimize_from_config(config_path: Path, output_dir: Path, output_options
             sessions=mc_sessions,
             sample_sessions=mc_sample_sessions,
             days=days,
+            data_dir=data_dir,
             fill_model_name=fill_model_name,
             perturbation=perturbation,
             fill_model_config_path=fill_model_config_path,

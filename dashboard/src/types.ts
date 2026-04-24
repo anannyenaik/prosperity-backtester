@@ -6,6 +6,7 @@ export interface Meta {
   traderName: string
   mode: string
   round?: number
+  roundName?: string
   fillModel: FillModelInfo
   perturbations: Record<string, unknown>
   accessScenario?: AccessScenarioInfo
@@ -618,6 +619,10 @@ export interface DashboardPayload {
   type: string
   meta: Meta
   products: string[]
+  productMetadata?: Record<string, Record<string, unknown>>
+  positionLimits?: Record<string, number>
+  roundSpec?: Record<string, unknown>
+  optionDiagnostics?: Record<string, unknown>
   assumptions: Assumptions
   dataContract?: DataContractEntry[]
   datasetReports: DatasetReport[]
@@ -651,9 +656,9 @@ export interface LoadedRun {
   payload: DashboardPayload
 }
 
-export type Product = 'ASH_COATED_OSMIUM' | 'INTARIAN_PEPPER_ROOT'
+export type Product = string
 export const PRODUCTS: Product[] = ['ASH_COATED_OSMIUM', 'INTARIAN_PEPPER_ROOT']
-export const PRODUCT_LABELS: Record<Product, string> = {
+export const PRODUCT_LABELS: Record<string, string> = {
   ASH_COATED_OSMIUM: 'Osmium',
   INTARIAN_PEPPER_ROOT: 'Pepper',
 }
