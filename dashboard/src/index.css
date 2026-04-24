@@ -512,77 +512,88 @@ table {
 
 .landing-shell {
   position: relative;
-  padding-top: clamp(12px, 1.65vh, 20px);
-  padding-bottom: clamp(12px, 1.65vh, 20px);
+  padding-top: clamp(8px, 1.05vh, 14px);
+  padding-bottom: clamp(8px, 1.05vh, 14px);
 }
 
 .landing-grid {
-  align-content: center;
-  gap: clamp(20px, 2vw, 32px);
+  align-content: stretch;
+  gap: clamp(18px, 1.8vw, 28px);
 }
 
 .landing-hero,
 .landing-panel {
+  height: 100%;
   min-height: 0;
 }
 
 .landing-hero {
-  padding-top: clamp(10px, 1.15vh, 18px);
-  padding-bottom: clamp(10px, 1.15vh, 18px);
+  justify-content: space-between;
+  padding-top: clamp(6px, 0.8vh, 12px);
+  padding-bottom: clamp(8px, 0.95vh, 14px);
+}
+
+.landing-hero-primary {
+  display: flex;
+  flex-direction: column;
+}
+
+.landing-hero-secondary {
+  margin-top: clamp(12px, 1.4vh, 18px);
 }
 
 .landing-hero-title {
-  font-size: clamp(3.2rem, 5.35vw, 4.75rem);
+  font-size: clamp(3.45rem, 5.85vw, 5.1rem);
 }
 
 .landing-hero-copy {
-  margin-top: clamp(15px, 1.85vh, 24px);
-  max-width: 37rem;
-  font-size: clamp(1.02rem, 1.08vw, 1.12rem);
-  line-height: 1.58;
+  margin-top: clamp(14px, 1.55vh, 20px);
+  max-width: 39rem;
+  font-size: clamp(1.06rem, 1.14vw, 1.18rem);
+  line-height: 1.52;
 }
 
 .landing-motif-strip {
-  margin-top: clamp(20px, 2.15vh, 28px);
-  gap: clamp(11px, 0.95vw, 15px);
+  margin-top: clamp(14px, 1.45vh, 18px);
+  gap: clamp(10px, 0.9vw, 14px);
 }
 
 .landing-motif-card {
-  min-height: clamp(96px, 12.6vh, 122px);
-  padding: clamp(12px, 1.45vh, 17px) clamp(13px, 1vw, 17px);
+  min-height: clamp(106px, 13.9vh, 136px);
+  padding: clamp(13px, 1.6vh, 19px) clamp(14px, 1.1vw, 18px);
 }
 
 .landing-motif-card__iconbox {
-  width: clamp(38px, 2.55vw, 44px);
-  height: clamp(38px, 2.55vw, 44px);
+  width: clamp(40px, 2.7vw, 48px);
+  height: clamp(40px, 2.7vw, 48px);
 }
 
 .landing-motif-card__label {
-  margin-top: clamp(11px, 1.1vh, 15px);
-  font-size: clamp(0.82rem, 0.88vw, 0.95rem);
+  margin-top: clamp(12px, 1.2vh, 16px);
+  font-size: clamp(0.86rem, 0.95vw, 1.02rem);
   line-height: 1.05;
 }
 
 .landing-motif-card__value {
-  margin-top: 5px;
-  font-size: clamp(11px, 0.8vw, 12.5px);
+  margin-top: 6px;
+  font-size: clamp(11.5px, 0.84vw, 13px);
   line-height: 1.35;
 }
 
 .landing-panel-body {
   min-height: 0;
-  gap: clamp(9px, 1vh, 14px);
+  gap: clamp(10px, 1.05vh, 14px);
   scrollbar-gutter: stable;
 }
 
 .landing-panel {
-  padding: clamp(13px, 1.55vh, 19px);
+  padding: clamp(14px, 1.7vh, 22px);
   overscroll-behavior: contain;
 }
 
 .landing-panel-header {
-  margin-bottom: clamp(11px, 1.3vh, 15px);
-  gap: clamp(11px, 0.95vw, 15px);
+  margin-bottom: clamp(12px, 1.35vh, 16px);
+  gap: clamp(12px, 1vw, 16px);
 }
 
 .landing-panel-copy {
@@ -594,7 +605,7 @@ table {
 
 .landing-panel .quickload-panel {
   min-height: 0;
-  padding: clamp(10px, 1.25vh, 14px);
+  padding: clamp(11px, 1.35vh, 15px);
 }
 
 .landing-panel .quickload-header {
@@ -607,33 +618,33 @@ table {
 }
 
 .landing-panel .quickload-primary {
-  margin-top: clamp(9px, 1.05vh, 13px);
-  gap: clamp(7px, 0.65vw, 9px);
+  margin-top: clamp(10px, 1.1vh, 14px);
+  gap: clamp(8px, 0.7vw, 10px);
 }
 
 .landing-panel .quickload-divider {
-  margin-top: clamp(10px, 1.1vh, 13px);
-  gap: clamp(7px, 0.6vw, 9px);
+  margin-top: clamp(10px, 1.15vh, 14px);
+  gap: clamp(8px, 0.65vw, 10px);
 }
 
 .landing-panel .quickload-chips {
-  margin-top: clamp(9px, 1.05vh, 13px);
-  gap: clamp(7px, 0.6vw, 9px);
+  margin-top: clamp(10px, 1.1vh, 14px);
+  gap: clamp(8px, 0.65vw, 10px);
 }
 
 .landing-panel .file-drop {
-  min-height: clamp(58px, 7.45vh, 78px);
-  gap: clamp(10px, 0.8vw, 13px);
-  padding: clamp(11px, 1.25vh, 15px) clamp(13px, 0.95vw, 17px);
+  min-height: clamp(62px, 7.95vh, 84px);
+  gap: clamp(11px, 0.85vw, 14px);
+  padding: clamp(12px, 1.35vh, 16px) clamp(14px, 1vw, 18px);
 }
 
 .landing-panel .file-drop__icon {
-  width: clamp(33px, 2.1vw, 37px);
-  height: clamp(33px, 2.1vw, 37px);
+  width: clamp(35px, 2.2vw, 39px);
+  height: clamp(35px, 2.2vw, 39px);
 }
 
 .landing-panel .file-drop__title {
-  font-size: clamp(0.78rem, 0.8vw, 0.86rem);
+  font-size: clamp(0.82rem, 0.86vw, 0.9rem);
   line-height: 1.1;
 }
 
@@ -643,23 +654,23 @@ table {
 }
 
 .landing-command-strip {
-  margin-top: clamp(17px, 1.9vh, 24px);
+  margin-top: clamp(14px, 1.45vh, 18px);
   letter-spacing: 0.18em;
 }
 
 .landing-panel .qa-button__content {
-  gap: clamp(9px, 0.8vw, 11px);
-  min-height: clamp(52px, 6.3vh, 62px);
-  padding: clamp(9px, 1vh, 11px) clamp(11px, 0.82vw, 13px);
+  gap: clamp(10px, 0.85vw, 12px);
+  min-height: clamp(56px, 6.8vh, 66px);
+  padding: clamp(10px, 1.1vh, 12px) clamp(12px, 0.88vw, 14px);
 }
 
 .landing-panel .qa-button__icon {
-  width: clamp(27px, 1.9vw, 31px);
-  height: clamp(27px, 1.9vw, 31px);
+  width: clamp(29px, 2vw, 33px);
+  height: clamp(29px, 2vw, 33px);
 }
 
 .landing-panel .qa-button__label {
-  font-size: clamp(0.76rem, 0.8vw, 0.84rem);
+  font-size: clamp(0.8rem, 0.86vw, 0.9rem);
 }
 
 .landing-panel .qa-button__indicator {
@@ -669,17 +680,17 @@ table {
 
 .landing-panel .qa-chip__content {
   gap: 2px;
-  min-height: clamp(46px, 5.7vh, 56px);
-  padding: clamp(7px, 0.8vh, 9px) clamp(9px, 0.7vw, 11px);
+  min-height: clamp(50px, 6.1vh, 60px);
+  padding: clamp(8px, 0.88vh, 10px) clamp(10px, 0.75vw, 12px);
 }
 
 .landing-panel .qa-chip__icon {
-  width: clamp(19px, 1.4vw, 23px);
-  height: clamp(19px, 1.4vw, 23px);
+  width: clamp(21px, 1.55vw, 24px);
+  height: clamp(21px, 1.55vw, 24px);
 }
 
 .landing-panel .qa-chip__label {
-  font-size: clamp(0.7rem, 0.74vw, 0.78rem);
+  font-size: clamp(0.74rem, 0.8vw, 0.82rem);
 }
 
 .landing-panel .qa-chip__caption {
@@ -688,45 +699,45 @@ table {
 
 @media (min-width: 1024px) and (max-height: 900px) {
   .landing-shell {
-    padding-top: clamp(8px, 1.15vh, 12px);
-    padding-bottom: clamp(8px, 1.15vh, 12px);
+    padding-top: clamp(5px, 0.75vh, 9px);
+    padding-bottom: clamp(6px, 0.8vh, 10px);
   }
 
   .landing-grid {
-    gap: clamp(16px, 1.4vw, 22px);
+    gap: clamp(16px, 1.35vw, 20px);
   }
 
   .landing-hero-kicker {
-    margin-bottom: 10px;
+    margin-bottom: 8px;
   }
 
   .landing-hero-title {
-    font-size: clamp(2.88rem, 5.12vw, 3.72rem);
+    font-size: clamp(3.06rem, 5.45vw, 3.98rem);
   }
 
   .landing-hero-copy {
-    margin-top: 13px;
-    max-width: 35rem;
-    font-size: clamp(0.98rem, 1vw, 1.03rem);
-    line-height: 1.5;
+    margin-top: 12px;
+    max-width: 36rem;
+    font-size: clamp(1rem, 1.04vw, 1.06rem);
+    line-height: 1.47;
   }
 
   .landing-motif-strip {
-    margin-top: 15px;
-    gap: clamp(9px, 0.78vw, 11px);
+    margin-top: 13px;
+    gap: clamp(9px, 0.75vw, 10px);
   }
 
   .landing-motif-card {
-    min-height: 86px;
-    padding: 11px 12px;
+    min-height: 92px;
+    padding: 12px 13px;
   }
 
   .landing-command-strip {
-    margin-top: 12px;
+    margin-top: 10px;
   }
 
   .landing-panel {
-    padding: clamp(12px, 1.3vh, 15px);
+    padding: clamp(13px, 1.35vh, 16px);
   }
 
   .landing-panel-header {
@@ -739,22 +750,22 @@ table {
   }
 
   .landing-panel .file-drop {
-    min-height: 56px;
-    gap: 9px;
-    padding: 10px 11px;
+    min-height: 60px;
+    gap: 10px;
+    padding: 11px 12px;
   }
 
   .landing-panel .file-drop__icon {
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
   }
 
   .landing-panel .file-drop__title {
-    font-size: 0.76rem;
+    font-size: 0.8rem;
   }
 
   .landing-panel .quickload-panel {
-    padding: 10px;
+    padding: 11px;
   }
 
   .landing-panel .quickload-header {
@@ -777,18 +788,18 @@ table {
   }
 
   .landing-panel .qa-button__content {
-    min-height: 50px;
-    gap: 9px;
-    padding: 9px 10px;
+    min-height: 54px;
+    gap: 10px;
+    padding: 10px 11px;
   }
 
   .landing-panel .qa-button__icon {
-    width: 27px;
-    height: 27px;
+    width: 29px;
+    height: 29px;
   }
 
   .landing-panel .qa-button__label {
-    font-size: 0.75rem;
+    font-size: 0.79rem;
   }
 
   .landing-panel .qa-button__indicator {
@@ -797,32 +808,32 @@ table {
   }
 
   .landing-panel .qa-chip__content {
-    min-height: 44px;
-    padding: 6px 8px;
+    min-height: 48px;
+    padding: 7px 9px;
   }
 
   .landing-panel .qa-chip__icon {
-    width: 19px;
-    height: 19px;
+    width: 21px;
+    height: 21px;
   }
 
   .landing-panel .qa-chip__label {
-    font-size: 0.68rem;
+    font-size: 0.72rem;
   }
 }
 
 @media (min-width: 1024px) and (max-height: 820px) {
   .landing-shell {
-    padding-top: clamp(6px, 0.95vh, 10px);
-    padding-bottom: clamp(6px, 0.95vh, 10px);
+    padding-top: clamp(3px, 0.45vh, 6px);
+    padding-bottom: clamp(4px, 0.55vh, 7px);
   }
 
   .landing-grid {
-    gap: clamp(12px, 1vw, 16px);
+    gap: clamp(12px, 0.95vw, 15px);
   }
 
   .landing-hero-kicker {
-    margin-bottom: 8px;
+    margin-bottom: 7px;
     gap: 10px;
   }
 
@@ -831,41 +842,41 @@ table {
   }
 
   .landing-hero-title {
-    font-size: clamp(2.62rem, 4.62vw, 3.24rem);
+    font-size: clamp(2.84rem, 4.95vw, 3.48rem);
   }
 
   .landing-hero-copy {
-    margin-top: 10px;
-    max-width: 34rem;
-    font-size: clamp(0.94rem, 0.96vw, 1rem);
-    line-height: 1.44;
+    margin-top: 9px;
+    max-width: 35rem;
+    font-size: clamp(0.98rem, 1vw, 1.04rem);
+    line-height: 1.4;
   }
 
   .landing-motif-strip {
-    margin-top: 15px;
-    max-width: 41rem;
+    margin-top: 12px;
+    max-width: 43rem;
     gap: 9px;
   }
 
   .landing-motif-card {
-    min-height: 86px;
-    padding: 11px 12px;
+    min-height: 90px;
+    padding: 12px 13px;
   }
 
   .landing-motif-card__iconbox {
-    width: 33px;
-    height: 33px;
+    width: 35px;
+    height: 35px;
   }
 
   .landing-motif-card__label {
-    margin-top: 8px;
-    font-size: 0.76rem;
+    margin-top: 9px;
+    font-size: 0.8rem;
     line-height: 1.1;
   }
 
   .landing-motif-card__value {
     margin-top: 3px;
-    font-size: 11px;
+    font-size: 11.2px;
     line-height: 1.25;
   }
 
@@ -875,31 +886,31 @@ table {
   }
 
   .landing-panel {
-    padding: 11px;
+    padding: 12px;
   }
 
   .landing-panel-header {
-    margin-bottom: 9px;
-    gap: 9px;
+    margin-bottom: 10px;
+    gap: 10px;
   }
 
   .landing-panel .file-drop {
-    min-height: 52px;
-    gap: 8px;
-    padding: 9px 10px;
+    min-height: 56px;
+    gap: 9px;
+    padding: 10px 11px;
   }
 
   .landing-panel .file-drop__icon {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
   }
 
   .landing-panel .file-drop__title {
-    font-size: 0.74rem;
+    font-size: 0.78rem;
   }
 
   .landing-panel .quickload-panel {
-    padding: 9px;
+    padding: 10px;
   }
 
   .landing-panel .quickload-header {
@@ -911,33 +922,33 @@ table {
   }
 
   .landing-panel .quickload-primary {
-    margin-top: 8px;
-    gap: 6px;
+    margin-top: 9px;
+    gap: 7px;
   }
 
   .landing-panel .quickload-divider {
-    margin-top: 8px;
-    gap: 6px;
+    margin-top: 9px;
+    gap: 7px;
   }
 
   .landing-panel .quickload-chips {
-    margin-top: 8px;
-    gap: 6px;
+    margin-top: 9px;
+    gap: 7px;
   }
 
   .landing-panel .qa-button__content {
-    min-height: 48px;
-    gap: 8px;
-    padding: 8px 9px;
+    min-height: 52px;
+    gap: 9px;
+    padding: 9px 10px;
   }
 
   .landing-panel .qa-button__icon {
-    width: 25px;
-    height: 25px;
+    width: 27px;
+    height: 27px;
   }
 
   .landing-panel .qa-button__label {
-    font-size: 0.72rem;
+    font-size: 0.76rem;
   }
 
   .landing-panel .qa-button__indicator {
@@ -946,18 +957,18 @@ table {
   }
 
   .landing-panel .qa-chip__content {
-    min-height: 42px;
+    min-height: 46px;
     gap: 1px;
-    padding: 6px 7px;
+    padding: 7px 8px;
   }
 
   .landing-panel .qa-chip__icon {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
   }
 
   .landing-panel .qa-chip__label {
-    font-size: 0.66rem;
+    font-size: 0.7rem;
   }
 
   .landing-panel .qa-chip__caption {
