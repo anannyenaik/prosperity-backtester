@@ -86,8 +86,10 @@ Historical Round 3 replay follows these rules:
 `prosperity_backtester.round3` provides:
 
 - voucher symbol and strike parsing
-- intrinsic value, time value, moneyness, Black-Scholes price, delta, and implied-vol inversion
-- per-day voucher diagnostics with average mid, average spread, intrinsic and time-value summaries, and IV and delta statistics
+- intrinsic value, time value, moneyness, Black-Scholes price, delta, gamma, vega, and implied-vol inversion
+- per-day voucher diagnostics with average mid, spread, depth, intrinsic, time value, IV, fitted IV, model fair, residual, delta, gamma, vega, and underlying-move beta statistics
+- compact chain samples with timestamp-level observed mid, fitted fair, residual z-score, spread, depth, and inclusion reason
+- surface-fit quality diagnostics, including direct versus fallback fit counts and included-strike residual quality
 
 Default surface-fit policy:
 
@@ -95,11 +97,27 @@ Default surface-fit policy:
 - deep ITM `VEV_4000` and `VEV_4500` are excluded by default
 - pinned far OTM `VEV_6000` and `VEV_6500` are excluded by default
 
+The surface is a robust per-timestamp linear IV fit over the primary strikes. If a timestamp cannot support a fit, the code reuses the previous fit, then falls back to the per-day median surface and records that source. It does not claim statistical confidence when the fit is thin.
+
+## Coherent Monte Carlo
+
+Round 3 synthetic generation is calibrated from the historical Round 3 data:
+
+- `HYDROGEL_PACK` has an independent delta-1 path
+- `VELVETFRUIT_EXTRACT` has its own underlying path
+- vouchers are generated from the underlying path, TTE, fitted surface, and sampled residuals
+- underlying shocks propagate through the voucher chain
+- Hydrogel shocks do not mechanically move voucher fairs
+- prices are clamped non-negative and generated books must remain crossed-book safe
+
+Round 3 Monte Carlo currently uses the classic Python backend. The streaming and Rust Monte Carlo backends are not active for Round 3.
+
 ## Known caveats
 
 - `HYDROGEL_PACK` appears effectively independent of `VELVETFRUIT_EXTRACT`
 - `VEV_6000` and `VEV_6500` are often pinned around `0.5` mid and may print `0.0` in trades
 - passive fills remain approximate
+- passive print fills are labelled as same-price queue assumptions or worse-price through-print assumptions
 - public trade data is sparse, so hidden queue behaviour is not claimed
 
 ## Manual challenge

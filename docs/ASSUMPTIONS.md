@@ -21,6 +21,8 @@ These parts remain deliberate modelling choices:
 
 - passive queue position
 - same-price queue share
+- same-price trade-print passive fills, labelled as a queue assumption
+- worse-price trade-print passive fills, labelled as a through-print assumption
 - missed passive fills
 - adverse-selection penalties
 - size-dependent slippage
@@ -39,6 +41,9 @@ Round 3 adds a few important boundaries:
 - Round 3 positions are marked to the observed market mid, including fractional mids such as `0.5`
 - option theory is diagnostic and synthetic support only
 - historical voucher replay does not override observed prices with Black-Scholes values
+- fitted IV, fair value, Greeks, residuals, and residual z-scores are diagnostics, not replay marks
+- coherent Round 3 Monte Carlo samples vouchers from the underlying path, fitted surface, and residual noise
+- Round 3 Monte Carlo currently runs through the classic Python path
 - no voucher exercise or cash settlement is applied during Round 3 replay unless official rules later require it
 - the Ornamental Bio-Pods challenge is separate from the algorithmic replay engine
 

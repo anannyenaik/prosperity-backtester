@@ -228,6 +228,8 @@ export interface FillRow {
   kind: string
   exact: boolean
   source_trade_price: number
+  passive_match_type?: string | null
+  approximation_reason?: string | null
   day: number
   mid: number | null
   reference_fair: number | null

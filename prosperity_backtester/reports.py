@@ -531,6 +531,12 @@ def _compact_behaviour(behaviour: Dict[str, object]) -> Dict[str, object]:
     return {key: value for key, value in behaviour.items() if key != "series"}
 
 
+def _compact_summary(summary: Dict[str, object]) -> Dict[str, object]:
+    compact = dict(summary)
+    compact.pop("option_diagnostics", None)
+    return compact
+
+
 def _cap_preview_rows(
     rows: Sequence[Dict[str, object]],
     options: OutputOptions,
@@ -568,7 +574,7 @@ def _sample_run_payload(
     behaviour_preview = _cap_preview_rows(rows["behaviourSeries"], options, multiplier=1, hard_limit=preview_limit)
     return {
         "runName": result.run_name,
-        "summary": result.summary,
+        "summary": _compact_summary(result.summary),
         "inventorySeries": inventory_preview,
         "inventorySeriesPreviewTruncated": len(inventory_preview) < len(rows["inventorySeries"]),
         "inventorySeriesTotalCount": len(rows["inventorySeries"]),
@@ -1024,8 +1030,17 @@ def build_dashboard_payload(
             "Scenario outputs should be used for ranking stability and fragility checks, not exact website forecasts.",
         ],
     }
-    if int(round_number) == 2 or access_scenario:
+    if int(round_number) == 2:
         assumptions["round2"] = ASSUMPTION_REGISTRY
+    if int(round_number) == 3:
+        assumptions["exact"].extend([
+            "Round 3 historical replay uses observed books and observed mids",
+            "Round 3 product limits and TTE mapping come from the round registry",
+        ])
+        assumptions["approximate"].extend([
+            "Round 3 option surface diagnostics are fitted research views",
+            "Round 3 synthetic vouchers are generated from the underlying, TTE, fitted surface and residual noise",
+        ])
 
     payload: Dict[str, object] = {
         "type": run_type,
@@ -1056,9 +1071,17 @@ def build_dashboard_payload(
         "datasetReports": dataset_reports or [],
         "validation": validation or {},
     }
+    if int(round_number) == 3 and (replay_result is not None or monte_carlo_results is not None):
+        payload["dataContract"].append({
+            "key": "option_diagnostics",
+            "label": "Round 3 option diagnostics",
+            "fidelity": "derived",
+            "location": "dashboard.json optionDiagnostics and manifest.json",
+            "notes": "Observed voucher mids are retained separately from fitted IV, model fair and residual diagnostics. Historical replay execution still uses the observed book.",
+        })
     if replay_result is not None:
         rows = replay_rows or compact_replay_rows(replay_result, output_options)
-        payload["summary"] = replay_result.summary
+        payload["summary"] = _compact_summary(replay_result.summary)
         if replay_result.summary.get("option_diagnostics") is not None:
             payload["optionDiagnostics"] = replay_result.summary["option_diagnostics"]
         payload["sessionRows"] = replay_result.session_rows
@@ -1271,7 +1294,7 @@ def _manifest_base(artefact: SessionArtefacts) -> Dict[str, object]:
         "fill_model": artefact.fill_model,
         "perturbations": artefact.perturbations,
         "access_scenario": artefact.access_scenario,
-        "summary": artefact.summary,
+        "summary": _compact_summary(artefact.summary),
         "fair_value_summary": artefact.fair_value_summary,
         "behaviour_summary": artefact.behaviour.get("summary", {}),
         "schema_version": DASHBOARD_SCHEMA_VERSION,
@@ -1352,6 +1375,7 @@ def write_replay_bundle(
         **_manifest_base(artefact),
         "dataset_reports": dashboard_payload.get("datasetReports", []),
         "validation": dashboard_payload.get("validation", {}),
+        "data_contract": dashboard_payload.get("dataContract", _data_contract(artefact.mode, output_options)),
     }
     if dashboard_payload.get("optionDiagnostics") is not None:
         manifest_payload["option_diagnostics"] = dashboard_payload.get("optionDiagnostics")
@@ -1476,6 +1500,7 @@ def write_mc_bundle(
         "dataset_reports": dashboard_payload.get("datasetReports", []),
         "validation": dashboard_payload.get("validation", {}),
         "option_diagnostics": dashboard_payload.get("optionDiagnostics"),
+        "data_contract": dashboard_payload.get("dataContract", _data_contract("monte_carlo", output_options)),
     }, output_options, runtime_context=runtime_context)
 
 

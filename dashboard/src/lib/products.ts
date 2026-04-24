@@ -45,12 +45,28 @@ export function productGroups(payload: DashboardPayload | null | undefined): Arr
   const groups = new Map<string, { id: string; label: string; products: string[] }>()
   for (const product of availableProducts(payload)) {
     const assetClass = String(payload?.productMetadata?.[product]?.asset_class ?? 'other')
-    const groupId = assetClass === 'delta1' ? 'delta1' : assetClass === 'option' ? 'option' : 'other'
-    const label = groupId === 'delta1' ? 'Delta-1' : groupId === 'option' ? 'Vouchers' : 'Other'
+    const diagnosticsGroup = String(payload?.productMetadata?.[product]?.diagnostics_group ?? '')
+    const includeInSurface = payload?.productMetadata?.[product]?.include_in_surface_fit
+    let groupId = 'other'
+    let label = 'Other'
+    if (diagnosticsGroup === 'underlying') {
+      groupId = 'underlying'
+      label = 'Underlying'
+    } else if (assetClass === 'option' && includeInSurface === true) {
+      groupId = 'surface-fit-vouchers'
+      label = 'Surface-fit vouchers'
+    } else if (assetClass === 'option') {
+      groupId = 'diagnostic-vouchers'
+      label = 'Excluded diagnostics'
+    } else if (assetClass === 'delta1') {
+      groupId = 'delta1'
+      label = 'Delta-1'
+    }
     if (!groups.has(groupId)) {
       groups.set(groupId, { id: groupId, label, products: [] })
     }
     groups.get(groupId)!.products.push(product)
   }
-  return Array.from(groups.values())
+  const order = ['delta1', 'underlying', 'surface-fit-vouchers', 'diagnostic-vouchers', 'other']
+  return Array.from(groups.values()).sort((left, right) => order.indexOf(left.id) - order.indexOf(right.id))
 }

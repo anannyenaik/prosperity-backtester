@@ -367,6 +367,12 @@ def _consume_passive_trades(
             continue
         trade.quantity -= take
         filled += take
+        passive_match_type = "same_price" if float(trade.price) == float(order.price) else "worse_price"
+        approximation_reason = (
+            "same-price trade print requires an assumed queue share"
+            if passive_match_type == "same_price"
+            else "trade printed through the resting order price"
+        )
         if side == "buy":
             ledger.apply_buy(execution_price, take)
             fills_out.append({
@@ -379,6 +385,8 @@ def _consume_passive_trades(
                 "exact": False,
                 "reference_price": order.price,
                 "source_trade_price": trade.price,
+                "passive_match_type": passive_match_type,
+                "approximation_reason": approximation_reason,
                 "slippage_ticks": execution_price - int(order.price),
                 "size_slippage_ticks": 0.0,
                 "adverse_selection_ticks": adverse_ticks,
@@ -399,6 +407,8 @@ def _consume_passive_trades(
                 "exact": False,
                 "reference_price": order.price,
                 "source_trade_price": trade.price,
+                "passive_match_type": passive_match_type,
+                "approximation_reason": approximation_reason,
                 "slippage_ticks": int(order.price) - execution_price,
                 "size_slippage_ticks": 0.0,
                 "adverse_selection_ticks": adverse_ticks,
@@ -961,6 +971,7 @@ def run_market_session(
     access_scenario: AccessScenario | None = None,
     print_trader_output: bool = False,
     timing_profile: Dict[str, object] | None = None,
+    include_option_diagnostics: bool = True,
 ) -> SessionArtefacts:
     round_spec = round_spec or get_round_spec(market_days[0].round_number if market_days else 1)
     products = tuple(round_spec.products)
@@ -1299,7 +1310,7 @@ def run_market_session(
         "fair_value": fair_summary,
         "behaviour": behaviour.get("summary", {}),
     }
-    if round_spec.round_number == 3:
+    if round_spec.round_number == 3 and include_option_diagnostics:
         summary["option_diagnostics"] = compute_option_diagnostics(market_days, round_spec=round_spec)
     artefacts = SessionArtefacts(
         run_name=run_name,

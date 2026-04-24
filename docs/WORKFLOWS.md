@@ -22,10 +22,22 @@ Run a coherent Monte Carlo smoke:
 python -m prosperity_backtester monte-carlo examples/noop_round3_trader.py --round 3 --data-dir data/round3 --days 0 --sessions 8 --sample-sessions 2 --synthetic-tick-limit 250
 ```
 
+Run the small coherence proof bundle:
+
+```bash
+python -m prosperity_backtester monte-carlo examples/noop_round3_trader.py --round 3 --data-dir data/round3 --days 0 --sessions 32 --sample-sessions 4 --synthetic-tick-limit 250 --output-dir backtests/r3_mc_coherence_proof
+```
+
 Run the checked-in Round 3 scenario bundle:
 
 ```bash
 python -m prosperity_backtester scenario-compare configs/round3_research_scenarios.json
+```
+
+Run passive-fill sensitivity:
+
+```bash
+python -m prosperity_backtester scenario-compare configs/round3_fill_sensitivity.json
 ```
 
 ## Round 3 research loop
@@ -54,6 +66,8 @@ Coherent Monte Carlo with a short synthetic path:
 ```bash
 python -m prosperity_backtester monte-carlo your_trader.py --round 3 --data-dir data/round3 --days 0 --sessions 32 --sample-sessions 4 --synthetic-tick-limit 250 --vol-shift 0.02 --vol-scale 1.1
 ```
+
+Round 3 Monte Carlo currently resolves to the classic Python backend. Do not read Rust or streaming backend timings as active Round 3 support.
 
 Scenario bundle with Round 3 perturbations:
 

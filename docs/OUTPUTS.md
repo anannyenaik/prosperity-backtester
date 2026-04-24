@@ -25,7 +25,16 @@ The canonical payload now carries round-aware fields:
 Round 3 replay bundles may also include:
 
 - `optionDiagnostics`
-- Round 3 `summary.option_diagnostics`
+
+`optionDiagnostics` contains:
+
+- top-level `underlying`, `final_tte_days`, and `surface_fit_vouchers`
+- one `days[]` entry per analysed day
+- per-voucher summaries for strike, average mid, spread, depth, intrinsic, time value, moneyness, IV distribution, fitted IV, model fair, residual distribution, residual z-score scale, delta, gamma, vega, move beta, fit inclusion, warnings, and observation counts
+- compact `chain_samples[]` rows with timestamp, underlying mid, observed voucher mid, intrinsic, time value, moneyness, implied IV, fitted IV, model fair, residual, residual z-score, spread, depth, delta, gamma, vega, and fit source
+- `surface_fit_policy` and `surface_fit_quality` diagnostics explaining included strikes and fallback use
+
+These fields are diagnostic and synthetic-calibration support. Historical replay still uses observed books and observed mids.
 
 Round 3 manifests may additionally carry:
 
@@ -80,3 +89,11 @@ Full mode can additionally keep:
 - canonical, sidecar, and debug file lists
 - provenance such as argv, git metadata, backend choice, worker count, and runtime timings
 - source data manifest metadata when a tracked data manifest is available
+
+Fill rows may include passive-fill fidelity fields:
+
+- `kind=aggressive_visible` and `exact=true` for visible-book aggressive fills
+- `kind=passive_approx` and `exact=false` for trade-print passive fills
+- `passive_match_type=same_price` for same-price queue assumptions
+- `passive_match_type=worse_price` for prints through the resting order price
+- `approximation_reason` with the local assumption used

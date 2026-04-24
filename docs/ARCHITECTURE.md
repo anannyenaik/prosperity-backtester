@@ -40,7 +40,7 @@ Round-specific logic is isolated:
 
 - `platform.py` is the main replay and Monte Carlo engine
 - `fill_models.py` resolves named fill assumptions
-- `round3.py` generates coherent Round 3 synthetic paths from the underlying and voucher chain
+- `round3.py` computes voucher diagnostics and generates coherent Round 3 synthetic paths from the underlying, fitted IV surface, and voucher residuals
 - `round2.py` stays out of Round 3 execution
 
 ### Reporting
@@ -55,4 +55,5 @@ Round-specific logic is isolated:
 - Historical replay trades the observed public books.
 - Passive fills remain approximate.
 - Round 3 option theory is diagnostic and synthetic support only.
+- Round 3 Monte Carlo uses the classic Python execution path; Rust and streaming backends are not Round 3 engines.
 - Round 2 access logic cannot leak into Round 3.

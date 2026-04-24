@@ -15,7 +15,10 @@
       "name": "historical_baseline",
       "fill_model": "base",
       "description": "Observed Round 3 books with the standard local fill baseline.",
-      "tags": ["baseline", "historical"]
+      "tags": ["baseline", "historical"],
+      "perturbation": {
+        "synthetic_tick_limit": 250
+      }
     },
     {
       "name": "underlying_up_vol_richer",

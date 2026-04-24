@@ -64,6 +64,7 @@ export function Replay() {
     { key: 'price', header: 'Price', fmt: 'num', digits: 0 },
     { key: 'quantity', header: 'Qty', fmt: 'int' },
     { key: 'kind', header: 'Kind', fmt: 'str' },
+    { key: 'passive_match_type', header: 'Passive type', fmt: 'str' },
     { key: 'markout_1', header: 'Mkt+1', fmt: 'num', tone: (v) => colorForValue(Number(v)) },
     { key: 'markout_5', header: 'Mkt+5', fmt: 'num', tone: (v) => colorForValue(Number(v)) },
     { key: 'signed_edge_to_analysis_fair', header: 'Edge', fmt: 'num', digits: 1, tone: (v) => colorForValue(Number(v)) },

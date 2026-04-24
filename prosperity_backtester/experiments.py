@@ -414,6 +414,7 @@ def run_replay(
         capture_full_output=True,
         access_scenario=access_scenario,
         print_trader_output=print_trader_output,
+        include_option_diagnostics=bool(write_bundle),
     )
     validation = {}
     if live_export is not None:
@@ -554,6 +555,7 @@ def _run_monte_carlo_chunk(task: Dict[str, object]) -> Dict[str, object]:
             access_scenario=access_scenario,
             print_trader_output=bool(task.get("print_trader_output", False)),
             timing_profile=session_profile,
+            include_option_diagnostics=False,
         )
         session_profile["market_generation_seconds"] = round(generation_seconds, 6)
         if path_band_accumulator is not None and result.path_metrics:
@@ -872,7 +874,7 @@ def _run_monte_carlo_profiled(
         runtime_context["phase_timings_seconds"]["provenance_capture_seconds"] = round(provenance_seconds, 6)
 
         def build_dashboard() -> Dict[str, object]:
-            return build_dashboard_payload(
+            dashboard = build_dashboard_payload(
                 run_type="monte_carlo",
                 run_name=run_name,
                 trader_name=trader_spec.name,
@@ -890,6 +892,9 @@ def _run_monte_carlo_profiled(
                 runtime_context=runtime_context,
                 provenance=dashboard_provenance,
             )
+            if round3_context is not None:
+                dashboard["optionDiagnostics"] = round3_context.option_diagnostics
+            return dashboard
 
         _record_mc_diagnostic("dashboard_build_started")
         dashboard_raw, dashboard_rss = _measure_phase_rss(build_dashboard)

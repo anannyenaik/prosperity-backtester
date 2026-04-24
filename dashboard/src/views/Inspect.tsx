@@ -116,6 +116,7 @@ export function Inspect() {
     { key: 'price', header: 'Price', fmt: 'num', digits: 0, align: 'right' },
     { key: 'quantity', header: 'Qty', fmt: 'int', align: 'right' },
     { key: 'kind', header: 'Kind', fmt: 'str' },
+    { key: 'passive_match_type', header: 'Passive type', fmt: 'str' },
     { key: 'markout_5', header: 'M+5', fmt: 'num', tone: (v) => colorForValue(Number(v)), align: 'right' },
     { key: 'signed_edge_to_analysis_fair', header: 'Edge', fmt: 'num', tone: (v) => colorForValue(Number(v)), align: 'right' },
   ]

@@ -1,6 +1,6 @@
 # Prosperity Backtester
 
-Result: this repository is now round-aware and ready for Round 3 historical replay, Round 3 option diagnostics, and coherent Round 3 Monte Carlo, while preserving the existing Round 1 and Round 2 workflows.
+Prosperity Backtester: Now round-aware and ready for Round 3 historical replay, Round 3 option diagnostics, and coherent Round 3 Monte Carlo, while preserving the existing Round 1 and Round 2 workflows.
 
 No Round 3 alpha strategy is checked in. The tracked `examples/noop_round3_trader.py` file is a smoke fixture only.
 
@@ -47,6 +47,12 @@ Run the checked-in Round 3 scenario bundle:
 python -m prosperity_backtester scenario-compare configs/round3_research_scenarios.json
 ```
 
+Run the generic Round 3 passive-fill sensitivity grid:
+
+```bash
+python -m prosperity_backtester scenario-compare configs/round3_fill_sensitivity.json
+```
+
 Open the latest bundle:
 
 ```bash
@@ -81,12 +87,15 @@ python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_resea
 
 - Round 3 historical replay trades the observed books and marks positions to observed mids.
 - Round 3 vouchers are not cash-settled or exercised inside historical replay.
+- Round 3 option theory is used for diagnostics and coherent synthetic generation, not as a replay price source.
+- Round 3 Monte Carlo currently uses the classic Python backend.
 - Passive fills remain approximate across all rounds.
 - Round 2 access and MAF logic remain available, but are intentionally isolated from Round 3.
 
 ## Documentation
 
 - [docs/ROUND3.md](docs/ROUND3.md): Round 3 products, data, TTE mapping, diagnostics, and caveats
+- [docs/ROUND3_HARDENING_REPORT.md](docs/ROUND3_HARDENING_REPORT.md): verification and performance proof for this hardening pass
 - [docs/WORKFLOWS.md](docs/WORKFLOWS.md): practical replay and Monte Carlo workflows
 - [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md): exact behaviour versus local modelling assumptions
 - [docs/OUTPUTS.md](docs/OUTPUTS.md): bundle structure and metadata

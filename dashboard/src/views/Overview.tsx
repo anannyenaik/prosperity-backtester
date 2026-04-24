@@ -86,6 +86,8 @@ export function Overview() {
   const bundle = interpretBundle(payload)
   const meta = payload.meta
   const access = meta?.accessScenario ?? payload.summary?.access_scenario
+  const roundNumber = numberOrNull(meta?.round)
+  const showRound2Access = roundNumber === 2 || payload.type === 'round2_scenarios' || Boolean(payload.round2)
   const provenance = meta?.provenance
   const runtime = provenance?.runtime
   const git = provenance?.git
@@ -129,6 +131,56 @@ export function Overview() {
   ]
 
   const mafCost = numberOrNull(payload.summary?.maf_cost) ?? numberOrNull(access?.maf_cost)
+  const optionDiagnosticDays = Array.isArray(payload.optionDiagnostics?.days)
+    ? (payload.optionDiagnostics.days as Array<Record<string, unknown>>)
+    : []
+  const latestOptionDiagnostics = optionDiagnosticDays[optionDiagnosticDays.length - 1]
+  const optionChainRows = Array.isArray(latestOptionDiagnostics?.vouchers)
+    ? (latestOptionDiagnostics.vouchers as Array<Record<string, unknown>>).map((row) => {
+        const product = String(row.product ?? '')
+        const productSummary = payload.summary?.per_product?.[product]
+        return {
+          ...row,
+          product,
+          position: productSummary?.final_position ?? null,
+          pnl_contribution: productSummary?.final_mtm ?? null,
+          warning_text: Array.isArray(row.warnings) ? row.warnings.join(' ') : '',
+        }
+      })
+    : []
+  const optionChainCols: ColDef<Record<string, unknown>>[] = [
+    { key: 'product', header: 'Product', fmt: 'str', render: (_value, row) => productLabel(payload, String(row.product ?? '')) },
+    { key: 'strike', header: 'Strike', fmt: 'int', align: 'right' },
+    { key: 'average_mid', header: 'Mid', fmt: 'num', digits: 2, align: 'right' },
+    { key: 'average_spread', header: 'Spread', fmt: 'num', digits: 2, align: 'right' },
+    { key: 'iv_median', header: 'IV', fmt: 'num', digits: 3, align: 'right' },
+    { key: 'fitted_iv_mean', header: 'Fit IV', fmt: 'num', digits: 3, align: 'right' },
+    { key: 'model_fair_mean', header: 'Fair', fmt: 'num', digits: 2, align: 'right' },
+    { key: 'residual_median', header: 'Residual', fmt: 'num', digits: 2, align: 'right', tone: (v) => colorForValue(Number(v)) },
+    { key: 'delta_mean', header: 'Delta', fmt: 'num', digits: 3, align: 'right' },
+    { key: 'position', header: 'Pos', fmt: 'int', align: 'right' },
+    { key: 'pnl_contribution', header: 'PnL', fmt: 'num', digits: 1, align: 'right', tone: (v) => colorForValue(Number(v)) },
+    { key: 'warning_text', header: 'Warnings', fmt: 'str' },
+  ]
+  const runMetadataPairs = [
+    { label: 'Bundle type', value: bundle.badge, tone: 'accent' as const },
+    { label: 'Run name', value: meta?.runName },
+    { label: 'Trader', value: meta?.traderName },
+    { label: 'Mode', value: meta?.mode },
+    { label: 'Round', value: meta?.round },
+    { label: 'Fill model', value: meta?.fillModel?.name ?? 'not available for this bundle type' },
+    ...(showRound2Access
+      ? [
+          { label: 'Access', value: access?.name ?? 'not available for this bundle type' },
+          { label: 'MAF cost', value: mafCost == null ? 'not available for this bundle type' : fmtNum(mafCost) },
+        ]
+      : []),
+    { label: 'Created', value: fmtDate(meta?.createdAt) },
+    { label: 'Schema v', value: meta?.schemaVersion },
+    { label: 'Output profile', value: meta?.outputProfile?.profile ?? 'legacy' },
+    { label: 'Dominant risk', value: payload.behaviour?.summary?.dominant_risk_product ?? 'not available for this bundle type' },
+    { label: 'Dominant turnover', value: payload.behaviour?.summary?.dominant_turnover_product ?? 'not available for this bundle type' },
+  ]
 
   return (
     <div className="space-y-5">
@@ -147,21 +199,7 @@ export function Overview() {
         <Card title="Run metadata">
           <KVGrid
             cols={2}
-            pairs={[
-              { label: 'Bundle type', value: bundle.badge, tone: 'accent' },
-              { label: 'Run name', value: meta?.runName },
-              { label: 'Trader', value: meta?.traderName },
-              { label: 'Mode', value: meta?.mode },
-              { label: 'Round', value: meta?.round },
-              { label: 'Fill model', value: meta?.fillModel?.name ?? 'not available for this bundle type' },
-              { label: 'Access', value: access?.name ?? 'not available for this bundle type' },
-              { label: 'MAF cost', value: mafCost == null ? 'not available for this bundle type' : fmtNum(mafCost) },
-              { label: 'Created', value: fmtDate(meta?.createdAt) },
-              { label: 'Schema v', value: meta?.schemaVersion },
-              { label: 'Output profile', value: meta?.outputProfile?.profile ?? 'legacy' },
-              { label: 'Dominant risk', value: payload.behaviour?.summary?.dominant_risk_product ?? 'not available for this bundle type' },
-              { label: 'Dominant turnover', value: payload.behaviour?.summary?.dominant_turnover_product ?? 'not available for this bundle type' },
-            ]}
+            pairs={runMetadataPairs}
           />
         </Card>
 
@@ -188,6 +226,15 @@ export function Overview() {
               { label: 'Final TTE', value: payload.optionDiagnostics.final_tte_days == null ? 'not recorded' : `${payload.optionDiagnostics.final_tte_days} days` },
             ]}
           />
+        </Card>
+      )}
+
+      {optionChainRows.length > 0 && (
+        <Card
+          title="Round 3 option chain"
+          subtitle={`Compact day ${String(latestOptionDiagnostics?.day ?? 'latest')} voucher diagnostics. Fair values are diagnostic only; replay uses observed books.`}
+        >
+          <DataTable rows={optionChainRows} cols={optionChainCols} striped />
         </Card>
       )}
 

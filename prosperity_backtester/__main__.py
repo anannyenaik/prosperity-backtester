@@ -566,7 +566,8 @@ def _print_replay_result(artefact) -> None:
     if artefact.summary.get("maf_cost"):
         print(f"Gross before MAF: {artefact.summary.get('gross_pnl_before_maf', 0.0):,.2f}")
         print(f"MAF cost: {artefact.summary.get('maf_cost', 0.0):,.2f}")
-    if artefact.access_scenario:
+    access_name = (artefact.access_scenario or {}).get("name")
+    if artefact.round_number == 2 or access_name not in (None, "", "no_access"):
         print(f"Access scenario: {artefact.access_scenario.get('name', 'no_access')}")
     print(f"Max drawdown: {artefact.summary.get('max_drawdown', 0.0):,.2f}")
     for product, product_summary in artefact.summary["per_product"].items():
@@ -586,12 +587,15 @@ def _print_day_breakdown(artefact) -> None:
         return
     print("Per-day PnL:")
     for row in artefact.session_rows:
-        print(
-            f"  day {row['day']}: pnl={row['final_pnl']:,.2f} "
-            f"gross={row.get('gross_pnl_before_maf', 0.0):,.2f} "
-            f"osmium={row.get('osmium_pnl', 0.0):,.2f} "
-            f"pepper={row.get('pepper_pnl', 0.0):,.2f}"
-        )
+        line = f"  day {row['day']}: pnl={row['final_pnl']:,.2f} gross={row.get('gross_pnl_before_maf', 0.0):,.2f}"
+        if artefact.round_number in (1, 2):
+            line += f" osmium={row.get('osmium_pnl', 0.0):,.2f} pepper={row.get('pepper_pnl', 0.0):,.2f}"
+        else:
+            per_product = row.get("per_product_pnl") or {}
+            leaders = sorted(per_product.items(), key=lambda item: abs(float(item[1] or 0.0)), reverse=True)[:3]
+            if leaders:
+                line += " leaders=" + ", ".join(f"{product}:{float(value or 0.0):,.2f}" for product, value in leaders)
+        print(line)
 
 
 def _print_compare_rows(rows: Sequence[dict[str, object]], *, merge_pnl: bool = False) -> None:
