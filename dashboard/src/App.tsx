@@ -128,11 +128,11 @@ const CAPABILITY_NODES = [
 
 function LandingScreen() {
   return (
-    <div className="landing-shell mx-auto flex h-full w-full max-w-[1400px] min-h-0 overflow-hidden px-4 py-2 md:px-7 md:py-3">
-      <div className="landing-grid grid h-full min-h-0 w-full items-center gap-4 overflow-hidden lg:grid-cols-[minmax(0,1fr)_minmax(400px,560px)] lg:gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(420px,590px)] xl:gap-5">
+    <div className="landing-shell mx-auto flex h-full w-full max-w-[1440px] min-h-0 overflow-hidden px-4 py-2 md:px-7 md:py-3">
+      <div className="landing-grid grid h-full min-h-0 w-full items-center gap-4 overflow-hidden lg:grid-cols-[minmax(0,1fr)_minmax(420px,580px)] lg:gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(440px,620px)] xl:gap-5">
         <section className="landing-hero flex min-w-0 min-h-0 flex-col justify-center lg:pr-3">
           <div className="landing-hero-kicker hud-label chapter-rule mb-3 text-accent">IMC PROSPERITY / RESEARCH PLATFORM</div>
-          <h1 className="landing-hero-title font-display max-w-[760px] text-[2.4rem] font-extrabold uppercase leading-[0.9] tracking-normal text-txt md:text-[3.15rem] lg:text-[2.85rem] xl:text-[3.3rem] 2xl:text-[3.55rem]">
+          <h1 className="landing-hero-title font-display max-w-[820px] text-[2.4rem] font-extrabold uppercase leading-[0.9] tracking-normal text-txt md:text-[3.15rem] lg:text-[2.85rem] xl:text-[3.3rem] 2xl:text-[3.55rem]">
             <span className="block">Strategy</span>
             <span className="block">research</span>
             <em className="font-serif mt-1 block text-[0.72em] font-light normal-case leading-[1.05] tracking-normal text-accent-2">decision workspace</em>
@@ -141,7 +141,7 @@ function LandingScreen() {
             Load replay, Monte Carlo, calibration, comparison, optimisation or scenario bundles to inspect run evidence and drive research decisions.
           </p>
 
-          <div className="landing-motif-strip motif-strip mt-4 grid max-w-[780px] grid-cols-2 gap-2.5 sm:grid-cols-4">
+          <div className="landing-motif-strip motif-strip mt-4 grid max-w-[820px] grid-cols-2 gap-2.5 sm:grid-cols-4">
             {CAPABILITY_NODES.map((item) => (
               <div key={item.label} className="landing-motif-card motif-card edge-traced edge-traced--soft rounded-lg px-3 py-3">
                 <div className="landing-motif-card__iconbox grid h-9 w-9 place-items-center rounded-lg border border-accent/20 bg-accent/10 text-accent shadow-[0_8px_18px_rgba(0,0,0,0.22)]">
@@ -162,7 +162,7 @@ function LandingScreen() {
           </div>
         </section>
 
-        <section className="landing-panel glass-panel edge-traced edge-traced--slow self-center flex w-full min-w-0 max-h-full flex-col overflow-hidden rounded-lg p-2.5 md:p-3 lg:max-w-[560px] lg:justify-self-end xl:max-w-[590px]">
+        <section className="landing-panel glass-panel edge-traced edge-traced--slow self-center flex w-full min-w-0 max-h-full flex-col overflow-hidden rounded-lg p-2.5 md:p-3 lg:max-w-[580px] lg:justify-self-end xl:max-w-[620px]">
           <div className="landing-panel-header mb-2 flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="hud-label text-accent-2">Bundle intake</div>
