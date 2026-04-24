@@ -15,7 +15,7 @@ fs.writeFileSync(
   bridgeModule,
   [
     "export { computeFloatingLayerLayout } from './src/lib/floatingLayer.ts'",
-    "export { measureViewportScrollbars, isPointNearViewportScrollbar, measureElementScrollbars, getElementScrollbarAxis } from './src/lib/cursor.ts'",
+    "export { measureViewportScrollbars, isPointNearViewportScrollbar, measureElementScrollbars, getElementScrollbarAxis, getExplicitScrollCursorAxis } from './src/lib/cursor.ts'",
   ].join('\n'),
 )
 
@@ -34,6 +34,7 @@ const {
   isPointNearViewportScrollbar,
   measureElementScrollbars,
   getElementScrollbarAxis,
+  getExplicitScrollCursorAxis,
 } = await import(pathToFileURL(compiledModule).href)
 
 after(() => {
@@ -101,4 +102,21 @@ test('element scrollbar hit-testing recognises the horizontal nav rail scrollbar
   assert.deepEqual(measureElementScrollbars(rail), { vertical: 0, horizontal: 12 })
   assert.equal(getElementScrollbarAxis({ x: 420, y: 98 }, rail), 'x')
   assert.equal(getElementScrollbarAxis({ x: 420, y: 78 }, rail), null)
+})
+
+test('explicit scroll cursor targets keep custom scrollbar regions in scroll mode', () => {
+  const explicitRegion = {
+    getAttribute(name) {
+      return name === 'data-scroll-cursor-axis' ? 'x' : null
+    },
+  }
+  const target = {
+    closest(selector) {
+      return selector === '[data-scroll-cursor-axis]' ? explicitRegion : null
+    },
+  }
+
+  assert.equal(getExplicitScrollCursorAxis(target), 'x')
+  assert.equal(getExplicitScrollCursorAxis({ closest: () => null }), null)
+  assert.equal(getExplicitScrollCursorAxis(null), null)
 })

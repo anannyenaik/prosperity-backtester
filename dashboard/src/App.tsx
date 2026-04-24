@@ -37,6 +37,9 @@ export function App() {
   const { runs, activeTab, loadRun, setServerRuns } = useStore()
   const View = VIEWS[activeTab] ?? Overview
   const isLanding = runs.length === 0
+  const mainStyle = {
+    paddingTop: 'calc(var(--dashboard-nav-height, 156px) + 16px)',
+  }
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -86,11 +89,11 @@ export function App() {
       <Cursor />
       <div className="app-atmosphere" aria-hidden="true" />
       <NavBar />
-      <main className={isLanding ? 'relative z-10 min-h-screen pt-[104px]' : 'relative z-10 min-h-screen pt-[116px]'}>
+      <main className="relative z-10 min-h-screen" style={mainStyle}>
         {isLanding ? (
           <LandingScreen />
         ) : (
-          <div className="mx-auto w-full max-w-[1680px] px-4 pb-12 md:px-7">
+          <div className="mx-auto w-full max-w-[1680px] px-4 pb-12 pt-1 md:px-7 md:pt-2">
             <View />
           </div>
         )}
@@ -108,7 +111,10 @@ const CAPABILITY_NODES = [
 
 function LandingScreen() {
   return (
-    <div className="mx-auto grid min-h-[calc(100dvh-104px)] w-full max-w-[1360px] items-start gap-5 px-4 pb-8 pt-3 md:px-7 md:pb-8 md:pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(340px,520px)] lg:gap-7 lg:py-5 2xl:items-center xl:grid-cols-[minmax(0,1fr)_minmax(360px,540px)] xl:gap-8 xl:py-6">
+    <div
+      className="mx-auto grid w-full max-w-[1360px] items-start gap-5 px-4 pb-8 pt-1 md:px-7 md:pb-8 md:pt-2 lg:grid-cols-[minmax(0,1fr)_minmax(340px,520px)] lg:gap-7 lg:py-4 2xl:items-center xl:grid-cols-[minmax(0,1fr)_minmax(360px,540px)] xl:gap-8 xl:py-5"
+      style={{ minHeight: 'calc(100dvh - var(--dashboard-nav-height, 156px) - 16px)' }}
+    >
       <section className="flex min-w-0 flex-col justify-center lg:pr-2">
         <div className="hud-label chapter-rule mb-3 text-accent">IMC PROSPERITY / RESEARCH PLATFORM</div>
         <h1 className="font-display max-w-[700px] text-[2.4rem] font-extrabold uppercase leading-[0.9] tracking-normal text-txt md:text-[3.15rem] lg:text-[2.85rem] xl:text-[3.3rem] 2xl:text-[3.55rem]">

@@ -141,6 +141,15 @@ export function getScrollbarHitAtPoint(
   }
 
   for (const element of getScrollbarCandidates(doc, point)) {
+    const explicitAxis = getExplicitScrollCursorAxis(element)
+    if (explicitAxis) {
+      return {
+        axis: explicitAxis,
+        element: isHtmlElement(element) ? element : null,
+        kind: 'element',
+      }
+    }
+
     if (!isHtmlElement(element)) continue
     if (element === doc.body || element === doc.documentElement) continue
 
@@ -182,6 +191,12 @@ export function resolveCursorState(target: Element | null): CursorState {
   if (target.closest(TEXT_SELECTOR)) return 'text'
   if (target.closest(INTERACTIVE_SELECTOR)) return 'hover'
   return 'idle'
+}
+
+export function getExplicitScrollCursorAxis(target: Element | null): ScrollbarAxis | null {
+  const candidate = target?.closest?.('[data-scroll-cursor-axis]')
+  const axis = candidate?.getAttribute('data-scroll-cursor-axis')
+  return axis === 'x' || axis === 'y' ? axis : null
 }
 
 function getScrollbarCandidates(doc: Document, point: { x: number; y: number }): Element[] {
