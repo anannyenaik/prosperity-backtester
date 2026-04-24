@@ -257,13 +257,13 @@ export function ServerRunLoader() {
   return (
     <div ref={rootRef} className="relative mt-1.5 min-w-0">
       <div className="quickload-panel edge-traced edge-traced--panel rounded-[12px] p-2 md:p-2.5">
-        <div className="flex items-start justify-between gap-3">
+        <div className="quickload-header flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="hud-label text-accent-2">Bundle server</div>
             <div className="mt-0.5 font-display text-[0.8rem] font-semibold uppercase tracking-[0.08em] text-txt">
               Quick load
             </div>
-            <div className="mt-1 max-w-[26rem] text-[11px] leading-[1.35] text-muted">
+            <div className="quickload-copy mt-1 max-w-[26rem] text-[11px] leading-[1.35] text-muted">
               Open the latest run immediately or browse every served bundle.
             </div>
           </div>

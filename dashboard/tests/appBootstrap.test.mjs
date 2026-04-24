@@ -235,3 +235,53 @@ test('manually closing the last bootstrap-loaded run returns to landing without 
   ])
   assert.match(JSON.stringify(renderer.toJSON()), /Bundle intake/)
 })
+
+test('landing main uses a viewport-bounded shell under the measured nav', async (t) => {
+  resetStore()
+  const windowMock = mockWindow()
+
+  t.after(() => {
+    windowMock.restore()
+    resetStore()
+  })
+
+  let renderer
+  await act(async () => {
+    renderer = create(React.createElement(App))
+    await flushAsyncWork()
+  })
+
+  const main = renderer.root.findByType('main')
+  assert.equal(main.props['data-page-state'], 'landing')
+  assert.deepEqual(main.props.style, {
+    boxSizing: 'border-box',
+    height: '100dvh',
+    overflow: 'hidden',
+    paddingTop: 'var(--dashboard-nav-height, 156px)',
+  })
+})
+
+test('loaded main keeps the scrollable padded layout', async (t) => {
+  resetStore()
+  const windowMock = mockWindow()
+
+  useStore.getState().loadRun(payload(), 'fixture.json')
+
+  t.after(() => {
+    windowMock.restore()
+    resetStore()
+  })
+
+  let renderer
+  await act(async () => {
+    renderer = create(React.createElement(App))
+    await flushAsyncWork()
+  })
+
+  const main = renderer.root.findByType('main')
+  assert.equal(main.props['data-page-state'], 'loaded')
+  assert.deepEqual(main.props.style, {
+    paddingTop: 'calc(var(--dashboard-nav-height, 156px) + 16px)',
+    minHeight: 'calc(100dvh - (var(--dashboard-nav-height, 156px) + 16px))',
+  })
+})

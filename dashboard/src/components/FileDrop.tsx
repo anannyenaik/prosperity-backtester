@@ -81,14 +81,14 @@ export function FileDrop() {
           if (e.target.files) parseFiles(e.target.files)
         }}
       />
-      <div className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-lg border border-border bg-bg/55 text-accent transition-colors duration-500 group-hover:border-accent/40">
+      <div className="file-drop__icon grid h-[34px] w-[34px] shrink-0 place-items-center rounded-lg border border-border bg-bg/55 text-accent transition-colors duration-500 group-hover:border-accent/40">
         {loading ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" /> : <Upload className="h-4 w-4" />}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="font-display text-[0.76rem] font-semibold uppercase tracking-[0.08em] text-txt">
+        <div className="file-drop__title font-display text-[0.76rem] font-semibold uppercase tracking-[0.08em] text-txt">
           {dragging ? 'Drop dashboard bundles' : 'Drop dashboard.json files'}
         </div>
-        <div className="mt-0.5 truncate text-[11px] leading-[1.35] text-muted">
+        <div className="file-drop__copy mt-0.5 truncate text-[11px] leading-[1.35] text-muted">
           Browse or drag replay, Monte Carlo, calibration and comparison bundles.
         </div>
       </div>
