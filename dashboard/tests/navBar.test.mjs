@@ -86,6 +86,31 @@ function replayPayload() {
   }
 }
 
+function round2Payload() {
+  return {
+    type: 'round2_scenarios',
+    meta: {
+      schemaVersion: 3,
+      runName: 'nav round2',
+      traderName: 'fixture_trader',
+      mode: 'round2_scenarios',
+      round: 2,
+      createdAt: '2026-04-23T20:15:00Z',
+      fillModel: { name: 'base' },
+      perturbations: {},
+      accessScenario: {},
+    },
+    products: ['ASH_COATED_OSMIUM', 'INTARIAN_PEPPER_ROOT'],
+    assumptions: { exact: [], approximate: [] },
+    datasetReports: [],
+    validation: {},
+    round2: {
+      scenarioRows: [{ maf: 0, winner: 'candidate' }],
+      winnerRows: [{ product: 'ASH_COATED_OSMIUM', winner: 'candidate' }],
+    },
+  }
+}
+
 function textOfNode(node) {
   return node.children
     .map((child) => (typeof child === 'string' ? child : textOfNode(child)))
@@ -136,4 +161,20 @@ test('unsupported tabs stay visible but render as disabled with no active afford
 
   assert.equal(replayButton.props.disabled, false)
   assert.equal(typeof replayButton.props.onClick, 'function')
+})
+
+test('supported Alpha Lab and Round 2 tabs use the available nav treatment', () => {
+  resetStore()
+  useStore.getState().loadRun(round2Payload(), 'nav-round2.json')
+
+  const renderer = create(React.createElement(NavBar))
+  const alphaButton = findNavButton(renderer.root, 'Alpha Lab')
+  const round2Button = findNavButton(renderer.root, 'Round 2')
+
+  for (const button of [alphaButton, round2Button]) {
+    assert.equal(button.props.disabled, false)
+    assert.equal(button.props['aria-disabled'], undefined)
+    assert.match(button.props.className, /nav-item--available/)
+    assert.doesNotMatch(button.props.className, /nav-item--disabled/)
+  }
 })

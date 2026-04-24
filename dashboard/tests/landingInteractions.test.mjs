@@ -15,7 +15,7 @@ fs.writeFileSync(
   bridgeModule,
   [
     "export { computeFloatingLayerLayout } from './src/lib/floatingLayer.ts'",
-    "export { measureViewportScrollbars, isPointNearViewportScrollbar } from './src/lib/cursor.ts'",
+    "export { measureViewportScrollbars, isPointNearViewportScrollbar, measureElementScrollbars, getElementScrollbarAxis } from './src/lib/cursor.ts'",
   ].join('\n'),
 )
 
@@ -32,6 +32,8 @@ const {
   computeFloatingLayerLayout,
   measureViewportScrollbars,
   isPointNearViewportScrollbar,
+  measureElementScrollbars,
+  getElementScrollbarAxis,
 } = await import(pathToFileURL(compiledModule).href)
 
 after(() => {
@@ -79,4 +81,24 @@ test('scrollbar hit-testing treats the viewport gutter as native scrollbar space
     isPointNearViewportScrollbar({ x: 700, y: 400 }, { width: 1366, height: 768 }, scrollbars),
     false,
   )
+})
+
+test('element scrollbar hit-testing recognises the horizontal nav rail scrollbar', () => {
+  const rail = {
+    rect: { left: 120, top: 48, right: 820, bottom: 104 },
+    clientWidth: 700,
+    clientHeight: 44,
+    offsetWidth: 700,
+    offsetHeight: 56,
+    scrollWidth: 1040,
+    scrollHeight: 44,
+    borderTop: 0,
+    borderRight: 0,
+    borderBottom: 0,
+    borderLeft: 0,
+  }
+
+  assert.deepEqual(measureElementScrollbars(rail), { vertical: 0, horizontal: 12 })
+  assert.equal(getElementScrollbarAxis({ x: 420, y: 98 }, rail), 'x')
+  assert.equal(getElementScrollbarAxis({ x: 420, y: 78 }, rail), null)
 })

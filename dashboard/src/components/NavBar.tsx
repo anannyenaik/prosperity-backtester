@@ -143,12 +143,17 @@ export function NavBar() {
             )}
           </div>
 
-          <div className="nav-rail mt-2 flex items-center gap-1.5 overflow-x-auto border-t border-border/85 pt-2.5">
+          <div
+            className="nav-rail mt-2 flex items-center gap-1.5 overflow-x-auto border-t border-border/85 pt-2.5"
+            data-scrollbar-axis="x"
+            data-scrollbar-size="12"
+          >
             {TABS.map((tab) => {
               const availability = getTabAvailability(activeRun?.payload, tab.id, {
                 comparePayload: compareRun?.payload,
                 sameCompareRun: Boolean(activeRun && compareRun && activeRun.id === compareRun.id),
               })
+              const isAvailable = availability.supported
               const isDisabled = !availability.supported
               const isActive = activeTab === tab.id && !isDisabled
               return (
@@ -162,6 +167,7 @@ export function NavBar() {
                   title={availability.supported ? availability.message : availability.title}
                   className={clsx(
                     'nav-item group flex shrink-0 items-center gap-2 rounded-[10px] px-3.5 py-2.5 text-xs',
+                    isAvailable && 'nav-item--available',
                     isActive ? 'nav-item--active text-accent' : isDisabled ? 'nav-item--disabled text-muted' : 'nav-item--idle text-muted',
                     tab.group === 'product' && !isActive && !isDisabled && 'opacity-75',
                   )}

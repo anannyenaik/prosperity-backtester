@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 import {
-  isPointNearViewportScrollbar,
-  measureViewportScrollbars,
+  getScrollbarHitAtPoint,
   resolveCursorState,
+  type ScrollbarAxis,
 } from '../lib/cursor'
 
 export function Cursor() {
@@ -33,6 +33,13 @@ export function Cursor() {
     let raf = 0
     let visible = false
     let scrollbarMode = false
+    let scrollbarAxis: ScrollbarAxis | null = null
+    let scrollbarDragAxis: ScrollbarAxis | null = null
+
+    const setCursorPoint = (element: HTMLDivElement, x: number, y: number) => {
+      element.style.setProperty('--cursor-x', `${x}px`)
+      element.style.setProperty('--cursor-y', `${y}px`)
+    }
 
     const step = () => {
       if (prefersReduced) {
@@ -46,8 +53,8 @@ export function Cursor() {
         coreX += (targetX - coreX) * 0.55
         coreY += (targetY - coreY) * 0.55
       }
-      ring.style.transform = `translate3d(${ringX}px, ${ringY}px, 0) translate(-50%, -50%)`
-      core.style.transform = `translate3d(${coreX}px, ${coreY}px, 0) translate(-50%, -50%)`
+      setCursorPoint(ring, ringX, ringY)
+      setCursorPoint(core, coreX, coreY)
       raf = window.requestAnimationFrame(step)
     }
 
@@ -64,78 +71,80 @@ export function Cursor() {
       core.classList.remove('is-visible')
     }
 
+    const clearScrollbarMode = () => {
+      scrollbarMode = false
+      scrollbarAxis = null
+      delete body.dataset.cursorAxis
+    }
+
     const updateScrollbarMode = (clientX: number, clientY: number) => {
       targetX = clientX
       targetY = clientY
-      const scrollbars = measureViewportScrollbars(
-        window.innerWidth,
-        window.innerHeight,
-        document.documentElement.clientWidth,
-        document.documentElement.clientHeight,
-      )
-      const nextScrollbarMode = isPointNearViewportScrollbar(
-        { x: clientX, y: clientY },
-        { width: window.innerWidth, height: window.innerHeight },
-        scrollbars,
-      )
+      const hit = getScrollbarHitAtPoint({ x: clientX, y: clientY })
+      const axis = scrollbarDragAxis ?? hit?.axis ?? null
 
-      if (nextScrollbarMode) {
+      if (axis) {
         scrollbarMode = true
-        body.dataset.cursorState = 'idle'
-        delete body.dataset.cursorPressed
+        scrollbarAxis = axis
+        body.dataset.cursorState = 'scroll'
+        body.dataset.cursorAxis = axis
         show()
         return true
       }
 
-      scrollbarMode = false
+      clearScrollbarMode()
       return false
     }
 
     const onMove = (event: PointerEvent) => {
       if (updateScrollbarMode(event.clientX, event.clientY)) return
-      targetX = event.clientX
-      targetY = event.clientY
+      clearScrollbarMode()
       body.dataset.cursorState = resolveCursorState(document.elementFromPoint(event.clientX, event.clientY))
       show()
     }
     const onOver = (event: PointerEvent) => {
       if (updateScrollbarMode(event.clientX, event.clientY)) return
+      clearScrollbarMode()
       body.dataset.cursorState = resolveCursorState(event.target as Element | null)
     }
     const onDown = (event: PointerEvent) => {
-      if (updateScrollbarMode(event.clientX, event.clientY)) return
       body.dataset.cursorPressed = 'true'
+      if (updateScrollbarMode(event.clientX, event.clientY)) {
+        scrollbarDragAxis = scrollbarAxis
+        return
+      }
     }
     const onUp = (event: PointerEvent) => {
       delete body.dataset.cursorPressed
+      scrollbarDragAxis = null
       if (updateScrollbarMode(event.clientX, event.clientY)) return
+      clearScrollbarMode()
       body.dataset.cursorState = resolveCursorState(document.elementFromPoint(event.clientX, event.clientY))
       show()
     }
     const onScroll = () => {
-      if (scrollbarMode) {
-        body.dataset.cursorState = 'idle'
+      if (scrollbarMode && scrollbarAxis) {
+        body.dataset.cursorState = 'scroll'
+        body.dataset.cursorAxis = scrollbarAxis
         show()
-        return
       }
-      if (body.dataset.cursorPressed !== 'true') return
-      scrollbarMode = true
-      body.dataset.cursorState = 'idle'
-      hide()
     }
     const onLeaveWindow = (event: PointerEvent) => {
       if (event.relatedTarget == null) {
-        scrollbarMode = false
+        scrollbarDragAxis = null
+        clearScrollbarMode()
         hide()
       }
     }
     const onEnterWindow = (event: PointerEvent) => {
       if (updateScrollbarMode(event.clientX, event.clientY)) return
+      clearScrollbarMode()
       body.dataset.cursorState = resolveCursorState(document.elementFromPoint(event.clientX, event.clientY))
       show()
     }
     const onBlur = () => {
-      scrollbarMode = false
+      scrollbarDragAxis = null
+      clearScrollbarMode()
       delete body.dataset.cursorPressed
       body.dataset.cursorState = 'idle'
       hide()
@@ -164,6 +173,7 @@ export function Cursor() {
       body.classList.remove('has-custom-cursor')
       delete body.dataset.cursorState
       delete body.dataset.cursorPressed
+      delete body.dataset.cursorAxis
     }
   }, [])
 
