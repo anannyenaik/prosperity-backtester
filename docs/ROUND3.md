@@ -134,11 +134,36 @@ Documented summary:
 
 This repo may add helper analysis for it, but it is intentionally not wired into the algorithmic exchange replay path.
 
+## End-to-end verification harness
+
+`python -m prosperity_backtester verify-round3 --data-dir data/round3 --output-dir backtests/r3_verification_latest` runs the full Round 3 trustworthiness sweep in a single command:
+
+- captures provenance (Python version, OS, git HEAD, dirty flag, run timestamp)
+- hashes every Round 3 price and trade CSV (`sha256`)
+- replays the data validator and asserts the known counts (price rows, timestamp range, trade rows per day, currency, product set)
+- runs the in-process replay-correctness fixtures (multi-level crossing, fractional MTM, atomic per-product limit enforcement, all-12-product execution, two-no-op exact-zero-diff compare)
+- runs option-diagnostics proof (no `NaN`/`Infinity`, primary fit set is `VEV_5000`..`VEV_5500`, every excluded strike is flagged)
+- runs Monte Carlo coherence proof (seed determinism, shock direction, vol shift, hydrogel-shock isolation, residual-noise isolation, no negative or crossed synthetic books)
+- launches the heavier `inspect`, `replay`, `compare`, `monte-carlo`, `scenario-compare` subprocesses for `round3_research_scenarios` and `round3_fill_sensitivity`
+- captures wall time, output size, file count, peak parent-process RSS, peak process-tree RSS, and child-process count for every subprocess (when `psutil` is installed)
+- writes `verification_report.json`, `verification_report.md`, and `manifest.json`
+
+If `psutil` is not installed, peak RSS values are reported as `n/a` and the report records the missing capture explicitly. RSS coverage now includes the `replay`, `inspect`, `scenario-compare`, and `fill-sensitivity` commands that previously lacked it.
+
+Use `--skip-heavy-mc` to skip the 64-session x workers 1/2/4 sweep when iterating quickly:
+
+```bash
+python -m prosperity_backtester verify-round3 --data-dir data/round3 --output-dir backtests/r3_verification_fast --skip-heavy-mc
+```
+
+Quick mode still runs data validation, replay fixtures, option diagnostics, MC coherence, dashboard payload proof, seed determinism, and small MC subprocesses. The full command remains the release-grade proof. Install the dev extra to include `psutil`; without it, RSS fields are reported as `n/a` and the caveats record the missing capture. The harness exits non-zero if any check or subprocess fails so it can gate trader-script work in scripts.
+
 ## Recommended workflow
 
-1. Inspect `data/round3` with `inspect --json`.
-2. Replay a no-op or minimal trader first.
-3. Replay candidate traders on historical books.
-4. Review option diagnostics before fitting any surface.
-5. Run coherent Monte Carlo with underlying, volatility, and liquidity perturbations.
-6. Re-run under conservative passive-fill settings before trusting small edges.
+1. Run `verify-round3` first. Treat its `verification_report.md` as the trust gate before any trader work.
+2. Inspect `data/round3` with `inspect --json` for ad-hoc data review.
+3. Replay a no-op or minimal trader to confirm a clean local baseline.
+4. Replay candidate traders on historical books.
+5. Review option diagnostics before fitting any surface.
+6. Run coherent Monte Carlo with underlying, volatility, and liquidity perturbations.
+7. Re-run under conservative passive-fill settings before trusting small edges.

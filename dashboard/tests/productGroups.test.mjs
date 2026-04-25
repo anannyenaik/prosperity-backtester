@@ -78,7 +78,7 @@ test('Round 3 product groups keep all 12 products visible without truncation', (
     'Delta-1',
     'Underlying',
     'Surface-fit vouchers',
-    'Excluded diagnostics',
+    'Diagnostic vouchers',
   ])
   assert.deepEqual(groups.find((group) => group.id === 'surface-fit-vouchers').products, [
     'VEV_5000',

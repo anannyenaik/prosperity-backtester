@@ -45,6 +45,7 @@ SUBCOMMANDS = {
     "scenario-compare",
     "derive-fill-profile",
     "workspace-bundle",
+    "verify-round3",
     "clean",
 }
 
@@ -547,6 +548,34 @@ def build_parser() -> argparse.ArgumentParser:
     workspace.add_argument("--open", "--vis", dest="open", action="store_true", help="Serve the written bundle locally and open it in the dashboard")
     workspace.add_argument("--keep-runs", type=_positive_int, default=30, help="When using the default backtests/ output root, keep this many timestamped runs")
 
+    verify = sub.add_parser(
+        "verify-round3",
+        help="Run the end-to-end Round 3 verification harness",
+        formatter_class=_CliFormatter,
+        description=(
+            "Run data validation, replay-correctness fixtures, option-diagnostics checks, "
+            "MC coherence proofs and scenario sweeps for Round 3. Captures per-command wall "
+            "time, output size, file count and (when psutil is available) peak process-tree "
+            "RSS. Writes verification_report.json, verification_report.md and manifest.json."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  python -m prosperity_backtester verify-round3 --data-dir data/round3 --output-dir backtests/r3_verification_latest\n"
+            "  python -m prosperity_backtester verify-round3 --skip-heavy-mc --output-dir backtests/r3_verification_fast\n"
+        ),
+    )
+    verify.add_argument("--data-dir", default=None, help="Round 3 data directory. Defaults to data/round3.")
+    verify.add_argument("--output-dir", default=None, help="Output directory. Defaults to backtests/<timestamp>_r3_verification.")
+    verify.add_argument("--days", nargs="*", default=None, help="Day list. Defaults to 0 1 2.")
+    verify.add_argument("--noop-trader", default=None, help="Path to a Round-3 no-op trader. Defaults to examples/noop_round3_trader.py.")
+    verify.add_argument("--research-config", default=None, help="Path to the research scenario-compare config. Defaults to configs/round3_research_scenarios.json.")
+    verify.add_argument("--fill-sensitivity-config", default=None, help="Path to the fill sensitivity scenario-compare config. Defaults to configs/round3_fill_sensitivity.json.")
+    verify.add_argument("--mc-sessions-fast", type=int, default=8)
+    verify.add_argument("--mc-sessions-medium", type=int, default=32)
+    verify.add_argument("--mc-sessions-heavy", type=int, default=64)
+    verify.add_argument("--mc-synthetic-tick-limit", type=int, default=250)
+    verify.add_argument("--skip-heavy-mc", action="store_true", help="Skip the 64-session x workers 1/2/4 sweep")
+
     clean = sub.add_parser("clean", help="Prune old timestamped backtest run directories")
     clean.add_argument("--dir", default=str(Path.cwd() / "backtests"))
     clean.add_argument("--keep", type=_positive_int, default=30)
@@ -914,6 +943,46 @@ def main(argv: List[str] | None = None) -> None:
             _open_latest(Path(args.dir), args.latest_type, host=args.host, port=args.port)
             return
         serve_directory(Path(args.dir), host=args.host, port=args.port, open_browser=args.open_browser)
+        return
+
+    if args.command == "verify-round3":
+        from .verify_round3 import run_verify_round3
+
+        data_dir = Path(args.data_dir).resolve() if args.data_dir else default_data_dir_for_round(3).resolve()
+        if args.output_dir:
+            output_dir = Path(args.output_dir).resolve()
+            auto_output = False
+        else:
+            output_dir = _timestamped_dir(Path.cwd() / "backtests", "r3_verification")
+            auto_output = True
+
+        days = tuple(int(day) for day in args.days) if args.days else (0, 1, 2)
+        noop_trader = Path(args.noop_trader).resolve() if args.noop_trader else None
+        research_config = Path(args.research_config).resolve() if args.research_config else None
+        fill_sensitivity_config = Path(args.fill_sensitivity_config).resolve() if args.fill_sensitivity_config else None
+
+        report = run_verify_round3(
+            data_dir=data_dir,
+            output_dir=output_dir,
+            days=days,
+            noop_trader=noop_trader,
+            research_scenarios_config=research_config,
+            fill_sensitivity_config=fill_sensitivity_config,
+            mc_sessions_fast=args.mc_sessions_fast,
+            mc_sessions_medium=args.mc_sessions_medium,
+            mc_sessions_heavy=args.mc_sessions_heavy,
+            mc_synthetic_tick_limit=args.mc_synthetic_tick_limit,
+            skip_heavy_mc=bool(args.skip_heavy_mc),
+        )
+        summary = report.get("summary", {})
+        print(f"Verify Round 3 status: {summary.get('overall_status')}")
+        print(f"  passed: {summary.get('passed')}  failed: {summary.get('failed')}  skipped: {summary.get('skipped')}")
+        print(f"  command failures: {summary.get('command_failures')}  commands: {summary.get('command_count')}")
+        print(f"Output: {output_dir}")
+        if summary.get("overall_status") != "pass":
+            # Don't prune on failure: we may need the artefacts.
+            sys.exit(1)
+        _prune_after_auto_run(output_dir, auto_output, 30)
         return
 
     if args.command == "clean":

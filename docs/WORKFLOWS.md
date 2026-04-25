@@ -1,6 +1,34 @@
 # Workflows
 
-Result: the default path is now Round 3 data inspection, Round 3 replay smoke, Round 3 option diagnostics, and coherent Round 3 Monte Carlo. Round 2 remains available as a historical workflow.
+Result: the default path is now Round 3 verification, Round 3 data inspection, Round 3 replay smoke, Round 3 option diagnostics, and coherent Round 3 Monte Carlo. Round 2 remains available as a historical workflow.
+
+## Round 3 verification (run this first)
+
+Trader-script work should only start after the harness reports `pass`:
+
+```bash
+python -m prosperity_backtester verify-round3 --data-dir data/round3 --output-dir backtests/r3_verification_latest
+```
+
+The harness covers:
+
+- provenance (Python, OS, git HEAD, dirty flag, run timestamp, data file `sha256` hashes)
+- exact data validation against the known Round 3 counts (price rows, timestamps, products, trade rows per day)
+- replay-correctness fixtures (multi-level crossing, fractional MTM, atomic per-product limit enforcement, all-12-product execution, two-no-op exact-zero-diff compare)
+- option-diagnostics proof (no `NaN`/`Infinity`, primary fit set is `VEV_5000`..`VEV_5500`, every excluded strike is flagged)
+- Monte Carlo coherence proof (seed determinism, shock direction, vol shift, hydrogel-shock isolation, residual-noise isolation, no negative or crossed synthetic books)
+- subprocess sweep over `inspect`, `replay`, `compare`, `monte-carlo`, `scenario-compare round3_research_scenarios`, and `scenario-compare round3_fill_sensitivity`
+- per-command wall time, output size, file count, peak parent-process RSS, peak process-tree RSS, and child-process count (when `psutil` is installed)
+
+It writes `verification_report.json`, `verification_report.md`, and `manifest.json`. Use `--skip-heavy-mc` to drop the 64-session x workers 1/2/4 sweep when iterating quickly. The CLI exits non-zero on any failure.
+
+Quick mode command:
+
+```bash
+python -m prosperity_backtester verify-round3 --data-dir data/round3 --output-dir backtests/r3_verification_fast --skip-heavy-mc
+```
+
+Quick mode still runs data validation, replay fixtures, option diagnostics, MC coherence, dashboard payload proof, seed determinism, and small MC subprocesses. Install the dev extra (`python -m pip install -e ".[dev]"`) to include `psutil`; without it, RSS fields are reported as unavailable rather than estimated.
 
 ## Round 3 smoke path
 

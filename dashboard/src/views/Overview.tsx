@@ -12,7 +12,7 @@ import { BundleBadge } from '../components/BundleBadge'
 import { PhaseTimings } from '../components/PhaseTimings'
 import { fmtNum, fmtInt, fmtPct, fmtDate, fmtBytes, colorForValue } from '../lib/format'
 import { formatBool, getComparisonRows, getTabAvailability, interpretBundle, isFiniteNumber, numberOrNull } from '../lib/bundles'
-import { positionLimit, productLabel } from '../lib/products'
+import { positionLimit, productLabel, productShortLabel } from '../lib/products'
 import { POSITION_LIMIT, PRODUCT_LABELS, type DashboardPayload, type DataContractEntry, type Product, type WorkspaceIntegrity, type WorkspaceSectionKey, type WorkspaceSourceBundle } from '../types'
 
 const WORKSPACE_SECTION_KEYS: WorkspaceSectionKey[] = [
@@ -139,17 +139,39 @@ export function Overview() {
     ? (latestOptionDiagnostics.vouchers as Array<Record<string, unknown>>).map((row) => {
         const product = String(row.product ?? '')
         const productSummary = payload.summary?.per_product?.[product]
+        const warnings = Array.isArray(row.warnings) ? row.warnings.map(String) : []
         return {
           ...row,
           product,
+          include_in_surface_fit: row.include_in_surface_fit === true,
+          fit_group: row.include_in_surface_fit === true ? 'Surface fit' : 'Diagnostic',
           position: productSummary?.final_position ?? null,
           pnl_contribution: productSummary?.final_mtm ?? null,
-          warning_text: Array.isArray(row.warnings) ? row.warnings.join(' ') : '',
+          warning_count: warnings.length,
+          warning_text: warnings.join('\n'),
         }
       })
     : []
+  const optionSurfaceFitCount = optionChainRows.filter((row) => row.include_in_surface_fit === true).length
+  const optionWarningCount = optionChainRows.reduce((total, row) => total + Number(row.warning_count ?? 0), 0)
   const optionChainCols: ColDef<Record<string, unknown>>[] = [
-    { key: 'product', header: 'Product', fmt: 'str', render: (_value, row) => productLabel(payload, String(row.product ?? '')) },
+    {
+      key: 'product',
+      header: 'Product',
+      fmt: 'str',
+      render: (_value, row) => {
+        const product = String(row.product ?? '')
+        return (
+          <span className="block min-w-[92px]">
+            <span className="block font-display text-xs font-semibold uppercase tracking-[0.08em] text-txt">
+              {productShortLabel(payload, product)}
+            </span>
+            <span className="hud-label mt-1 block text-muted">{productLabel(payload, product)}</span>
+          </span>
+        )
+      },
+    },
+    { key: 'fit_group', header: 'Fit', fmt: 'str' },
     { key: 'strike', header: 'Strike', fmt: 'int', align: 'right' },
     { key: 'average_mid', header: 'Mid', fmt: 'num', digits: 2, align: 'right' },
     { key: 'average_spread', header: 'Spread', fmt: 'num', digits: 2, align: 'right' },
@@ -160,7 +182,22 @@ export function Overview() {
     { key: 'delta_mean', header: 'Delta', fmt: 'num', digits: 3, align: 'right' },
     { key: 'position', header: 'Pos', fmt: 'int', align: 'right' },
     { key: 'pnl_contribution', header: 'PnL', fmt: 'num', digits: 1, align: 'right', tone: (v) => colorForValue(Number(v)) },
-    { key: 'warning_text', header: 'Warnings', fmt: 'str' },
+    {
+      key: 'warning_count',
+      header: 'Notes',
+      fmt: 'int',
+      render: (_value, row) => {
+        const count = Number(row.warning_count ?? 0)
+        return (
+          <span
+            title={String(row.warning_text ?? '')}
+            className={count > 0 ? 'rounded-md border border-warn/25 bg-warn/10 px-2 py-1 text-warn' : 'text-muted'}
+          >
+            {count > 0 ? `${count} note${count === 1 ? '' : 's'}` : 'Clean'}
+          </span>
+        )
+      },
+    },
   ]
   const runMetadataPairs = [
     { label: 'Bundle type', value: bundle.badge, tone: 'accent' as const },
@@ -233,6 +270,16 @@ export function Overview() {
         <Card
           title="Round 3 option chain"
           subtitle={`Compact day ${String(latestOptionDiagnostics?.day ?? 'latest')} voucher diagnostics. Fair values are diagnostic only; replay uses observed books.`}
+          action={
+            <div className="flex flex-wrap justify-end gap-2">
+              <span className="hud-label rounded-lg border border-accent/20 bg-accent/10 px-2.5 py-1 text-accent">
+                {fmtInt(optionSurfaceFitCount)} surface-fit
+              </span>
+              <span className="hud-label rounded-lg border border-warn/20 bg-warn/10 px-2.5 py-1 text-warn">
+                {fmtInt(optionWarningCount)} notes
+              </span>
+            </div>
+          }
         >
           <DataTable rows={optionChainRows} cols={optionChainCols} striped />
         </Card>

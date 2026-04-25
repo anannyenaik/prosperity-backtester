@@ -6,7 +6,7 @@ No Round 3 alpha strategy is checked in. The tracked `examples/noop_round3_trade
 
 ## Quick start
 
-Runtime code uses the Python standard library only. Tests use `pytest`.
+Runtime code uses the Python standard library only. Tests use `pytest`; the dev extra also installs `psutil` so `verify-round3` can capture process-tree RSS.
 
 ```bash
 python -m pip install -e ".[dev]"
@@ -22,6 +22,20 @@ npm run build --prefix dashboard
 ```
 
 ## Round 3 path
+
+Run the verification harness first; it gates trader-script work and writes a structured pass/fail report:
+
+```bash
+python -m prosperity_backtester verify-round3 --data-dir data/round3 --output-dir backtests/r3_verification_latest
+```
+
+Quick mode skips only the heavy 64-session worker sweep, while still running data validation, replay fixtures, option diagnostics, MC coherence, dashboard payload proof, and small MC subprocesses:
+
+```bash
+python -m prosperity_backtester verify-round3 --data-dir data/round3 --output-dir backtests/r3_verification_fast --skip-heavy-mc
+```
+
+`verify-round3` validates data counts, runs replay-correctness fixtures, asserts option-diagnostic safety, runs MC coherence and seed-determinism checks, and launches `inspect`, `replay`, `compare`, `monte-carlo`, and `scenario-compare` subprocesses. It captures wall time, output size, and (when `psutil` is installed) peak parent and process-tree RSS for every command. Without `psutil`, the harness still runs and reports RSS as unavailable.
 
 Inspect the tracked Round 3 public data:
 

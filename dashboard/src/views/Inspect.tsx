@@ -20,7 +20,7 @@ import {
   globalTs,
   rowsAround,
 } from '../lib/data'
-import { colorForValue, fmtInt, fmtNum, fmtPct, fmtPrice, fmtTimestamp } from '../lib/format'
+import { colorForValue, fmtCodeLabel, fmtInt, fmtNum, fmtPct, fmtPrice, fmtTimestamp } from '../lib/format'
 import { getTabAvailability, numberOrNull } from '../lib/bundles'
 import { positionLimit, productLabel } from '../lib/products'
 import type { FillRow, OrderIntentRow, OrderRow, Product } from '../types'
@@ -115,8 +115,8 @@ export function Inspect() {
     { key: 'side', header: 'Side', fmt: 'str', tone: (v) => (v === 'buy' ? 'good' : 'bad') },
     { key: 'price', header: 'Price', fmt: 'num', digits: 0, align: 'right' },
     { key: 'quantity', header: 'Qty', fmt: 'int', align: 'right' },
-    { key: 'kind', header: 'Kind', fmt: 'str' },
-    { key: 'passive_match_type', header: 'Passive type', fmt: 'str' },
+    { key: 'kind', header: 'Kind', fmt: 'str', render: fmtCodeLabel },
+    { key: 'passive_match_type', header: 'Passive type', fmt: 'str', render: fmtCodeLabel },
     { key: 'markout_5', header: 'M+5', fmt: 'num', tone: (v) => colorForValue(Number(v)), align: 'right' },
     { key: 'signed_edge_to_analysis_fair', header: 'Edge', fmt: 'num', tone: (v) => colorForValue(Number(v)), align: 'right' },
   ]
@@ -126,7 +126,7 @@ export function Inspect() {
     { key: 'timestamp', header: 'Tick', fmt: 'int' },
     { key: 'submitted_quantity', header: 'Qty', fmt: 'int', align: 'right', tone: (v) => colorForValue(Number(v)) },
     { key: 'submitted_price', header: 'Price', fmt: 'num', digits: 0, align: 'right' },
-    { key: 'order_role', header: 'Role', fmt: 'str' },
+    { key: 'order_role', header: 'Role', fmt: 'str', render: fmtCodeLabel },
     { key: 'distance_to_touch', header: 'Dist', fmt: 'num', align: 'right' },
     { key: 'signed_edge_to_analysis_fair', header: 'Edge', fmt: 'num', align: 'right', tone: (v) => colorForValue(Number(v)) },
   ]

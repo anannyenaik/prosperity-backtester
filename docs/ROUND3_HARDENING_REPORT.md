@@ -41,7 +41,23 @@ Result: Round 3 replay, diagnostics, Monte Carlo, dashboard review, and output c
 | Scenario compare `round3_research_scenarios.json` | 153.588s | 5 | 50,203 B | not captured by harness |
 | Fill sensitivity `round3_fill_sensitivity.json` | 95.108s | 5 | 54,585 B | not captured by harness |
 
-RSS is recorded from the existing Monte Carlo reporting harness. Replay and inspect peak process-tree RSS are not currently captured.
+The values above are from the original 2026-04-24 hardening pass. Replay, inspect, and scenario-compare RSS rows that originally read `not captured by harness` are now covered by the `verify-round3` harness when `psutil` is installed in the active environment.
+
+## End-to-end verification harness (added 2026-04-25)
+
+`python -m prosperity_backtester verify-round3 --data-dir data/round3 --output-dir backtests/r3_verification_latest` is now the single entry point that produces a structured trustworthiness report. It writes `verification_report.json`, `verification_report.md`, and `manifest.json`, and exits non-zero on any failure.
+
+The report combines:
+
+- provenance (Python version, platform, git HEAD, dirty flag, run timestamp, per-file `sha256` data hashes)
+- exact data validation against known Round 3 counts
+- in-process replay-correctness fixtures (multi-level crossing, fractional MTM, atomic per-product limit enforcement, 12-product execution, two-no-op exact-zero-diff compare)
+- option-diagnostics safety (no `NaN`/`Infinity`, primary fit set is `VEV_5000`..`VEV_5500`, every excluded strike flagged)
+- Monte Carlo coherence proof (seed determinism, shock direction, vol shift, hydrogel-shock isolation, residual-noise isolation, no negative or crossed synthetic books)
+- subprocess sweep over `inspect`, `replay` day 0, `replay` days 0/1/2, `compare`, three Monte Carlo cells, two seed-determinism MC runs, `scenario-compare` for `round3_research_scenarios`, and `scenario-compare` for `round3_fill_sensitivity`
+- per-command wall time, output size, file count, peak parent-process RSS, peak process-tree RSS, and child-process count (when `psutil` is installed; the report records the gap explicitly otherwise)
+
+The latest performance/RSS numbers should be regenerated locally rather than transcribed here, since they are environment-specific. Run `verify-round3` and read `backtests/r3_verification_latest/verification_report.md` for the up-to-date table.
 
 ## Caveats
 
@@ -50,3 +66,4 @@ RSS is recorded from the existing Monte Carlo reporting harness. Replay and insp
 - Option fair values, fitted IVs, Greeks, residuals, and z-scores are diagnostics and synthetic-calibration inputs, not historical replay marks.
 - Replay does not apply voucher exercise or cash settlement.
 - Scenario compare is still the slowest checked-in R3 workflow because it replays multiple full historical scenarios.
+- `psutil` is included in the dev extra, but is not a runtime dependency. Install the dev extra to capture peak parent and process-tree RSS in the verification report; the harness records the gap when missing.

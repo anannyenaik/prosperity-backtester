@@ -57,7 +57,7 @@ export function productGroups(payload: DashboardPayload | null | undefined): Arr
       label = 'Surface-fit vouchers'
     } else if (assetClass === 'option') {
       groupId = 'diagnostic-vouchers'
-      label = 'Excluded diagnostics'
+      label = 'Diagnostic vouchers'
     } else if (assetClass === 'delta1') {
       groupId = 'delta1'
       label = 'Delta-1'

@@ -17,7 +17,7 @@ import {
   buildFairFillData,
   byProduct,
 } from '../lib/data'
-import { fmtNum, fmtInt, fmtPct, colorForValue } from '../lib/format'
+import { fmtCodeLabel, fmtNum, fmtInt, fmtPct, colorForValue } from '../lib/format'
 import { getTabAvailability, numberOrNull } from '../lib/bundles'
 import { positionLimit, productLabel, productShortLabel } from '../lib/products'
 import type { Product, FillRow, BehaviourPerProduct } from '../types'
@@ -63,8 +63,8 @@ export function Replay() {
     { key: 'side', header: 'Side', fmt: 'str', tone: (v) => (v === 'buy' ? 'good' : 'bad') },
     { key: 'price', header: 'Price', fmt: 'num', digits: 0 },
     { key: 'quantity', header: 'Qty', fmt: 'int' },
-    { key: 'kind', header: 'Kind', fmt: 'str' },
-    { key: 'passive_match_type', header: 'Passive type', fmt: 'str' },
+    { key: 'kind', header: 'Kind', fmt: 'str', render: fmtCodeLabel },
+    { key: 'passive_match_type', header: 'Passive type', fmt: 'str', render: fmtCodeLabel },
     { key: 'markout_1', header: 'Mkt+1', fmt: 'num', tone: (v) => colorForValue(Number(v)) },
     { key: 'markout_5', header: 'Mkt+5', fmt: 'num', tone: (v) => colorForValue(Number(v)) },
     { key: 'signed_edge_to_analysis_fair', header: 'Edge', fmt: 'num', digits: 1, tone: (v) => colorForValue(Number(v)) },

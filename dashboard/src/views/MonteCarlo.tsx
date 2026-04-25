@@ -100,6 +100,18 @@ export function MonteCarlo() {
     { key: 'fill_count', header: 'Fills', fmt: 'int' },
     { key: 'limit_breaches', header: 'Breaches', fmt: 'int', tone: (v) => (Number(v) > 0 ? 'bad' : 'neutral') },
   ]
+  const perProductRows = Object.entries(summary.per_product ?? {}).map(([prod, stats]) => ({
+    product: prod,
+    mean: stats.mean,
+    min: stats.min,
+    max: stats.max,
+  }))
+  const perProductCols: ColDef<(typeof perProductRows)[0]>[] = [
+    { key: 'product', header: 'Product', fmt: 'str', render: (_value, row) => productLabel(run.payload, row.product) },
+    { key: 'mean', header: 'Mean', fmt: 'num', align: 'right', tone: (v) => colorForValue(Number(v)) },
+    { key: 'min', header: 'Min', fmt: 'num', align: 'right', tone: (v) => colorForValue(Number(v)) },
+    { key: 'max', header: 'Max', fmt: 'num', align: 'right', tone: (v) => colorForValue(Number(v)) },
+  ]
 
   return (
     <div className="space-y-5">
@@ -219,27 +231,9 @@ export function MonteCarlo() {
       </Card>
 
       {/* Per-product MC summary */}
-      {summary.per_product && (
+      {perProductRows.length > 0 && (
         <Card title="Per-product MC summary">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Object.entries(summary.per_product).map(([prod, stats]) => (
-              <div key={prod} className="rounded-lg bg-surface-2 border border-border p-4">
-                <div className="text-muted text-xs uppercase tracking-wider mb-3 font-semibold">
-                  {productLabel(run.payload, prod)}
-                </div>
-                <div className="grid grid-cols-3 gap-3 text-xs">
-                  {(['mean', 'min', 'max'] as const).map((k) => (
-                    <div key={k}>
-                      <div className="text-muted uppercase tracking-wide mb-0.5">{k}</div>
-                      <div className={`font-bold font-mono ${colorForValue(stats[k]) === 'good' ? 'text-good' : colorForValue(stats[k]) === 'bad' ? 'text-bad' : 'text-txt-soft'}`}>
-                        {fmtNum(stats[k])}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+          <DataTable rows={perProductRows} cols={perProductCols} maxRows={20} striped />
         </Card>
       )}
     </div>

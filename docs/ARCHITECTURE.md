@@ -50,6 +50,10 @@ Round-specific logic is isolated:
 - `storage.py` controls light versus full output profiles
 - `provenance.py` records git and runtime metadata
 
+### Verification
+
+- `verify_round3.py` runs the Round 3 trustworthiness sweep: data validation, replay-correctness fixtures, option-diagnostics safety, MC coherence, dashboard payload checks, and a subprocess sweep over `inspect`, `replay`, `compare`, `monte-carlo`, and `scenario-compare`. It samples peak parent and process-tree RSS via `psutil` (when available) and writes `verification_report.json`, `verification_report.md`, and `manifest.json`. The CLI command `verify-round3` exits non-zero on any failure so the harness can gate further work.
+
 ## Design boundaries
 
 - Historical replay trades the observed public books.

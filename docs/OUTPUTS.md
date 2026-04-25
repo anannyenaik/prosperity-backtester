@@ -53,6 +53,28 @@ Round 3 manifests may additionally carry:
 | `optimization` | Variant ranking by replay plus Monte Carlo score | `optimization.csv` |
 | `scenario_compare` | Ranking under configured stress scenarios | `scenario_results.csv`, `scenario_winners.csv`, `robustness_ranking.csv`, `scenario_pairwise_mc.csv` |
 | `round2_scenarios` | Ranking under MAF and extra-access assumptions | `round2_scenarios.csv`, `round2_winners.csv`, `round2_pairwise_mc.csv`, `round2_maf_sensitivity.csv` |
+| `round3_verification` | Round 3 trustworthiness sweep | `verification_report.json`, `verification_report.md`, plus child run directories for each subprocess command |
+
+## Round 3 verification report
+
+`verify-round3` writes:
+
+- `verification_report.json`: structured payload with provenance, summary, per-check results, per-command results, and caveats
+- `verification_report.md`: human-readable summary with a check table and a performance/RSS/output-size table
+- `manifest.json`: lightweight type/status alias for discoverability
+
+`verification_report.json` schema highlights:
+
+- `provenance.git.commit`, `git.dirty`, `git.branch`
+- `provenance.runtime.python_version`, `runtime.executable`
+- `mode`: `full` or `quick`; quick mode is `--skip-heavy-mc`
+- `psutil_available`: `true` when peak RSS is captured, otherwise the `caveats[]` records the gap
+- `summary.overall_status`: `"pass"` or `"fail"`
+- `checks[].name` and `checks[].status` for each in-process correctness gate (`data_validation`, `option_diagnostics`, `mc_coherence`, replay fixtures, `dashboard_payload`, `mc_seed_determinism`)
+- `commands[]` records per subprocess: `name`, `command`, `wall_seconds`, `peak_rss_mb_process`, `peak_rss_mb_tree`, `peak_child_process_count`, `output_size_bytes`, `output_file_count`, `status`, `rss_capture_method`, and `rss_caveats`. Captured stdout files, including `inspect_report.json`, are included in output-size accounting.
+- `caveats[]`: explicit notes about passive-fill approximation, classic-only Round 3 MC, and missing RSS capture when applicable
+
+Each subprocess writes its bundle into a sibling directory under the verification output (for example `replay_noop_days012/dashboard.json`), so the harness output is self-contained and replayable.
 
 ## Light versus full output
 

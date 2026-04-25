@@ -79,6 +79,26 @@ export function fmtTimestamp(global: number): string {
   return `${dayLabel} t${ts}`
 }
 
+const CODE_LABELS: Record<string, string> = {
+  aggressive_visible: 'Aggressive visible',
+  passive_approx: 'Passive approximate',
+  same_price_queue: 'Same-price queue',
+  price_improved: 'Price improved',
+  crossed_spread: 'Crossed spread',
+  no_passive_match: 'No passive match',
+}
+
+export function fmtCodeLabel(v: unknown): string {
+  if (v == null || v === '') return '-'
+  const key = String(v)
+  if (CODE_LABELS[key]) return CODE_LABELS[key]
+  return key
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ')
+}
+
 export function truncateStr(s: string, max = 24): string {
   return s.length > max ? s.slice(0, max - 1) + '...' : s
 }

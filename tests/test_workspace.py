@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from prosperity_backtester.__main__ import main
 from prosperity_backtester.server import _find_bundles
 from prosperity_backtester.workspace import WorkspaceSource, assemble_workspace_payload, write_workspace_bundle
@@ -262,6 +264,11 @@ def test_workspace_assembly_records_promoted_and_shadowed_sections():
 def test_workspace_bundle_cli_builds_real_pack_into_temporary_output(tmp_path):
     output_dir = tmp_path / "workspace_bundle"
     source_dir = ROOT / "backtests" / "final_round2_study_pack"
+    if not source_dir.is_dir():
+        pytest.skip(
+            "backtests/final_round2_study_pack is generated output and is not checked in; "
+            "regenerate it to run this end-to-end workspace integration test."
+        )
 
     main([
         "workspace-bundle",
