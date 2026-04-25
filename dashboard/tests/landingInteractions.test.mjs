@@ -124,7 +124,7 @@ test('explicit scroll cursor targets keep custom scrollbar regions in scroll mod
   assert.equal(getExplicitScrollCursorAxis(null), null)
 })
 
-test('bundle browser overlay enables native cursor fallback while preserving click targets', () => {
+test('bundle browser overlay keeps the custom cursor above the modal', () => {
   const root = { classList: createClassList() }
   const body = { classList: createClassList() }
   const doc = { documentElement: root, body }
@@ -140,8 +140,13 @@ test('bundle browser overlay enables native cursor fallback while preserving cli
   assert.equal(body.classList.contains(CURSOR_OVERLAY_OPEN_CLASS), false)
 
   const css = fs.readFileSync(path.join(dashboardRoot, 'src', 'index.css'), 'utf8')
-  assert.match(css, new RegExp(`html\\.has-custom-cursor\\.${CUSTOM_CURSOR_VISIBLE_CLASS}:not\\(\\.${CURSOR_OVERLAY_OPEN_CLASS}\\)`))
-  assert.match(css, new RegExp(`html\\.${CURSOR_OVERLAY_OPEN_CLASS} \\.custom-cursor`))
+  const cursorSource = fs.readFileSync(path.join(dashboardRoot, 'src', 'components', 'Cursor.tsx'), 'utf8')
+  assert.match(css, new RegExp(`html\\.has-custom-cursor\\.${CUSTOM_CURSOR_VISIBLE_CLASS}`))
+  assert.doesNotMatch(css, new RegExp(`html\\.has-custom-cursor\\.${CUSTOM_CURSOR_VISIBLE_CLASS}:not\\(\\.${CURSOR_OVERLAY_OPEN_CLASS}\\)`))
+  assert.doesNotMatch(css, new RegExp(`html\\.${CURSOR_OVERLAY_OPEN_CLASS} \\.custom-cursor\\s*\\{[\\s\\S]*?visibility:\\s*hidden`))
+  assert.match(css, /\.custom-cursor\s*\{[\s\S]*?pointer-events:\s*none;/)
+  assert.match(css, /\.custom-cursor\s*\{[\s\S]*?z-index:\s*2147483647;/)
+  assert.match(cursorSource, /createPortal\(cursorLayer, document\.body\)/)
 })
 
 function createClassList() {

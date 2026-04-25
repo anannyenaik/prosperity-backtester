@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import {
   CUSTOM_CURSOR_VISIBLE_CLASS,
   getScrollbarHitAtPoint,
@@ -206,10 +207,13 @@ export function Cursor() {
     }
   }, [])
 
-  return (
+  const cursorLayer = (
     <>
       <div ref={ringRef} className="custom-cursor custom-cursor-ring" aria-hidden="true" />
       <div ref={coreRef} className="custom-cursor custom-cursor-core" aria-hidden="true" />
     </>
   )
+
+  if (typeof document === 'undefined' || !document.body) return cursorLayer
+  return createPortal(cursorLayer, document.body)
 }

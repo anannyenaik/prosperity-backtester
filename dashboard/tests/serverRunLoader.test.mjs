@@ -169,8 +169,12 @@ test('browse local server opens a fixed floating overlay instead of an in-flow p
   })
 
   const surface = renderer.root.find((node) => node.props['data-loader-surface'] === 'browser')
+  const list = renderer.root.find((node) => String(node.props.className ?? '').includes('bundle-browser-list'))
   assert.match(surface.props.className, /\bfixed\b/)
   assert.doesNotMatch(surface.props.className, /\babsolute\b/)
+  assert.equal(surface.props.style.height, surface.props.style.maxHeight)
+  assert.match(list.props.className, /\boverflow-y-auto\b/)
+  assert.equal(list.props['data-scrollbar-axis'], 'y')
   assert.match(JSON.stringify(renderer.toJSON()), /Bundle browser/)
   assert.match(JSON.stringify(renderer.toJSON()), /Available bundles \(58 shown of 58\)/)
   assert.match(JSON.stringify(renderer.toJSON()), /served run 57/)

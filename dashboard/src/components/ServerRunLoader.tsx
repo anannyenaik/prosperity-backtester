@@ -273,6 +273,10 @@ export function ServerRunLoader() {
   }, [filter, serverRuns])
 
   const loading = loadingKey != null
+  const browserLayerStyle = {
+    ...layerStyle,
+    height: layerStyle.maxHeight,
+  }
   const browserLayer = browserState.open ? (
     <>
       <button
@@ -287,7 +291,7 @@ export function ServerRunLoader() {
         aria-modal="true"
         aria-label="Bundle browser"
         className="loader-surface fixed z-50"
-        style={layerStyle}
+        style={browserLayerStyle}
       >
         <div className="loader-surface-body flex min-h-0 flex-col">
           <div className="flex items-start justify-between gap-4 border-b border-border bg-white/[0.03] px-4 py-4">
@@ -333,7 +337,11 @@ export function ServerRunLoader() {
                   ))}
                 </div>
               </div>
-              <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-border">
+              <div
+                className="bundle-browser-list min-h-0 flex-1 overflow-y-auto divide-y divide-border"
+                data-scrollbar-axis="y"
+                data-scrollbar-size="10"
+              >
                 {visibleRuns.length > 0 ? (
                   visibleRuns.map((run) => (
                     <button
