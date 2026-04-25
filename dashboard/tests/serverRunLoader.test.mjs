@@ -29,7 +29,7 @@ await build({
   format: 'esm',
   platform: 'node',
   outfile: compiledModule,
-  external: ['react', 'react/jsx-runtime', 'react-test-renderer', 'zustand', 'clsx', 'lucide-react'],
+  external: ['react', 'react/jsx-runtime', 'react-dom', 'react-test-renderer', 'zustand', 'clsx', 'lucide-react'],
   logLevel: 'silent',
 })
 
@@ -145,16 +145,16 @@ function findButton(root, label) {
 
 test('browse local server opens a fixed floating overlay instead of an in-flow panel', async (t) => {
   resetStore()
+  const runs = Array.from({ length: 58 }, (_, index) =>
+    runMeta({
+      path: `backtests/run_${String(index).padStart(2, '0')}/dashboard.json`,
+      name: `served run ${index}`,
+      type: index % 3 === 0 ? 'replay' : index % 3 === 1 ? 'monte_carlo' : 'comparison',
+    }),
+  )
   const fetchMock = mockFetch({
     '/api/runs': {
-      json: [
-        runMeta(),
-        runMeta({
-          path: 'backtests/2026-04-23_20-10-00_comparison/dashboard.json',
-          name: '2026-04-23 compare',
-          type: 'comparison',
-        }),
-      ],
+      json: runs,
     },
   })
   t.after(() => fetchMock.restore())
@@ -172,7 +172,8 @@ test('browse local server opens a fixed floating overlay instead of an in-flow p
   assert.match(surface.props.className, /\bfixed\b/)
   assert.doesNotMatch(surface.props.className, /\babsolute\b/)
   assert.match(JSON.stringify(renderer.toJSON()), /Bundle browser/)
-  assert.match(JSON.stringify(renderer.toJSON()), /Available bundles/)
+  assert.match(JSON.stringify(renderer.toJSON()), /Available bundles \(58 shown of 58\)/)
+  assert.match(JSON.stringify(renderer.toJSON()), /served run 57/)
 })
 
 test('bundle browser labels workspace bundles clearly with source and missing counts', async (t) => {
@@ -257,7 +258,7 @@ test('workspace quick-load opens the latest workspace bundle directly', async (t
   ])
 })
 
-test('missing quick-loads show an explicit unavailable notice instead of failing silently', async (t) => {
+test('missing workspace quick-load shows the required explicit notice', async (t) => {
   resetStore()
   const fetchMock = mockFetch({
     '/api/runs': {
@@ -279,13 +280,12 @@ test('missing quick-loads show an explicit unavailable notice instead of failing
   })
 
   await act(async () => {
-    await findButton(renderer.root, 'Load latest Monte Carlo bundle').props.onClick()
+    await findButton(renderer.root, 'Open Latest Workspace').props.onClick()
   })
 
   const rendered = JSON.stringify(renderer.toJSON())
   assert.match(rendered, /Quick load unavailable/)
-  assert.match(rendered, /Monte Carlo bundle unavailable/)
-  assert.match(rendered, /No monte carlo bundle is currently available on the local server\./i)
+  assert.match(rendered, /No workspace bundle found/)
   assert.match(rendered, /Browse available bundles/)
   assert.doesNotMatch(rendered, /Available bundles/)
 })
@@ -305,7 +305,7 @@ test('unavailable notices can be dismissed cleanly', async (t) => {
   })
 
   await act(async () => {
-    await findButton(renderer.root, 'Load latest Comparison bundle').props.onClick()
+    await findButton(renderer.root, 'Open Latest Workspace').props.onClick()
   })
 
   assert.equal(renderer.root.findAll((node) => node.props['data-loader-surface'] === 'notice').length, 1)
@@ -357,7 +357,7 @@ test('browse from an unavailable notice opens the bundle browser and clears the 
   })
 
   await act(async () => {
-    await findButton(renderer.root, 'Load latest Comparison bundle').props.onClick()
+    await findButton(renderer.root, 'Open Latest Workspace').props.onClick()
   })
 
   assert.equal(renderer.root.findAll((node) => node.props['data-loader-surface'] === 'notice').length, 1)
@@ -372,7 +372,7 @@ test('browse from an unavailable notice opens the bundle browser and clears the 
   assert.match(rendered, /2026-04-23 compare/)
 })
 
-test('matching quick-loads still fetch and load the selected bundle', async (t) => {
+test('single-purpose cards open a filtered browser and selecting a row loads it', async (t) => {
   resetStore()
   const compareRun = runMeta({
     path: 'backtests/2026-04-23_20-05-00_compare/dashboard.json',
@@ -395,7 +395,17 @@ test('matching quick-loads still fetch and load the selected bundle', async (t) 
   })
 
   await act(async () => {
-    await findButton(renderer.root, 'Load latest Comparison bundle').props.onClick()
+    await findButton(renderer.root, 'Browse Comparison bundles').props.onClick()
+  })
+
+  assert.deepEqual(fetchMock.calls, ['/api/runs'])
+  let rendered = JSON.stringify(renderer.toJSON())
+  assert.match(rendered, /Comparison bundles \(1 shown of 2\)/)
+  assert.match(rendered, /2026-04-23 compare/)
+  assert.doesNotMatch(rendered, /2026-04-23 replay/)
+
+  await act(async () => {
+    await findButton(renderer.root, '2026-04-23 compare').props.onClick()
   })
 
   assert.deepEqual(fetchMock.calls, [
@@ -440,4 +450,149 @@ test('generic latest bundle skips workspace bundles and opens the latest single-
     '/api/runs',
     '/api/run/backtests%2F2026-04-24_08-45-00_compare%2Fdashboard.json',
   ])
+})
+
+test('generic latest bundle skips unknown and workspace bundles', async (t) => {
+  resetStore()
+  const unknownRun = runMeta({
+    path: 'backtests/2026-04-24_09-05-00_unknown/dashboard.json',
+    name: '2026-04-24 unknown',
+    type: 'legacy',
+  })
+  const workspaceRun = runMeta({
+    path: 'backtests/2026-04-24_09-00-00_workspace/dashboard.json',
+    name: '2026-04-24 workspace',
+    type: 'workspace',
+    workspaceSourceCount: 3,
+  })
+  const replayRun = runMeta({
+    path: 'backtests/2026-04-24_08-45-00_replay/dashboard.json',
+    name: '2026-04-24 replay',
+    type: 'replay',
+  })
+  const fetchMock = mockFetch({
+    '/api/runs': {
+      json: [unknownRun, workspaceRun, replayRun],
+    },
+    '/api/run/backtests%2F2026-04-24_08-45-00_replay%2Fdashboard.json': {
+      json: payload('replay'),
+    },
+  })
+  t.after(() => fetchMock.restore())
+
+  let renderer
+  await act(async () => {
+    renderer = create(React.createElement(ServerRunLoader))
+  })
+
+  await act(async () => {
+    await findButton(renderer.root, 'Open Latest Bundle').props.onClick()
+  })
+
+  assert.deepEqual(fetchMock.calls, [
+    '/api/runs',
+    '/api/run/backtests%2F2026-04-24_08-45-00_replay%2Fdashboard.json',
+  ])
+})
+
+test('replay, Monte Carlo and comparison cards filter the served run list', async (t) => {
+  resetStore()
+  const runs = [
+    runMeta({
+      path: 'r3_algo_v1_final_replay/dashboard.json',
+      name: 'r3_algo_v1_final_replay',
+      type: 'replay',
+    }),
+    runMeta({
+      path: 'r3_algo_v1_final_compare/dashboard.json',
+      name: 'r3_algo_v1_final_compare',
+      type: 'comparison',
+    }),
+    runMeta({
+      path: 'r3_algo_v1_final_mc32/dashboard.json',
+      name: 'r3_algo_v1_final_mc32',
+      type: 'monte_carlo',
+    }),
+    ...Array.from({ length: 55 }, (_, index) =>
+      runMeta({
+        path: `backtests/calibration_${index}/dashboard.json`,
+        name: `calibration ${index}`,
+        type: 'calibration',
+      }),
+    ),
+  ]
+  const fetchMock = mockFetch({
+    '/api/runs': {
+      json: runs,
+    },
+  })
+  t.after(() => fetchMock.restore())
+
+  let renderer
+  await act(async () => {
+    renderer = create(React.createElement(ServerRunLoader))
+  })
+
+  await act(async () => {
+    await findButton(renderer.root, 'Browse Replay bundles').props.onClick()
+  })
+
+  let rendered = JSON.stringify(renderer.toJSON())
+  assert.match(rendered, /Replay bundles \(1 shown of 58\)/)
+  assert.match(rendered, /r3_algo_v1_final_replay/)
+  assert.doesNotMatch(rendered, /r3_algo_v1_final_compare/)
+
+  await act(async () => {
+    await findButton(renderer.root, 'Close bundle browser').props.onClick()
+  })
+  await act(async () => {
+    await findButton(renderer.root, 'Browse Monte Carlo bundles').props.onClick()
+  })
+
+  rendered = JSON.stringify(renderer.toJSON())
+  assert.match(rendered, /Monte Carlo bundles \(1 shown of 58\)/)
+  assert.match(rendered, /r3_algo_v1_final_mc32/)
+  assert.doesNotMatch(rendered, /r3_algo_v1_final_replay/)
+
+  await act(async () => {
+    await findButton(renderer.root, 'Close bundle browser').props.onClick()
+  })
+  await act(async () => {
+    await findButton(renderer.root, 'Browse Comparison bundles').props.onClick()
+  })
+
+  rendered = JSON.stringify(renderer.toJSON())
+  assert.match(rendered, /Comparison bundles \(1 shown of 58\)/)
+  assert.match(rendered, /r3_algo_v1_final_compare/)
+  assert.doesNotMatch(rendered, /r3_algo_v1_final_mc32/)
+})
+
+test('single-purpose cards show a clear empty state when no served runs match', async (t) => {
+  resetStore()
+  const fetchMock = mockFetch({
+    '/api/runs': {
+      json: Array.from({ length: 58 }, (_, index) =>
+        runMeta({
+          path: `backtests/replay_${index}/dashboard.json`,
+          name: `replay ${index}`,
+          type: 'replay',
+        }),
+      ),
+    },
+  })
+  t.after(() => fetchMock.restore())
+
+  let renderer
+  await act(async () => {
+    renderer = create(React.createElement(ServerRunLoader))
+  })
+
+  await act(async () => {
+    await findButton(renderer.root, 'Browse Comparison bundles').props.onClick()
+  })
+
+  const rendered = JSON.stringify(renderer.toJSON())
+  assert.match(rendered, /Comparison bundles \(0 shown of 58\)/)
+  assert.match(rendered, /No comparison bundles found/)
+  assert.match(rendered, /returned 58 bundles/)
 })

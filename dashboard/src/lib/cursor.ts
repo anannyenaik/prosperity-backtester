@@ -3,6 +3,8 @@ const INTERACTIVE_SELECTOR =
 const TEXT_SELECTOR =
   'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([disabled]), textarea, [contenteditable="true"]'
 const CLOSE_SELECTOR = '[data-cursor="close"], [aria-label^="Close"], [aria-label^="Dismiss"]'
+export const CUSTOM_CURSOR_VISIBLE_CLASS = 'has-visible-custom-cursor'
+export const CURSOR_OVERLAY_OPEN_CLASS = 'has-cursor-overlay-open'
 
 export type CursorState = 'idle' | 'hover' | 'close' | 'text' | 'scroll'
 export type ScrollbarAxis = 'x' | 'y'
@@ -41,6 +43,16 @@ const SCROLLABLE_OVERFLOW = new Set(['auto', 'scroll', 'overlay'])
 export interface ScrollbarMetrics {
   vertical: number
   horizontal: number
+}
+
+export function setCursorOverlayOpen(open: boolean, doc: Document = document) {
+  if (open) {
+    doc.documentElement.classList.add(CURSOR_OVERLAY_OPEN_CLASS)
+    doc.body?.classList.add(CURSOR_OVERLAY_OPEN_CLASS)
+    return
+  }
+  doc.documentElement.classList.remove(CURSOR_OVERLAY_OPEN_CLASS)
+  doc.body?.classList.remove(CURSOR_OVERLAY_OPEN_CLASS)
 }
 
 export function measureViewportScrollbars(

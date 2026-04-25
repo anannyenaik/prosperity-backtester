@@ -15,7 +15,7 @@ fs.writeFileSync(
   bridgeModule,
   [
     "export { computeFloatingLayerLayout } from './src/lib/floatingLayer.ts'",
-    "export { measureViewportScrollbars, isPointNearViewportScrollbar, measureElementScrollbars, getElementScrollbarAxis, getExplicitScrollCursorAxis } from './src/lib/cursor.ts'",
+    "export { CURSOR_OVERLAY_OPEN_CLASS, CUSTOM_CURSOR_VISIBLE_CLASS, measureViewportScrollbars, isPointNearViewportScrollbar, measureElementScrollbars, getElementScrollbarAxis, getExplicitScrollCursorAxis, setCursorOverlayOpen } from './src/lib/cursor.ts'",
   ].join('\n'),
 )
 
@@ -29,12 +29,15 @@ await build({
 })
 
 const {
+  CURSOR_OVERLAY_OPEN_CLASS,
+  CUSTOM_CURSOR_VISIBLE_CLASS,
   computeFloatingLayerLayout,
   measureViewportScrollbars,
   isPointNearViewportScrollbar,
   measureElementScrollbars,
   getElementScrollbarAxis,
   getExplicitScrollCursorAxis,
+  setCursorOverlayOpen,
 } = await import(pathToFileURL(compiledModule).href)
 
 after(() => {
@@ -120,3 +123,38 @@ test('explicit scroll cursor targets keep custom scrollbar regions in scroll mod
   assert.equal(getExplicitScrollCursorAxis({ closest: () => null }), null)
   assert.equal(getExplicitScrollCursorAxis(null), null)
 })
+
+test('bundle browser overlay enables native cursor fallback while preserving click targets', () => {
+  const root = { classList: createClassList() }
+  const body = { classList: createClassList() }
+  const doc = { documentElement: root, body }
+
+  setCursorOverlayOpen(true, doc)
+
+  assert.equal(root.classList.contains(CURSOR_OVERLAY_OPEN_CLASS), true)
+  assert.equal(body.classList.contains(CURSOR_OVERLAY_OPEN_CLASS), true)
+
+  setCursorOverlayOpen(false, doc)
+
+  assert.equal(root.classList.contains(CURSOR_OVERLAY_OPEN_CLASS), false)
+  assert.equal(body.classList.contains(CURSOR_OVERLAY_OPEN_CLASS), false)
+
+  const css = fs.readFileSync(path.join(dashboardRoot, 'src', 'index.css'), 'utf8')
+  assert.match(css, new RegExp(`html\\.has-custom-cursor\\.${CUSTOM_CURSOR_VISIBLE_CLASS}:not\\(\\.${CURSOR_OVERLAY_OPEN_CLASS}\\)`))
+  assert.match(css, new RegExp(`html\\.${CURSOR_OVERLAY_OPEN_CLASS} \\.custom-cursor`))
+})
+
+function createClassList() {
+  const classes = new Set()
+  return {
+    add(value) {
+      classes.add(value)
+    },
+    remove(value) {
+      classes.delete(value)
+    },
+    contains(value) {
+      return classes.has(value)
+    },
+  }
+}

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import {
+  CUSTOM_CURSOR_VISIBLE_CLASS,
   getScrollbarHitAtPoint,
   resolveCursorState,
   type ScrollbarAxis,
@@ -63,12 +64,16 @@ export function Cursor() {
     const show = () => {
       if (visible) return
       visible = true
+      root.classList.add(CUSTOM_CURSOR_VISIBLE_CLASS)
+      body.classList.add(CUSTOM_CURSOR_VISIBLE_CLASS)
       ring.classList.add('is-visible')
       core.classList.add('is-visible')
     }
     const hide = () => {
       if (!visible) return
       visible = false
+      root.classList.remove(CUSTOM_CURSOR_VISIBLE_CLASS)
+      body.classList.remove(CUSTOM_CURSOR_VISIBLE_CLASS)
       ring.classList.remove('is-visible')
       core.classList.remove('is-visible')
     }
@@ -192,7 +197,9 @@ export function Cursor() {
       window.removeEventListener('blur', onBlur)
       window.cancelAnimationFrame(raf)
       root.classList.remove('has-custom-cursor')
+      root.classList.remove(CUSTOM_CURSOR_VISIBLE_CLASS)
       body.classList.remove('has-custom-cursor')
+      body.classList.remove(CUSTOM_CURSOR_VISIBLE_CLASS)
       delete body.dataset.cursorState
       delete body.dataset.cursorPressed
       delete body.dataset.cursorAxis

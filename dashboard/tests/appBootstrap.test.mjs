@@ -29,7 +29,7 @@ await build({
   format: 'esm',
   platform: 'node',
   outfile: compiledModule,
-  external: ['react', 'react/jsx-runtime', 'react-test-renderer', 'zustand', 'clsx', 'lucide-react', 'recharts'],
+  external: ['react', 'react/jsx-runtime', 'react-dom', 'react-test-renderer', 'zustand', 'clsx', 'lucide-react', 'recharts'],
   logLevel: 'silent',
 })
 

@@ -1938,7 +1938,7 @@ table {
   top: 0;
   left: 0;
   pointer-events: none;
-  z-index: 100;
+  z-index: 2147483647;
   will-change: transform, opacity, width, height, border-color, background;
   transform: translate3d(var(--cursor-x, 0px), var(--cursor-y, 0px), 0) translate(-50%, -50%) scale(var(--cursor-scale, 1));
   opacity: 0;
@@ -2100,24 +2100,28 @@ body.has-custom-cursor[data-cursor-pressed="true"] .custom-cursor-core {
   --cursor-scale: 1.6;
 }
 
-html.has-custom-cursor,
-html.has-custom-cursor body {
+html.has-custom-cursor.has-visible-custom-cursor:not(.has-cursor-overlay-open),
+html.has-custom-cursor.has-visible-custom-cursor:not(.has-cursor-overlay-open) body {
   cursor: none !important;
 }
 
-html.has-custom-cursor *,
-html.has-custom-cursor *::before,
-html.has-custom-cursor *::after {
+html.has-custom-cursor.has-visible-custom-cursor:not(.has-cursor-overlay-open) *,
+html.has-custom-cursor.has-visible-custom-cursor:not(.has-cursor-overlay-open) *::before,
+html.has-custom-cursor.has-visible-custom-cursor:not(.has-cursor-overlay-open) *::after {
   cursor: inherit !important;
 }
 
-html.has-custom-cursor ::-webkit-scrollbar,
-html.has-custom-cursor ::-webkit-scrollbar-thumb,
-html.has-custom-cursor ::-webkit-scrollbar-track,
-html.has-custom-cursor ::-webkit-scrollbar-corner,
-html.has-custom-cursor ::-webkit-scrollbar-button,
-html.has-custom-cursor ::-webkit-resizer {
+html.has-custom-cursor.has-visible-custom-cursor:not(.has-cursor-overlay-open) ::-webkit-scrollbar,
+html.has-custom-cursor.has-visible-custom-cursor:not(.has-cursor-overlay-open) ::-webkit-scrollbar-thumb,
+html.has-custom-cursor.has-visible-custom-cursor:not(.has-cursor-overlay-open) ::-webkit-scrollbar-track,
+html.has-custom-cursor.has-visible-custom-cursor:not(.has-cursor-overlay-open) ::-webkit-scrollbar-corner,
+html.has-custom-cursor.has-visible-custom-cursor:not(.has-cursor-overlay-open) ::-webkit-scrollbar-button,
+html.has-custom-cursor.has-visible-custom-cursor:not(.has-cursor-overlay-open) ::-webkit-resizer {
   cursor: none !important;
+}
+
+html.has-cursor-overlay-open .custom-cursor {
+  visibility: hidden;
 }
 
 body.has-custom-cursor input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([disabled]),

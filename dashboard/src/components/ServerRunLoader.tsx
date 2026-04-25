@@ -8,6 +8,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
+import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -28,6 +29,7 @@ import { useStore, type ServerRunMeta } from '../store'
 import type { DashboardPayload } from '../types'
 import { fmtBytes, fmtDate, fmtNum } from '../lib/format'
 import { computeFloatingLayerLayout } from '../lib/floatingLayer'
+import { setCursorOverlayOpen } from '../lib/cursor'
 
 type RunFilter = 'all' | 'workspace' | 'replay' | 'monte_carlo' | 'comparison' | 'calibration' | 'optimization' | 'round2_scenarios'
 type QuickLoadKind = Exclude<RunFilter, 'all'>
@@ -138,6 +140,12 @@ export function ServerRunLoader() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [browserState.open])
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    setCursorOverlayOpen(browserState.open)
+    return () => setCursorOverlayOpen(false)
+  }, [browserState.open])
+
   async function runWithLoading(key: string, work: () => Promise<void>) {
     if (loadingKey) return
     setLoadingKey(key)
@@ -154,7 +162,10 @@ export function ServerRunLoader() {
       if (!res.ok) {
         throw new Error(`Server returned ${res.status}`)
       }
-      const runs = (await res.json()) as ServerRunMeta[]
+      const runs = readServerRunsResponse(await res.json())
+      if (!runs) {
+        throw new Error('Unexpected run list response')
+      }
       setServerRuns(runs)
       if (options.openBrowser) {
         setNotice(null)
@@ -165,13 +176,13 @@ export function ServerRunLoader() {
         })
       }
       return runs
-    } catch {
+    } catch (error) {
       if (options.openBrowser) {
         setNotice(null)
         setBrowserState({
           open: true,
           status: 'error',
-          message: 'Could not reach the local dashboard bundle server. Start the server and try again.',
+          message: runListErrorMessage(error),
         })
       }
       return null
@@ -179,34 +190,42 @@ export function ServerRunLoader() {
   }
 
   async function loadFromServer(run: ServerRunMeta) {
-    const res = await fetch(`/api/run/${encodeURIComponent(run.path)}`)
-    if (!res.ok) {
-      if (browserState.open) {
-        setNotice(null)
-        setBrowserState({
-          open: true,
-          status: 'load_error',
-          message: `The server could not open ${run.name}. Try again or choose another bundle.`,
-        })
+    try {
+      const res = await fetch(`/api/run/${encodeURIComponent(run.path)}`)
+      if (!res.ok) {
+        showLoadError(run)
         return
       }
-      setNotice({
-        variant: 'error',
-        title: 'Bundle load failed',
-        message: `The server could not open ${run.name}. Try again or browse another bundle.`,
+      const payload = (await res.json()) as DashboardPayload
+      setNotice(null)
+      setBrowserState((current) => ({ ...current, open: false }))
+      loadRun(payload, run.name)
+    } catch {
+      showLoadError(run)
+    }
+  }
+
+  function showLoadError(run: ServerRunMeta) {
+    if (browserState.open) {
+      setNotice(null)
+      setBrowserState({
+        open: true,
+        status: 'load_error',
+        message: `The server could not open ${run.name}. Try again or choose another bundle.`,
       })
       return
     }
-    const payload = (await res.json()) as DashboardPayload
-    setNotice(null)
-    setBrowserState((current) => ({ ...current, open: false }))
-    loadRun(payload, run.name)
+    setNotice({
+      variant: 'error',
+      title: 'Bundle load failed',
+      message: `The server could not open ${run.name}. Try again or browse another bundle.`,
+    })
   }
 
-  async function openBrowser() {
-    await runWithLoading('browse', async () => {
+  async function openBrowser(nextFilter: RunFilter = 'all') {
+    await runWithLoading(nextFilter === 'all' ? 'browse' : `browse:${nextFilter}`, async () => {
       setNotice(null)
-      setFilter('all')
+      setFilter(nextFilter)
       await fetchRuns({ openBrowser: true })
     })
   }
@@ -223,7 +242,7 @@ export function ServerRunLoader() {
 
       const target = kind
         ? runs.find((run) => normaliseRunType(run.type) === kind)
-        : runs.find((run) => normaliseRunType(run.type) !== 'workspace')
+        : runs.find((run) => isKnownSinglePurposeRun(run))
       if (!target) {
         setNotice(unavailableNotice(kind))
         return
@@ -245,21 +264,200 @@ export function ServerRunLoader() {
   }, [filter, serverRuns])
 
   const availableFilters = useMemo(() => {
-    const types = new Set<RunFilter>(['all'])
+    const types = new Set<RunFilter>(['all', filter])
     for (const run of serverRuns) {
       const type = normaliseRunType(run.type)
       if (type) types.add(type)
     }
     return Array.from(types)
-  }, [serverRuns])
-
-  useEffect(() => {
-    if (!availableFilters.includes(filter)) {
-      setFilter('all')
-    }
-  }, [availableFilters, filter])
+  }, [filter, serverRuns])
 
   const loading = loadingKey != null
+  const browserLayer = browserState.open ? (
+    <>
+      <button
+        type="button"
+        aria-label="Close bundle browser"
+        onClick={() => setBrowserState((current) => ({ ...current, open: false }))}
+        className="fixed inset-0 z-40 cursor-default bg-bg/12 backdrop-blur-[1px]"
+      />
+      <div
+        data-loader-surface="browser"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Bundle browser"
+        className="loader-surface fixed z-50"
+        style={layerStyle}
+      >
+        <div className="loader-surface-body flex min-h-0 flex-col">
+          <div className="flex items-start justify-between gap-4 border-b border-border bg-white/[0.03] px-4 py-4">
+            <div>
+              <div className="hud-label text-accent-2">Bundle browser</div>
+              <div className="mt-2 text-sm text-txt-soft">
+                {browserState.status === 'list'
+                  ? browserListTitle(filter, visibleRuns.length, serverRuns.length)
+                  : browserState.status === 'empty'
+                    ? 'No dashboard bundles found'
+                    : browserState.status === 'load_error'
+                      ? 'Bundle load failed'
+                      : 'Local bundle server unavailable'}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setBrowserState((current) => ({ ...current, open: false }))}
+              data-cursor="close"
+              className="subtle-button inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+            >
+              <X className="h-3.5 w-3.5" />
+              Close
+            </button>
+          </div>
+
+          {browserState.status === 'list' && (
+            <>
+              <div className="border-b border-border bg-white/[0.02] px-4 py-3">
+                <div className="flex flex-wrap gap-2">
+                  {availableFilters.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setFilter(item)}
+                      className={clsx(
+                        'rounded-lg px-3 py-2 text-[11px] uppercase tracking-[0.12em]',
+                        filter === item ? 'signal-button' : 'subtle-button',
+                      )}
+                    >
+                      {filterLabel(item)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-border">
+                {visibleRuns.length > 0 ? (
+                  visibleRuns.map((run) => (
+                    <button
+                      key={run.path}
+                      type="button"
+                      disabled={loadingKey != null}
+                      onClick={() => void loadSpecificRun(run)}
+                      className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-accent/5 disabled:cursor-wait disabled:opacity-70"
+                    >
+                      <span className="min-w-0">
+                        <span className="flex min-w-0 items-center gap-2">
+                          {normaliseRunType(run.type) === 'workspace' && (
+                            <span
+                              className="hud-label rounded border border-accent/35 bg-accent/12 px-1.5 py-0.5 text-accent"
+                              title={run.workspaceSourceCount ? `Assembled from ${run.workspaceSourceCount} child bundle${run.workspaceSourceCount === 1 ? '' : 's'}` : 'Research workspace bundle'}
+                            >
+                              workspace
+                            </span>
+                          )}
+                          <span className="block truncate font-display text-xs font-semibold uppercase tracking-[0.08em] text-txt">
+                            {run.name}
+                          </span>
+                        </span>
+                        <span className="hud-label mt-1 flex flex-wrap gap-2 text-muted">
+                          <span>{filterLabel(normaliseRunType(run.type))}</span>
+                          {run.workspaceSourceCount != null && run.workspaceSourceCount > 0 && (
+                            <span>{run.workspaceSourceCount} sources</span>
+                          )}
+                          {Array.isArray(run.workspaceSectionsMissing) && run.workspaceSectionsMissing.length > 0 && (
+                            <span>missing {run.workspaceSectionsMissing.length}</span>
+                          )}
+                          {run.profile && <span>{run.profile}</span>}
+                          {run.workflowTier && <span>{run.workflowTier}</span>}
+                          {run.engineBackend && <span>{run.engineBackend}</span>}
+                          {run.monteCarloBackend && <span>mc:{run.monteCarloBackend}</span>}
+                          {run.workerCount != null && run.workerCount > 1 && <span>{run.workerCount} workers</span>}
+                          {run.gitDirty === true && <span>dirty git</span>}
+                          {run.sizeBytes != null && <span>{fmtBytes(run.sizeBytes)}</span>}
+                          <span>{fmtDate(run.createdAt)}</span>
+                        </span>
+                        <span className="mt-1 block truncate text-[11px] text-muted/85">{run.path}</span>
+                      </span>
+                      {run.finalPnl != null && (
+                        <span className={clsx('font-mono text-xs', run.finalPnl >= 0 ? 'text-good' : 'text-bad')}>
+                          {fmtNum(run.finalPnl)}
+                        </span>
+                      )}
+                    </button>
+                  ))
+                ) : (
+                  <FilteredEmptyState filter={filter} totalRuns={serverRuns.length} />
+                )}
+              </div>
+            </>
+          )}
+
+          {browserState.status === 'empty' && (
+            <div className="px-4 py-5 text-sm leading-6 text-txt-soft">
+              No dashboard bundles were found under the served directory.
+            </div>
+          )}
+
+          {(browserState.status === 'error' || browserState.status === 'load_error') && (
+            <div className="px-4 py-5 text-sm leading-6 text-txt-soft">
+              {browserState.message}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  ) : null
+  const noticeLayer = notice ? (
+    <div
+      data-loader-surface="notice"
+      role="status"
+      aria-live="polite"
+      className="loader-surface fixed z-50"
+      style={layerStyle}
+    >
+      <div className="loader-surface-body px-5 py-4">
+        <div className="flex items-start gap-4">
+          <div
+            className={clsx(
+              'mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-full border shadow-[0_0_24px_rgba(0,0,0,0.18)]',
+              notice.variant === 'unavailable'
+                ? 'border-warn/35 bg-warn/10 text-warn'
+                : 'border-bad/35 bg-bad/10 text-bad',
+            )}
+          >
+            <AlertTriangle className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="hud-label text-accent-2">
+              {notice.variant === 'unavailable' ? 'Quick load unavailable' : 'Quick load error'}
+            </div>
+            <div className="mt-2 font-display text-base font-semibold uppercase tracking-[0.08em] text-txt">
+              {notice.title}
+            </div>
+            <div className="mt-2 max-w-[34rem] text-sm leading-6 text-txt-soft">{notice.message}</div>
+            {notice.variant === 'unavailable' && (
+              <button
+                type="button"
+                disabled={loadingKey != null}
+                onClick={() => void openBrowser()}
+                className="signal-button mt-4 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
+              >
+                {loadingKey === 'browse' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
+                Browse available bundles
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            data-cursor="close"
+            className="subtle-button inline-flex items-center justify-center rounded-lg p-2 text-xs"
+            aria-label="Dismiss quick load notice"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null
 
   return (
     <div ref={rootRef} className="relative mt-1.5 min-w-0">
@@ -334,196 +532,16 @@ export function ServerRunLoader() {
               label={label}
               caption={caption}
               icon={icon}
-              onClick={() => void loadLatestFromServer(type)}
+              onClick={() => void openBrowser(type)}
               disabled={loadingKey != null}
-              loading={loadingKey === `latest:${type}`}
+              loading={loadingKey === `browse:${type}`}
             />
           ))}
         </div>
       </div>
 
-      {browserState.open && (
-        <>
-          <button
-            type="button"
-            aria-label="Close bundle browser"
-            onClick={() => setBrowserState((current) => ({ ...current, open: false }))}
-            className="fixed inset-0 z-40 cursor-default bg-bg/12 backdrop-blur-[1px]"
-          />
-          <div
-            data-loader-surface="browser"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Bundle browser"
-            className="loader-surface fixed z-50"
-            style={layerStyle}
-          >
-            <div className="loader-surface-body flex min-h-0 flex-col">
-              <div className="flex items-start justify-between gap-4 border-b border-border bg-white/[0.03] px-4 py-4">
-                <div>
-                  <div className="hud-label text-accent-2">Bundle browser</div>
-                  <div className="mt-2 text-sm text-txt-soft">
-                    {browserState.status === 'list'
-                      ? `Available bundles (${visibleRuns.length} shown of ${serverRuns.length})`
-                      : browserState.status === 'empty'
-                        ? 'No dashboard bundles found'
-                        : browserState.status === 'load_error'
-                          ? 'Bundle load failed'
-                          : 'Local bundle server unavailable'}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setBrowserState((current) => ({ ...current, open: false }))}
-                  data-cursor="close"
-                  className="subtle-button inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
-                >
-                  <X className="h-3.5 w-3.5" />
-                  Close
-                </button>
-              </div>
-
-              {browserState.status === 'list' && (
-                <>
-                  <div className="border-b border-border bg-white/[0.02] px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      {availableFilters.map((item) => (
-                        <button
-                          key={item}
-                          type="button"
-                          onClick={() => setFilter(item)}
-                          className={clsx(
-                            'rounded-lg px-3 py-2 text-[11px] uppercase tracking-[0.12em]',
-                            filter === item ? 'signal-button' : 'subtle-button',
-                          )}
-                        >
-                          {filterLabel(item)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-border">
-                    {visibleRuns.map((run) => (
-                      <button
-                        key={run.path}
-                        type="button"
-                        disabled={loadingKey != null}
-                        onClick={() => void loadSpecificRun(run)}
-                        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-accent/5 disabled:cursor-wait disabled:opacity-70"
-                      >
-                        <span className="min-w-0">
-                          <span className="flex min-w-0 items-center gap-2">
-                            {normaliseRunType(run.type) === 'workspace' && (
-                              <span
-                                className="hud-label rounded border border-accent/35 bg-accent/12 px-1.5 py-0.5 text-accent"
-                                title={run.workspaceSourceCount ? `Assembled from ${run.workspaceSourceCount} child bundle${run.workspaceSourceCount === 1 ? '' : 's'}` : 'Research workspace bundle'}
-                              >
-                                workspace
-                              </span>
-                            )}
-                            <span className="block truncate font-display text-xs font-semibold uppercase tracking-[0.08em] text-txt">
-                              {run.name}
-                            </span>
-                          </span>
-                          <span className="hud-label mt-1 flex flex-wrap gap-2 text-muted">
-                            <span>{filterLabel(normaliseRunType(run.type))}</span>
-                            {run.workspaceSourceCount != null && run.workspaceSourceCount > 0 && (
-                              <span>{run.workspaceSourceCount} sources</span>
-                            )}
-                            {Array.isArray(run.workspaceSectionsMissing) && run.workspaceSectionsMissing.length > 0 && (
-                              <span>missing {run.workspaceSectionsMissing.length}</span>
-                            )}
-                            {run.profile && <span>{run.profile}</span>}
-                            {run.workflowTier && <span>{run.workflowTier}</span>}
-                            {run.engineBackend && <span>{run.engineBackend}</span>}
-                            {run.monteCarloBackend && <span>mc:{run.monteCarloBackend}</span>}
-                            {run.workerCount != null && run.workerCount > 1 && <span>{run.workerCount} workers</span>}
-                            {run.gitDirty === true && <span>dirty git</span>}
-                            {run.sizeBytes != null && <span>{fmtBytes(run.sizeBytes)}</span>}
-                            <span>{fmtDate(run.createdAt)}</span>
-                          </span>
-                          <span className="mt-1 block truncate text-[11px] text-muted/85">{run.path}</span>
-                        </span>
-                        {run.finalPnl != null && (
-                          <span className={clsx('font-mono text-xs', run.finalPnl >= 0 ? 'text-good' : 'text-bad')}>
-                            {fmtNum(run.finalPnl)}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {browserState.status === 'empty' && (
-                <div className="px-4 py-5 text-sm leading-6 text-txt-soft">
-                  No dashboard bundles were found under the served directory.
-                </div>
-              )}
-
-              {(browserState.status === 'error' || browserState.status === 'load_error') && (
-                <div className="px-4 py-5 text-sm leading-6 text-txt-soft">
-                  {browserState.message}
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
-
-      {notice && (
-        <div
-          data-loader-surface="notice"
-          role="status"
-          aria-live="polite"
-          className="loader-surface fixed z-50"
-          style={layerStyle}
-        >
-          <div className="loader-surface-body px-5 py-4">
-            <div className="flex items-start gap-4">
-              <div
-                className={clsx(
-                  'mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-full border shadow-[0_0_24px_rgba(0,0,0,0.18)]',
-                  notice.variant === 'unavailable'
-                    ? 'border-warn/35 bg-warn/10 text-warn'
-                    : 'border-bad/35 bg-bad/10 text-bad',
-                )}
-              >
-                <AlertTriangle className="h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="hud-label text-accent-2">
-                  {notice.variant === 'unavailable' ? 'Quick load unavailable' : 'Quick load error'}
-                </div>
-                <div className="mt-2 font-display text-base font-semibold uppercase tracking-[0.08em] text-txt">
-                  {notice.title}
-                </div>
-                <div className="mt-2 max-w-[34rem] text-sm leading-6 text-txt-soft">{notice.message}</div>
-                {notice.variant === 'unavailable' && (
-                  <button
-                    type="button"
-                    disabled={loadingKey != null}
-                    onClick={() => void openBrowser()}
-                    className="signal-button mt-4 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-xs"
-                  >
-                    {loadingKey === 'browse' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Server className="h-3.5 w-3.5" />}
-                    Browse available bundles
-                  </button>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => setNotice(null)}
-                data-cursor="close"
-                className="subtle-button inline-flex items-center justify-center rounded-lg p-2 text-xs"
-                aria-label="Dismiss quick load notice"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {renderFloatingLayer(browserLayer)}
+      {renderFloatingLayer(noticeLayer)}
     </div>
   )
 }
@@ -575,7 +593,7 @@ function QuickLoadChip({ label, caption, icon, onClick, disabled, loading }: Qui
       onClick={onClick}
       disabled={disabled}
       data-interactive="true"
-      aria-label={`Load latest ${label} bundle`}
+      aria-label={`Browse ${label} bundles`}
       className={clsx('qa-chip group', loading && 'is-loading')}
     >
       <span className="qa-chip__glow" aria-hidden="true" />
@@ -657,8 +675,56 @@ function useAnchoredLayerStyle(anchorRef: RefObject<HTMLElement>, active: boolea
 }
 
 function normaliseRunType(value: string | null | undefined): RunFilter {
-  const key = (value ?? 'unknown').toLowerCase()
+  const key = (value ?? 'unknown').toLowerCase().trim()
   return RUN_TYPE_MAP[key] ?? 'all'
+}
+
+function readServerRunsResponse(value: unknown): ServerRunMeta[] | null {
+  if (!Array.isArray(value)) return null
+  return value.every(isServerRunMeta) ? value : null
+}
+
+function isServerRunMeta(value: unknown): value is ServerRunMeta {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<ServerRunMeta>
+  return typeof candidate.path === 'string' && typeof candidate.name === 'string' && typeof candidate.type === 'string'
+}
+
+function runListErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message === 'Unexpected run list response') {
+    return 'The local dashboard bundle server returned an unexpected run list. Refresh the page or restart the server.'
+  }
+  return 'Could not reach the local dashboard bundle server. Start the server and try again.'
+}
+
+function isKnownSinglePurposeRun(run: ServerRunMeta) {
+  const type = normaliseRunType(run.type)
+  return type !== 'all' && type !== 'workspace'
+}
+
+function browserListTitle(filter: RunFilter, shown: number, total: number) {
+  if (filter === 'all') return `Available bundles (${shown} shown of ${total})`
+  return `${filterTitle(filter)} bundles (${shown} shown of ${total})`
+}
+
+function FilteredEmptyState({ filter, totalRuns }: { filter: RunFilter; totalRuns: number }) {
+  const title = filter === 'all' ? 'No dashboard bundles found' : `No ${filterTitle(filter).toLowerCase()} bundles found`
+  const message =
+    filter === 'all'
+      ? 'The local server did not return any dashboard bundles.'
+      : `The local server returned ${totalRuns} bundle${totalRuns === 1 ? '' : 's'}, but none match this filter.`
+  return (
+    <div className="px-4 py-5 text-sm leading-6 text-txt-soft">
+      <div className="font-display text-xs font-semibold uppercase tracking-[0.08em] text-txt">{title}</div>
+      <div className="mt-2">{message}</div>
+    </div>
+  )
+}
+
+function renderFloatingLayer(node: ReactNode) {
+  if (!node) return null
+  if (typeof document === 'undefined' || !document.body) return node
+  return createPortal(node, document.body)
 }
 
 function filterLabel(value: RunFilter) {
@@ -670,6 +736,19 @@ function filterLabel(value: RunFilter) {
     comparison: 'Compare',
     calibration: 'Calibration',
     optimization: 'Optimise',
+    round2_scenarios: 'Round 2',
+  }[value]
+}
+
+function filterTitle(value: RunFilter) {
+  return {
+    all: 'Available',
+    workspace: 'Workspace',
+    replay: 'Replay',
+    monte_carlo: 'Monte Carlo',
+    comparison: 'Comparison',
+    calibration: 'Calibration',
+    optimization: 'Optimisation',
     round2_scenarios: 'Round 2',
   }[value]
 }
@@ -697,9 +776,9 @@ function unavailableNotice(kind?: QuickLoadKind): LoaderNotice {
   if (kind === 'workspace') {
     return {
       variant: 'unavailable',
-      title: 'Workspace bundle unavailable',
+      title: 'No workspace bundle found',
       message:
-        'No workspace bundle is currently available on the local server. ' +
+        'No workspace bundle found on the local server. ' +
         'Generate one with `python -m prosperity_backtester workspace-bundle --from-dir <backtests dir>` or browse an individual bundle.',
     }
   }
