@@ -11,7 +11,7 @@ from prosperity_backtester.round2 import AccessScenario
 
 
 ROOT = Path(__file__).resolve().parent.parent
-STARTER = ROOT / "strategies" / "starter.py"
+STARTER = ROOT / "strategies" / "archive" / "legacy" / "starter.py"
 
 
 def _write_round2_tiny_dataset(data_dir: Path) -> None:

@@ -11,7 +11,7 @@ from prosperity_backtester.experiments import run_scenario_compare_from_config
 
 
 ROOT = Path(__file__).resolve().parent.parent
-STARTER = ROOT / "strategies" / "starter.py"
+STARTER = ROOT / "strategies" / "archive" / "legacy" / "starter.py"
 
 
 def _write_tiny_round1_dataset(data_dir: Path) -> None:

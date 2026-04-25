@@ -457,7 +457,7 @@ def test_cli_output_policy_flags_can_disable_full_debug_extras():
     parser = build_parser()
     args = parser.parse_args([
         "monte-carlo",
-        "strategies/trader.py",
+        "strategies/archive/legacy/trader.py",
         "--output-profile",
         "full",
         "--no-series-sidecars",
@@ -479,7 +479,7 @@ def test_cli_limit_overrides_and_print_flag_are_parsed():
     parser = build_parser()
     args = parser.parse_args([
         'replay',
-        'strategies/trader.py',
+        'strategies/archive/legacy/trader.py',
         '--limit',
         'ASH_COATED_OSMIUM:60',
         '--limit',
@@ -501,13 +501,13 @@ def test_cli_aliases_and_mc_backend_are_parsed():
 
     replay_args = parser.parse_args([
         'replay',
-        'strategies/trader.py',
+        'strategies/archive/legacy/trader.py',
         '--vis',
         '--print',
     ])
     mc_args = parser.parse_args([
         'monte-carlo',
-        'strategies/trader.py',
+        'strategies/archive/legacy/trader.py',
         '--mc-backend',
         'classic',
     ])

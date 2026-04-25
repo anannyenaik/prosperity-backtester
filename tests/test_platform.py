@@ -16,8 +16,8 @@ DATA_DIR = ROOT / "data" / "round1"
 LIVE_EXPORT = ROOT / "live_exports" / "259168" / "259168.json"
 TRADER_V9 = ROOT / "examples" / "trader_round1_v9.py"
 BENCHMARK_TRADER = ROOT / "examples" / "benchmark_trader.py"
-STARTER = ROOT / "strategies" / "starter.py"
-MAIN_TRADER = ROOT / "strategies" / "trader.py"
+STARTER = ROOT / "strategies" / "archive" / "legacy" / "starter.py"
+MAIN_TRADER = ROOT / "strategies" / "archive" / "legacy" / "trader.py"
 
 
 def _write_trade_matching_dataset(data_dir: Path) -> None:

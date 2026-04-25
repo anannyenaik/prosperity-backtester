@@ -7,11 +7,11 @@
   "traders": [
     {
       "name": "optimised",
-      "path": "strategies/r2_algo_v2_optimised.py"
+      "path": "strategies/archive/round2/r2_algo_v2_optimised.py"
     },
     {
       "name": "submitted",
-      "path": "strategies/r2_algo_v2.py"
+      "path": "strategies/archive/round2/r2_algo_v2.py"
     }
   ],
   "scenarios": [

@@ -123,8 +123,8 @@ def test_profile_replay_suite_writes_day_breakdown_report(tmp_path):
 def test_cli_defaults_follow_round_specs_for_routine_replay_and_compare():
     parser = build_parser()
 
-    replay_args = parser.parse_args(["replay", "strategies/trader.py"])
-    compare_args = parser.parse_args(["compare", "strategies/trader.py", "strategies/starter.py"])
+    replay_args = parser.parse_args(["replay", "strategies/archive/legacy/trader.py"])
+    compare_args = parser.parse_args(["compare", "strategies/archive/legacy/trader.py", "strategies/archive/legacy/starter.py"])
     round3_replay_args = parser.parse_args(["replay", "tests/fixtures/noop_round3_trader.py", "--round", "3"])
 
     assert replay_args.days is None

@@ -4,8 +4,8 @@ Result: the Round 2 workflow is now built around one fixed submitted baseline an
 
 Submission-facing scripts:
 
-- `strategies/r2_algo_v2.py`: frozen submitted baseline
-- `strategies/r2_algo_v2_optimised.py`: improved candidate
+- `strategies/archive/round2/r2_algo_v2.py`: frozen submitted baseline
+- `strategies/archive/round2/r2_algo_v2_optimised.py`: improved candidate
 
 Round 2 outputs remain local decision evidence. They are not a claim about exact hidden website mechanics.
 
@@ -61,19 +61,19 @@ python -m prosperity_backtester inspect --round 2 --data-dir data/round2 --days 
 Replay the submitted baseline:
 
 ```bash
-python -m prosperity_backtester replay strategies/r2_algo_v2.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base
+python -m prosperity_backtester replay strategies/archive/round2/r2_algo_v2.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base
 ```
 
 Replay the optimised candidate:
 
 ```bash
-python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base
+python -m prosperity_backtester replay strategies/archive/round2/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base
 ```
 
 Compare the two directly:
 
 ```bash
-python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --merge-pnl
+python -m prosperity_backtester compare strategies/archive/round2/r2_algo_v2_optimised.py strategies/archive/round2/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --merge-pnl
 ```
 
 ## Checked-In Review Packs

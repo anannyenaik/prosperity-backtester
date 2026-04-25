@@ -313,8 +313,8 @@ def build_parser() -> argparse.ArgumentParser:
             "  python -m prosperity_backtester inspect --round 3 --data-dir data/round3 --days 0 1 2 --json\n"
             "  python -m prosperity_backtester replay tests/fixtures/noop_round3_trader.py --round 3 --data-dir data/round3 --days 0 1 2 --fill-mode base\n"
             "  python -m prosperity_backtester monte-carlo tests/fixtures/noop_round3_trader.py --round 3 --data-dir data/round3 --days 0 --sessions 8 --sample-sessions 2 --synthetic-tick-limit 250\n"
-            "  python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base\n"
-            "  python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --merge-pnl\n"
+            "  python -m prosperity_backtester replay strategies/archive/round2/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base\n"
+            "  python -m prosperity_backtester compare strategies/archive/round2/r2_algo_v2_optimised.py strategies/archive/round2/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --merge-pnl\n"
             "  python -m prosperity_backtester serve --latest-type replay\n"
         ),
     )
@@ -396,9 +396,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Replay one trader with short daily defaults and optional local debug controls.",
         epilog=(
             "Examples:\n"
-            "  python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base\n"
-            "  python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --with-extra-access --access-mode deterministic --maf-bid 1000 --access-quality 0.75 --access-passive-multiplier 1.12 --access-missed-reduction 0.02 --vis\n"
-            "  python -m prosperity_backtester replay strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --limit INTARIAN_PEPPER_ROOT:40 --print\n"
+            "  python -m prosperity_backtester replay strategies/archive/round2/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base\n"
+            "  python -m prosperity_backtester replay strategies/archive/round2/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --with-extra-access --access-mode deterministic --maf-bid 1000 --access-quality 0.75 --access-passive-multiplier 1.12 --access-missed-reduction 0.02 --vis\n"
+            "  python -m prosperity_backtester replay strategies/archive/round2/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --limit INTARIAN_PEPPER_ROOT:40 --print\n"
         ),
     )
     add_shared(replay)
@@ -411,9 +411,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run Monte Carlo robustness sessions with optional worker parallelism and saved sample paths.",
         epilog=(
             "Examples:\n"
-            "  python -m prosperity_backtester monte-carlo strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --quick --noise-profile fitted\n"
-            "  python -m prosperity_backtester monte-carlo strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --sessions 256 --sample-sessions 16 --workers 4\n"
-            "  python -m prosperity_backtester monte-carlo strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --sessions 256 --workers 4 --mc-backend rust\n"
+            "  python -m prosperity_backtester monte-carlo strategies/archive/round2/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --quick --noise-profile fitted\n"
+            "  python -m prosperity_backtester monte-carlo strategies/archive/round2/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --sessions 256 --sample-sessions 16 --workers 4\n"
+            "  python -m prosperity_backtester monte-carlo strategies/archive/round2/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --sessions 256 --workers 4 --mc-backend rust\n"
         ),
     )
     add_shared(mc)
@@ -432,8 +432,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="Compare traders on the same replay settings, with optional merged PnL output.",
         epilog=(
             "Examples:\n"
-            "  python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base\n"
-            "  python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --with-extra-access --access-mode stochastic --access-quality 0.8 --access-probability 0.65 --maf-bid 1000 --merge-pnl --vis\n"
+            "  python -m prosperity_backtester compare strategies/archive/round2/r2_algo_v2_optimised.py strategies/archive/round2/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base\n"
+            "  python -m prosperity_backtester compare strategies/archive/round2/r2_algo_v2_optimised.py strategies/archive/round2/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --with-extra-access --access-mode stochastic --access-quality 0.8 --access-probability 0.65 --maf-bid 1000 --merge-pnl --vis\n"
         ),
     )
     compare.add_argument("traders", nargs="+", help="Trader python files")

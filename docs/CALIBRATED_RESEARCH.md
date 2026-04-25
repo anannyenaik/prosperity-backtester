@@ -86,7 +86,7 @@ Review:
 For a leading strategy, run a longer robustness pass:
 
 ```bash
-python -m prosperity_backtester monte-carlo strategies/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --fill-mode base --noise-profile fitted --sessions 512 --sample-sessions 32 --workers 4
+python -m prosperity_backtester monte-carlo strategies/archive/round2/r2_algo_v2_optimised.py --round 2 --data-dir data/round2 --days 0 --fill-mode base --noise-profile fitted --sessions 512 --sample-sessions 32 --workers 4
 ```
 
 Read the result with this split in mind:

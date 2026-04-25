@@ -109,7 +109,7 @@ Round 2 submitted-versus-optimised review remains:
 
 ```bash
 python -m prosperity_backtester inspect --round 2 --data-dir data/round2 --days -1 0 1 --json
-python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --merge-pnl
+python -m prosperity_backtester compare strategies/archive/round2/r2_algo_v2_optimised.py strategies/archive/round2/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --merge-pnl
 python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_research.json
 ```
 

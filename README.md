@@ -1,8 +1,8 @@
 # Prosperity Backtester
 
-Prosperity Backtester: Now round-aware and ready for Round 3 historical replay, Round 3 option diagnostics, and coherent Round 3 Monte Carlo, while preserving the existing Round 1 and Round 2 workflows.
+Prosperity Backtester: Now round-aware and ready for Round 3 historical replay, Round 3 option diagnostics, coherent Round 3 Monte Carlo, and early Round 3 trader research, while preserving the existing Round 1 and Round 2 workflows.
 
-No Round 3 alpha strategy is checked in. The tracked `examples/noop_round3_trader.py` file is a smoke fixture only.
+`strategies/r3_algo_v1.py` is the active Round 3 research trader. The tracked `examples/noop_round3_trader.py` file remains a smoke fixture only.
 
 ## Quick start
 
@@ -49,6 +49,12 @@ Run a deterministic Round 3 replay smoke:
 python -m prosperity_backtester replay examples/noop_round3_trader.py --round 3 --data-dir data/round3 --days 0 1 2 --fill-mode base
 ```
 
+Run the active Round 3 research trader:
+
+```bash
+python -m prosperity_backtester replay strategies/r3_algo_v1.py --round 3 --data-dir data/round3 --days 0 1 2 --fill-mode base
+```
+
 Run a coherent Round 3 Monte Carlo smoke:
 
 ```bash
@@ -75,16 +81,16 @@ python -m prosperity_backtester serve --latest
 
 ## Historical Round 2 path
 
-The submitted and optimised Round 2 strategy pair is still tracked:
+The submitted and optimised Round 2 strategy pair is archived and still runnable:
 
-- `strategies/r2_algo_v2.py`
-- `strategies/r2_algo_v2_optimised.py`
+- `strategies/archive/round2/r2_algo_v2.py`
+- `strategies/archive/round2/r2_algo_v2_optimised.py`
 
 Typical Round 2 commands remain:
 
 ```bash
 python -m prosperity_backtester inspect --round 2 --data-dir data/round2 --days -1 0 1 --json
-python -m prosperity_backtester compare strategies/r2_algo_v2_optimised.py strategies/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --merge-pnl
+python -m prosperity_backtester compare strategies/archive/round2/r2_algo_v2_optimised.py strategies/archive/round2/r2_algo_v2.py --names optimised submitted --round 2 --data-dir data/round2 --days -1 0 1 --fill-mode base --merge-pnl
 python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_research.json
 ```
 
