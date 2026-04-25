@@ -1,0 +1,103 @@
+{
+  "name": "r3_hydrogel_meanshift_stress",
+  "round": 3,
+  "data_dir": "data/round3",
+  "days": [0],
+  "fill_model": "base",
+  "traders": [
+    {
+      "name": "r3_v1",
+      "path": "strategies/r3_algo_v1.py"
+    },
+    {
+      "name": "r3_v1_1",
+      "path": "strategies/r3_algo_v1_1_candidate.py"
+    },
+    {
+      "name": "r3_v1_2",
+      "path": "strategies/r3_algo_v1_2_candidate.py"
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "shift_neutral",
+      "fill_model": "base",
+      "description": "Synthetic baseline with no Hydrogel shift.",
+      "tags": ["meanshift", "baseline"],
+      "perturbation": {
+        "synthetic_tick_limit": 500,
+        "shock_tick": 1
+      }
+    },
+    {
+      "name": "shift_minus_100",
+      "fill_model": "base",
+      "description": "Hydrogel synthetic path persistently shifted by -100 from tick 1.",
+      "tags": ["meanshift", "down", "stress", "wide"],
+      "perturbation": {
+        "synthetic_tick_limit": 500,
+        "shock_tick": 1,
+        "hydrogel_shock": -100.0
+      }
+    },
+    {
+      "name": "shift_minus_30",
+      "fill_model": "base",
+      "description": "Hydrogel synthetic path persistently shifted by -30 from tick 1.",
+      "tags": ["meanshift", "down"],
+      "perturbation": {
+        "synthetic_tick_limit": 500,
+        "shock_tick": 1,
+        "hydrogel_shock": -30.0
+      }
+    },
+    {
+      "name": "shift_plus_30",
+      "fill_model": "base",
+      "description": "Hydrogel synthetic path persistently shifted by +30 from tick 1.",
+      "tags": ["meanshift", "up"],
+      "perturbation": {
+        "synthetic_tick_limit": 500,
+        "shock_tick": 1,
+        "hydrogel_shock": 30.0
+      }
+    },
+    {
+      "name": "shift_plus_100",
+      "fill_model": "base",
+      "description": "Hydrogel synthetic path persistently shifted by +100 from tick 1.",
+      "tags": ["meanshift", "up", "stress", "wide"],
+      "perturbation": {
+        "synthetic_tick_limit": 500,
+        "shock_tick": 1,
+        "hydrogel_shock": 100.0
+      }
+    },
+    {
+      "name": "shift_minus_60",
+      "fill_model": "base",
+      "description": "Hydrogel synthetic path persistently shifted by -60 from tick 1.",
+      "tags": ["meanshift", "down", "stress"],
+      "perturbation": {
+        "synthetic_tick_limit": 500,
+        "shock_tick": 1,
+        "hydrogel_shock": -60.0
+      }
+    },
+    {
+      "name": "shift_plus_60",
+      "fill_model": "base",
+      "description": "Hydrogel synthetic path persistently shifted by +60 from tick 1.",
+      "tags": ["meanshift", "up", "stress"],
+      "perturbation": {
+        "synthetic_tick_limit": 500,
+        "shock_tick": 1,
+        "hydrogel_shock": 60.0
+      }
+    }
+  ],
+  "mc_sessions": 16,
+  "mc_sample_sessions": 2,
+  "mc_seed": 20260424,
+  "mc_workers": 1
+}

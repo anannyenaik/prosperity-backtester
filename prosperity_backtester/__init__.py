@@ -6,6 +6,7 @@ from .experiments import (
     run_monte_carlo,
     run_replay,
     run_round2_scenario_compare_from_config,
+    run_round3_hydrogel_meanshift_from_config,
     run_scenario_compare_from_config,
 )
 from .replay import ReplayResult, run_replay as run_legacy_replay
@@ -23,6 +24,7 @@ __all__ = [
     "run_monte_carlo",
     "run_replay",
     "run_round2_scenario_compare_from_config",
+    "run_round3_hydrogel_meanshift_from_config",
     "run_scenario_compare_from_config",
     "run_session",
 ]

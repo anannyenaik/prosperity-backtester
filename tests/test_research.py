@@ -126,9 +126,11 @@ def test_cli_defaults_follow_round_specs_for_routine_replay_and_compare():
     replay_args = parser.parse_args(["replay", "strategies/archive/legacy/trader.py"])
     compare_args = parser.parse_args(["compare", "strategies/archive/legacy/trader.py", "strategies/archive/legacy/starter.py"])
     round3_replay_args = parser.parse_args(["replay", "tests/fixtures/noop_round3_trader.py", "--round", "3"])
+    round3_meanshift_args = parser.parse_args(["round3-hydrogel-meanshift", "configs/r3_hydrogel_meanshift_stress.json"])
 
     assert replay_args.days is None
     assert compare_args.days == ["0"]
+    assert round3_meanshift_args.command == "round3-hydrogel-meanshift"
     assert _days_from_args(replay_args) == (-2, -1, 0)
     assert _days_from_args(compare_args) == (0,)
     assert _days_from_args(round3_replay_args) == (0, 1, 2)

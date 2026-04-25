@@ -1,0 +1,68 @@
+{
+  "name": "r3_algo_v1_2_research",
+  "round": 3,
+  "data_dir": "data/round3",
+  "days": [0, 1, 2],
+  "fill_model": "base",
+  "traders": [
+    {
+      "name": "r3_v1_2",
+      "path": "strategies/r3_algo_v1_2_candidate.py"
+    },
+    {
+      "name": "noop",
+      "path": "examples/noop_round3_trader.py"
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "historical_baseline",
+      "fill_model": "base",
+      "description": "Observed Round 3 books with the standard local fill baseline.",
+      "tags": ["baseline", "historical"],
+      "perturbation": {
+        "synthetic_tick_limit": 250
+      }
+    },
+    {
+      "name": "underlying_up_vol_richer",
+      "fill_model": "base",
+      "description": "Positive Velvetfruit shock with slightly richer implied volatility.",
+      "tags": ["underlying", "volatility"],
+      "perturbation": {
+        "synthetic_tick_limit": 250,
+        "shock_tick": 100,
+        "underlying_shock": 120.0,
+        "vol_shift": 0.02,
+        "vol_scale": 1.05
+      }
+    },
+    {
+      "name": "voucher_liquidity_stress",
+      "fill_model": "empirical_conservative",
+      "description": "Wider voucher quotes and thinner option-chain liquidity.",
+      "tags": ["vouchers", "liquidity", "stress"],
+      "perturbation": {
+        "synthetic_tick_limit": 250,
+        "option_liquidity_scale": 0.7,
+        "voucher_spread_shift_ticks": 1,
+        "option_residual_noise_scale": 1.2
+      }
+    },
+    {
+      "name": "hydrogel_liquidity_stress",
+      "fill_model": "empirical_conservative",
+      "description": "Independent Hydrogel stress without forcing voucher-chain distortion.",
+      "tags": ["hydrogel", "stress"],
+      "perturbation": {
+        "synthetic_tick_limit": 250,
+        "hydrogel_shock": -80.0,
+        "hydrogel_liquidity_scale": 0.75
+      }
+    }
+  ],
+  "mc_sessions": 8,
+  "mc_sample_sessions": 2,
+  "mc_seed": 20260424,
+  "mc_workers": 1
+}

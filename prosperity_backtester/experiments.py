@@ -28,7 +28,13 @@ from .mc_backends import (
     run_rust_backend,
     run_streaming_synthetic_session,
 )
-from .platform import PerturbationConfig, SessionArtefacts, generate_synthetic_market_days, run_market_session
+from .platform import (
+    PerturbationConfig,
+    SessionArtefacts,
+    generate_synthetic_market_days,
+    run_market_session,
+    summarise_monte_carlo_sessions,
+)
 from .provenance import capture_provenance
 from .reports import (
     all_session_path_band_method,
@@ -44,7 +50,7 @@ from .reports import (
     write_run_bundle,
 )
 from .round2 import AccessScenario, NO_ACCESS_SCENARIO, access_scenario_from_dict, expand_scenarios
-from .round3 import prepare_round3_synthetic_context
+from .round3 import ROUND3_HYDROGEL, prepare_round3_synthetic_context
 from .metadata import RoundSpec, get_round_spec
 from .scenarios import ResearchScenario, scenario_manifest, scenarios_from_config
 from .storage import OutputOptions
@@ -1471,9 +1477,264 @@ def _mc_summary_for_rows(results: Sequence[SessionArtefacts]) -> Dict[str, objec
         "mc_p05": p05,
         "mc_p50": _quantile(finals, 0.50),
         "mc_p95": _quantile(finals, 0.95),
+        "mc_min": min(finals),
+        "mc_max": max(finals),
         "mc_expected_shortfall_05": statistics.fmean(tail) if tail else p05,
         "mc_positive_rate": sum(1 for value in finals if value > 0) / len(finals),
+        "mc_win_rate": sum(1 for value in finals if value > 0) / len(finals),
         "mc_mean_drawdown": statistics.fmean(float(session.summary.get("max_drawdown", 0.0)) for session in results),
+        "mc_max_limit_breaches": max(int(session.summary.get("limit_breaches", 0)) for session in results),
+    }
+
+
+def _round3_hydrogel_meanshift_row(
+    *,
+    scenario: ResearchScenario,
+    trader_spec: TraderSpec,
+    results: Sequence[SessionArtefacts],
+    fill_model_name: str,
+    round_number: int,
+) -> Dict[str, object]:
+    summary = summarise_monte_carlo_sessions(list(results))
+    return {
+        "scenario": scenario.name,
+        "scenario_description": scenario.description,
+        "scenario_tags": ",".join(scenario.tags),
+        "trader": trader_spec.name,
+        "overrides": describe_overrides(trader_spec.overrides),
+        "round": round_number,
+        "source": "synthetic_round3_mc",
+        "path_transform": "persistent_hydrogel_shift",
+        "fill_model": fill_model_name,
+        "hydrogel_shift": scenario.perturbation.shock_for(ROUND3_HYDROGEL),
+        "shift_start_tick": scenario.perturbation.shock_tick,
+        "synthetic_tick_limit": scenario.perturbation.synthetic_tick_limit,
+        "mc_sessions": summary.get("session_count"),
+        "mc_mean": summary.get("mean"),
+        "mc_std": summary.get("std"),
+        "mc_p05": summary.get("p05"),
+        "mc_p50": summary.get("p50"),
+        "mc_p95": summary.get("p95"),
+        "mc_min": summary.get("min"),
+        "mc_max": summary.get("max"),
+        "mc_expected_shortfall_05": summary.get("expected_shortfall_05"),
+        "mc_positive_rate": summary.get("positive_rate"),
+        "mc_win_rate": summary.get("positive_rate"),
+        "mc_mean_drawdown": summary.get("mean_max_drawdown"),
+        "mc_max_limit_breaches": summary.get("max_limit_breaches"),
+    }
+
+
+def _round3_hydrogel_meanshift_product_rows(
+    *,
+    scenario: ResearchScenario,
+    trader_spec: TraderSpec,
+    results: Sequence[SessionArtefacts],
+) -> List[Dict[str, object]]:
+    summary = summarise_monte_carlo_sessions(list(results))
+    per_product = summary.get("per_product", {})
+    if not isinstance(per_product, Mapping):
+        return []
+    rows: List[Dict[str, object]] = []
+    for product, metrics in per_product.items():
+        if not isinstance(metrics, Mapping):
+            continue
+        rows.append({
+            "scenario": scenario.name,
+            "trader": trader_spec.name,
+            "source": "synthetic_round3_mc",
+            "hydrogel_shift": scenario.perturbation.shock_for(ROUND3_HYDROGEL),
+            "product": product,
+            "mc_mean_mtm": metrics.get("mean"),
+            "mc_min_mtm": metrics.get("min"),
+            "mc_max_mtm": metrics.get("max"),
+        })
+    return rows
+
+
+def _round3_hydrogel_pairwise_rows(
+    mc_results: Dict[tuple[str, str], List[SessionArtefacts]],
+) -> List[Dict[str, object]]:
+    rows: List[Dict[str, object]] = []
+    scenarios = sorted({key[0] for key in mc_results})
+    for scenario in scenarios:
+        traders = sorted(trader for sc, trader in mc_results if sc == scenario)
+        for idx, trader_a in enumerate(traders):
+            for trader_b in traders[idx + 1:]:
+                sessions_a = mc_results[(scenario, trader_a)]
+                sessions_b = mc_results[(scenario, trader_b)]
+                n = min(len(sessions_a), len(sessions_b))
+                if n == 0:
+                    continue
+                diffs = [
+                    float(sessions_a[i].summary["final_pnl"]) - float(sessions_b[i].summary["final_pnl"])
+                    for i in range(n)
+                ]
+                mean_diff = statistics.fmean(diffs)
+                rows.append({
+                    "scenario": scenario,
+                    "trader_a": trader_a,
+                    "trader_b": trader_b,
+                    "sessions": n,
+                    "mc_mean_diff_a_minus_b": mean_diff,
+                    "mc_p05_diff": _quantile(diffs, 0.05),
+                    "mc_p50_diff": _quantile(diffs, 0.50),
+                    "mc_p95_diff": _quantile(diffs, 0.95),
+                    "mc_min_diff": min(diffs),
+                    "mc_max_diff": max(diffs),
+                    "a_win_rate": sum(1 for value in diffs if value > 0) / n,
+                    "likely_winner": trader_a if mean_diff > 0 else trader_b if mean_diff < 0 else "tie",
+                })
+    return rows
+
+
+def run_round3_hydrogel_meanshift_from_config(
+    config_path: Path,
+    output_dir: Path,
+    output_options: OutputOptions | None = None,
+) -> Dict[str, List[Dict[str, object]]]:
+    config_path = config_path.resolve()
+    config = _load_json_config(config_path)
+    run_name = str(config.get("name", config_path.stem))
+    round_number = int(config.get("round", 3))
+    if round_number != 3:
+        raise ValueError("Round 3 Hydrogel mean-shift harness requires round=3")
+    data_dir = _config_data_dir(config, config_path, round_number)
+    days = _config_days(config)
+    fill_model_config_path = _optional_config_path(config, config_path, "fill_config")
+    default_fill_model = str(config.get("fill_model", "base"))
+    scenarios = scenarios_from_config(config.get("scenarios"))
+    trader_specs = _trader_specs_from_config(config, config_path)
+    if not scenarios:
+        raise ValueError(f"{config_path}: no Hydrogel mean-shift scenarios configured")
+    mc_sessions = int(config.get("mc_sessions", 16))
+    if mc_sessions <= 0:
+        raise ValueError("Round 3 Hydrogel mean-shift harness requires mc_sessions > 0")
+    mc_sample_sessions = int(config.get("mc_sample_sessions", min(4, mc_sessions)))
+    mc_sample_sessions = max(0, min(mc_sample_sessions, mc_sessions))
+    mc_seed = int(config.get("mc_seed", 20260424))
+    mc_workers = int(config.get("mc_workers", 1))
+    mc_backend = str(config.get("mc_backend", "auto"))
+    output_options = output_options or OutputOptions.from_config(config)
+
+    summary_rows: List[Dict[str, object]] = []
+    product_rows: List[Dict[str, object]] = []
+    mc_results: Dict[tuple[str, str], List[SessionArtefacts]] = {}
+
+    for scenario_idx, scenario in enumerate(scenarios):
+        fill_model_name = scenario.fill_model or default_fill_model
+        for trader_spec in trader_specs:
+            results = run_monte_carlo(
+                trader_spec=trader_spec,
+                sessions=mc_sessions,
+                sample_sessions=mc_sample_sessions,
+                days=days,
+                data_dir=data_dir,
+                fill_model_name=fill_model_name,
+                fill_model_config_path=fill_model_config_path,
+                perturbation=scenario.perturbation,
+                output_dir=output_dir / scenario.name / trader_spec.name / "monte_carlo",
+                base_seed=mc_seed + scenario_idx * 10_000,
+                run_name=f"{run_name}_{scenario.name}_{trader_spec.name}_mc",
+                workers=mc_workers,
+                monte_carlo_backend=mc_backend,
+                round_number=round_number,
+                register=False,
+                write_bundle=output_options.write_child_bundles,
+                output_options=output_options,
+            )
+            summary_rows.append(
+                _round3_hydrogel_meanshift_row(
+                    scenario=scenario,
+                    trader_spec=trader_spec,
+                    results=results,
+                    fill_model_name=fill_model_name,
+                    round_number=round_number,
+                )
+            )
+            product_rows.extend(
+                _round3_hydrogel_meanshift_product_rows(
+                    scenario=scenario,
+                    trader_spec=trader_spec,
+                    results=results,
+                )
+            )
+            mc_results[(scenario.name, trader_spec.name)] = list(results)
+
+    summary_rows.sort(key=lambda row: (float(row.get("hydrogel_shift") or 0.0), str(row["scenario"]), str(row["trader"])))
+    product_rows.sort(key=lambda row: (float(row.get("hydrogel_shift") or 0.0), str(row["scenario"]), str(row["trader"]), str(row["product"])))
+    pairwise_rows = _round3_hydrogel_pairwise_rows(mc_results)
+    aggregate_runtime_context = _mc_runtime_context(
+        workers=mc_workers,
+        sessions=mc_sessions,
+        sample_sessions=mc_sample_sessions,
+        monte_carlo_backend=mc_backend,
+        data_scope=_data_scope_context(
+            round_number=round_number,
+            days=days,
+            data_dir=data_dir,
+            source="synthetic_round3_mc",
+        ),
+    )
+    dashboard = build_dashboard_payload(
+        run_type="round3_hydrogel_meanshift",
+        run_name=run_name,
+        trader_name="multiple" if len(trader_specs) > 1 else trader_specs[0].name,
+        mode="monte_carlo",
+        fill_model=resolve_fill_model(default_fill_model, fill_model_config_path).to_dict(),
+        perturbations={
+            "scenario_count": len(scenarios),
+            "path_transform": "persistent_hydrogel_shift",
+            "source": "synthetic_round3_mc",
+        },
+        round_number=round_number,
+        comparison_rows=summary_rows,
+        scenario_analysis={
+            "scenarios": scenario_manifest(scenarios),
+            "rows": summary_rows,
+            "productRows": product_rows,
+            "pairwiseMc": pairwise_rows,
+            "assumptions": {
+                "source": "Synthetic Round 3 Monte Carlo only; no historical replay rows are produced.",
+                "shock": "hydrogel_shock is applied persistently to the synthetic Hydrogel latent path from shock_tick onward.",
+                "unknown": "This stress does not prove final-simulation Hydrogel dynamics or hidden queue behaviour.",
+            },
+        },
+        output_options=output_options,
+        runtime_context=aggregate_runtime_context,
+    )
+    write_run_bundle(
+        output_dir,
+        dashboard,
+        extra_csvs={
+            "r3_hydrogel_meanshift.csv": summary_rows,
+            "r3_hydrogel_meanshift_products.csv": product_rows,
+            "r3_hydrogel_meanshift_pairwise.csv": pairwise_rows,
+        },
+        output_options=output_options,
+    )
+    write_manifest(
+        output_dir,
+        {
+            "run_type": "round3_hydrogel_meanshift",
+            "run_name": run_name,
+            "round": round_number,
+            "source": "synthetic_round3_mc",
+            "path_transform": "persistent_hydrogel_shift",
+            "scenario_count": len(scenarios),
+            "trader_count": len(trader_specs),
+            "mc_sessions": mc_sessions,
+            "mc_sample_sessions": mc_sample_sessions,
+            "scenarios": scenario_manifest(scenarios),
+            "fill_config": str(fill_model_config_path) if fill_model_config_path else None,
+        },
+        output_options,
+        runtime_context=aggregate_runtime_context,
+    )
+    return {
+        "summary_rows": summary_rows,
+        "product_rows": product_rows,
+        "pairwise_rows": pairwise_rows,
     }
 
 

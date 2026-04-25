@@ -7,11 +7,12 @@ import pytest
 
 from prosperity_backtester.noise import resolve_noise_profile
 from prosperity_backtester.scenarios import default_research_scenarios
-from prosperity_backtester.experiments import run_scenario_compare_from_config
+from prosperity_backtester.experiments import run_round3_hydrogel_meanshift_from_config, run_scenario_compare_from_config
 
 
 ROOT = Path(__file__).resolve().parent.parent
 STARTER = ROOT / "strategies" / "archive" / "legacy" / "starter.py"
+NOOP_ROUND3 = ROOT / "tests" / "fixtures" / "noop_round3_trader.py"
 
 
 def _write_tiny_round1_dataset(data_dir: Path) -> None:
@@ -80,6 +81,43 @@ def test_scenario_compare_bundle(tmp_path):
     assert result["robustness_rows"][0]["trader"] == "starter"
     assert (tmp_path / "scenario_out" / "dashboard.json").is_file()
     assert (tmp_path / "scenario_out" / "robustness_ranking.csv").is_file()
+
+
+def test_round3_hydrogel_meanshift_bundle_is_synthetic_only(tmp_path):
+    config = {
+        "name": "tiny_hydrogel_meanshift",
+        "round": 3,
+        "data_dir": str(ROOT / "data" / "round3"),
+        "days": [0],
+        "traders": [{"name": "noop", "path": str(NOOP_ROUND3)}],
+        "scenarios": [
+            {
+                "name": "shift_neutral",
+                "fill_model": "base",
+                "perturbation": {"synthetic_tick_limit": 4, "shock_tick": 1},
+            },
+            {
+                "name": "shift_plus_25",
+                "fill_model": "base",
+                "perturbation": {"synthetic_tick_limit": 4, "shock_tick": 1, "hydrogel_shock": 25.0},
+            },
+        ],
+        "mc_sessions": 2,
+        "mc_sample_sessions": 0,
+    }
+    config_path = tmp_path / "r3_meanshift.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+
+    result = run_round3_hydrogel_meanshift_from_config(config_path, tmp_path / "r3_meanshift")
+
+    rows = result["summary_rows"]
+    assert len(rows) == 2
+    assert {row["source"] for row in rows} == {"synthetic_round3_mc"}
+    assert {float(row["hydrogel_shift"]) for row in rows} == {0.0, 25.0}
+    assert all("final_pnl" not in row for row in rows)
+    assert all(row["mc_min"] is not None and row["mc_max"] is not None for row in rows)
+    assert (tmp_path / "r3_meanshift" / "r3_hydrogel_meanshift.csv").is_file()
+    assert (tmp_path / "r3_meanshift" / "r3_hydrogel_meanshift_products.csv").is_file()
 
 
 def test_scenario_config_reports_missing_trader(tmp_path):

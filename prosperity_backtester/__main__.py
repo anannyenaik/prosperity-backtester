@@ -21,6 +21,7 @@ from .experiments import (
     run_optimize_from_config,
     run_replay,
     run_round2_scenario_compare_from_config,
+    run_round3_hydrogel_meanshift_from_config,
     run_scenario_compare_from_config,
     run_sweep_from_config,
 )
@@ -42,6 +43,7 @@ SUBCOMMANDS = {
     "inspect",
     "serve",
     "round2-scenarios",
+    "round3-hydrogel-meanshift",
     "scenario-compare",
     "derive-fill-profile",
     "workspace-bundle",
@@ -66,6 +68,10 @@ RUN_TYPE_ALIASES = {
     "round2": "round2_scenarios",
     "round2-scenarios": "round2_scenarios",
     "round2_scenarios": "round2_scenarios",
+    "round3-hydrogel-meanshift": "round3_hydrogel_meanshift",
+    "round3_hydrogel_meanshift": "round3_hydrogel_meanshift",
+    "r3-hydrogel-meanshift": "round3_hydrogel_meanshift",
+    "r3_hydrogel_meanshift": "round3_hydrogel_meanshift",
     "scenario-compare": "scenario_compare",
     "scenario_compare": "scenario_compare",
     "workspace": "workspace",
@@ -134,7 +140,7 @@ def _default_auto_label(args, label: str) -> str:
         display = names[:2] if names else traders[:2]
         joined = "_vs_".join(_slug(name) for name in display if name)
         return f"{label}_{joined or 'comparison'}"
-    if args.command in {"sweep", "optimize", "round2-scenarios", "scenario-compare"}:
+    if args.command in {"sweep", "optimize", "round2-scenarios", "round3-hydrogel-meanshift", "scenario-compare"}:
         return f"{label}_{_slug(Path(str(getattr(args, 'config', label))).stem)}"
     if args.command == "derive-fill-profile":
         return f"{label}_{_slug(str(getattr(args, 'profile_name', 'empirical')))}"
@@ -480,6 +486,14 @@ def build_parser() -> argparse.ArgumentParser:
     round2.add_argument("--output-dir", default=None)
     add_output_controls(round2, child_bundles=True)
 
+    round3_meanshift = sub.add_parser(
+        "round3-hydrogel-meanshift",
+        help="Run synthetic-only Round 3 Hydrogel persistent mean-shift MC scenarios",
+    )
+    round3_meanshift.add_argument("config", help="Path to Round 3 Hydrogel mean-shift JSON config")
+    round3_meanshift.add_argument("--output-dir", default=None)
+    add_output_controls(round3_meanshift, child_bundles=True)
+
     scenario_compare = sub.add_parser("scenario-compare", help="Run calibrated baseline/stress/crash scenario comparisons")
     scenario_compare.add_argument("config", help="Path to research scenario JSON config")
     scenario_compare.add_argument("--output-dir", default=None)
@@ -811,6 +825,27 @@ def main(argv: List[str] | None = None) -> None:
             gap = row.get("gap_to_second")
             gap_text = "n/a" if gap is None else f"{gap:,.2f}"
             print(f"  {row['scenario']}: winner={row['winner']} pnl={row['winner_final_pnl']:,.2f} gap={gap_text}")
+        print(f"Output bundle: {output_dir}")
+        _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
+        if args.open:
+            _open_bundle(output_dir)
+        return
+
+    if args.command == "round3-hydrogel-meanshift":
+        output_dir, auto_output = _auto_output_dir(args, "r3_hydrogel_meanshift")
+        cli_options = _output_options_from_args(args) if _has_output_policy_override(args) else None
+        result = run_round3_hydrogel_meanshift_from_config(Path(args.config).resolve(), output_dir, output_options=cli_options)
+        rows = result["summary_rows"]
+        print(f"Round 3 Hydrogel mean-shift rows: {len(rows)}")
+        for row in rows:
+            print(
+                f"  shift={float(row.get('hydrogel_shift') or 0.0):+,.0f} "
+                f"trader={row['trader']} mean={float(row.get('mc_mean') or 0.0):,.2f} "
+                f"p05={float(row.get('mc_p05') or 0.0):,.2f} "
+                f"min={float(row.get('mc_min') or 0.0):,.2f} "
+                f"max={float(row.get('mc_max') or 0.0):,.2f} "
+                f"win={100.0 * float(row.get('mc_win_rate') or 0.0):.1f}%"
+            )
         print(f"Output bundle: {output_dir}")
         _prune_after_auto_run(output_dir, auto_output, args.keep_runs)
         if args.open:
