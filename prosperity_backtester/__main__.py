@@ -13,6 +13,7 @@ from .experiments import (
     DEFAULT_DATA_DIR,
     DEFAULT_ROUND2_DATA_DIR,
     DEFAULT_ROUND3_DATA_DIR,
+    DEFAULT_ROUND4_DATA_DIR,
     TraderSpec,
     calibrate_against_live_export,
     default_data_dir_for_round,
@@ -48,6 +49,8 @@ SUBCOMMANDS = {
     "derive-fill-profile",
     "workspace-bundle",
     "verify-round3",
+    "verify-round4",
+    "r4-counterparty-research",
     "clean",
 }
 
@@ -140,7 +143,7 @@ def _default_auto_label(args, label: str) -> str:
         display = names[:2] if names else traders[:2]
         joined = "_vs_".join(_slug(name) for name in display if name)
         return f"{label}_{joined or 'comparison'}"
-    if args.command in {"sweep", "optimize", "round2-scenarios", "round3-hydrogel-meanshift", "scenario-compare"}:
+    if args.command in {"sweep", "optimize", "round2-scenarios", "round3-hydrogel-meanshift", "scenario-compare", "r4-counterparty-research", "verify-round4"}:
         return f"{label}_{_slug(Path(str(getattr(args, 'config', label))).stem)}"
     if args.command == "derive-fill-profile":
         return f"{label}_{_slug(str(getattr(args, 'profile_name', 'empirical')))}"
@@ -242,6 +245,9 @@ def _perturb_from_args(args) -> PerturbationConfig:
         voucher_spread_shift_ticks=int(getattr(args, "voucher_spread_shift_ticks", 0)),
         underlying_liquidity_scale=float(getattr(args, "underlying_liquidity_scale", 1.0)),
         hydrogel_liquidity_scale=float(getattr(args, "hydrogel_liquidity_scale", 1.0)),
+        counterparty_flow_enabled=bool(getattr(args, "counterparty_flow", True)),
+        counterparty_edge_strength=float(getattr(args, "counterparty_edge_strength", 0.0)),
+        counterparty_edge_sign=float(getattr(args, "counterparty_edge_sign", 1.0)),
         scenario_name=str(getattr(args, "scenario_name", "cli")),
     )
 
@@ -312,10 +318,12 @@ def _access_requested(args) -> bool:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Prosperity replay, Monte Carlo and research platform for Rounds 1 to 3",
+        description="Prosperity replay, Monte Carlo and research platform for Rounds 1 to 4",
         formatter_class=_CliFormatter,
         epilog=(
             "Examples:\n"
+            "  python -m prosperity_backtester inspect --round 4 --data-dir data/round4 --days 1 2 3 --json\n"
+            "  python -m prosperity_backtester r4-counterparty-research --data-dir data/round4 --output-dir backtests/r4_counterparty_research_latest\n"
             "  python -m prosperity_backtester inspect --round 3 --data-dir data/round3 --days 0 1 2 --json\n"
             "  python -m prosperity_backtester replay tests/fixtures/noop_round3_trader.py --round 3 --data-dir data/round3 --days 0 1 2 --fill-mode base\n"
             "  python -m prosperity_backtester monte-carlo tests/fixtures/noop_round3_trader.py --round 3 --data-dir data/round3 --days 0 --sessions 8 --sample-sessions 2 --synthetic-tick-limit 250\n"
@@ -327,7 +335,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
 
     def add_round_and_access(subparser):
-        subparser.add_argument("--round", type=int, default=1, choices=[1, 2, 3], help="Competition round mode")
+        subparser.add_argument("--round", type=int, default=1, choices=[1, 2, 3, 4], help="Competition round mode")
         subparser.add_argument("--with-extra-access", action="store_true", help="Enable the local Round 2 extra-quote access assumption")
         subparser.add_argument("--contract-won", action="store_true", help="Assume the MAF contract is won and the fee is paid")
         subparser.add_argument("--access-name", default=None, help="Display name for the local access scenario")
@@ -357,7 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
     def add_shared(subparser):
         subparser.add_argument("trader", help="Trader python file")
         subparser.add_argument("--name", default=None, help="Display name for the trader")
-        subparser.add_argument("--data-dir", "--data", dest="data_dir", default=None, help=f"Directory containing CSVs. Defaults: round 1 {DEFAULT_DATA_DIR}, round 2 {DEFAULT_ROUND2_DATA_DIR}, round 3 {DEFAULT_ROUND3_DATA_DIR}")
+        subparser.add_argument("--data-dir", "--data", dest="data_dir", default=None, help=f"Directory containing CSVs. Defaults: round 1 {DEFAULT_DATA_DIR}, round 2 {DEFAULT_ROUND2_DATA_DIR}, round 3 {DEFAULT_ROUND3_DATA_DIR}, round 4 {DEFAULT_ROUND4_DATA_DIR}")
         subparser.add_argument("--days", nargs="*", default=None, help="Day list. Defaults follow the chosen round.")
         subparser.add_argument("--fill-mode", default="base", help=f"Fill assumption preset. Built-ins: {', '.join(sorted(FILL_MODELS))}")
         subparser.add_argument("--fill-config", default=None, help="Optional JSON fill-profile config produced by derive-fill-profile")
@@ -390,6 +398,9 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--voucher-spread-shift-ticks", type=int, default=0, help="Round 3 voucher spread shift in ticks")
         subparser.add_argument("--underlying-liquidity-scale", type=float, default=1.0, help="Round 3 underlying book-depth multiplier")
         subparser.add_argument("--hydrogel-liquidity-scale", type=float, default=1.0, help="Round 3 hydrogel book-depth multiplier")
+        subparser.add_argument("--counterparty-flow", action=argparse.BooleanOptionalAction, default=True, help="Enable named synthetic counterparty flow when the calibrated round supports it")
+        subparser.add_argument("--counterparty-edge-strength", type=float, default=0.0, help="Synthetic informed-name edge strength for Round 4 MC")
+        subparser.add_argument("--counterparty-edge-sign", type=float, default=1.0, help="Set to -1 to sign-flip synthetic counterparty edge stress")
         subparser.add_argument("--scenario-name", default="cli")
         subparser.add_argument("--print-trader-output", "--print", dest="print_trader_output", action="store_true", help="Forward trader stdout directly instead of suppressing it")
         add_output_controls(subparser)
@@ -519,7 +530,7 @@ def build_parser() -> argparse.ArgumentParser:
     inspect = sub.add_parser("inspect", help="Print a concise dataset inspection report", formatter_class=_CliFormatter)
     inspect.add_argument("--data-dir", "--data", dest="data_dir", default=None)
     inspect.add_argument("--days", nargs="*", default=None)
-    inspect.add_argument("--round", type=int, default=1, choices=[1, 2, 3])
+    inspect.add_argument("--round", type=int, default=1, choices=[1, 2, 3, 4])
     inspect.add_argument("--json", action="store_true")
 
     serve = sub.add_parser(
@@ -589,6 +600,28 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--mc-sessions-heavy", type=int, default=64)
     verify.add_argument("--mc-synthetic-tick-limit", type=int, default=250)
     verify.add_argument("--skip-heavy-mc", action="store_true", help="Skip the 64-session x workers 1/2/4 sweep")
+
+    r4_research = sub.add_parser(
+        "r4-counterparty-research",
+        help="Build Round 4 counterparty markout research tables",
+        formatter_class=_CliFormatter,
+    )
+    r4_research.add_argument("--data-dir", default="data/round4")
+    r4_research.add_argument("--output-dir", default=None)
+    r4_research.add_argument("--days", nargs="*", default=None, help="Day list. Defaults to 1 2 3.")
+    r4_research.add_argument("--horizons", nargs="*", default=["1", "5", "10", "20", "50", "100", "300"])
+
+    verify4 = sub.add_parser(
+        "verify-round4",
+        help="Run the Round 4 data, research and MC smoke verification harness",
+        formatter_class=_CliFormatter,
+    )
+    verify4.add_argument("--data-dir", default=None, help="Round 4 data directory. Defaults to data/round4.")
+    verify4.add_argument("--output-dir", default=None, help="Output directory. Defaults to backtests/<timestamp>_r4_verification.")
+    verify4.add_argument("--days", nargs="*", default=None, help="Day list. Defaults to 1 2 3.")
+    verify4.add_argument("--trader", default="strategies/r4_algo_v1_candidate.py")
+    verify4.add_argument("--skip-mc", action="store_true")
+    verify4.add_argument("--full", action="store_true", help="Use a larger smoke sample than the default fast run.")
 
     clean = sub.add_parser("clean", help="Prune old timestamped backtest run directories")
     clean.add_argument("--dir", default=str(Path.cwd() / "backtests"))
@@ -913,8 +946,8 @@ def main(argv: List[str] | None = None) -> None:
         dataset = load_round_dataset(_data_dir_from_args(args), days, round_number=args.round)
         market_days = [dataset[day] for day in days]
         payload = inspect_dataset_days(market_days, round_number=args.round)
-        if int(args.round) == 3:
-            payload["option_diagnostics"] = compute_option_diagnostics(market_days)
+        if int(args.round) in (3, 4):
+            payload["option_diagnostics"] = compute_option_diagnostics(market_days, round_spec=get_round_spec(int(args.round)))
         if args.json:
             print(json.dumps(payload, indent=2))
         else:
@@ -922,6 +955,26 @@ def main(argv: List[str] | None = None) -> None:
             print(f"Products: {', '.join(payload['products'])}")
             for day_row in payload["days"]:
                 print(f"Day {day_row['day']}: {day_row['validation']}")
+        return
+
+    if args.command == "r4-counterparty-research":
+        from .counterparty_research import run_round4_counterparty_research
+
+        if args.output_dir:
+            output_dir = Path(args.output_dir).resolve()
+        else:
+            output_dir = (Path.cwd() / "backtests" / "r4_counterparty_research_latest").resolve()
+        days = tuple(int(day) for day in args.days) if args.days else tuple(get_round_spec(4).default_days)
+        horizons = tuple(int(value) for value in args.horizons)
+        summary = run_round4_counterparty_research(
+            data_dir=Path(args.data_dir).resolve(),
+            output_dir=output_dir,
+            days=days,
+            horizons=horizons,
+        )
+        print(f"Round 4 counterparty research rows: {summary['product_side_rows']}")
+        print(f"Recommendations: {summary['recommendation_rows']}")
+        print(f"Output: {output_dir}")
         return
 
     if args.command == "workspace-bundle":
@@ -1016,6 +1069,34 @@ def main(argv: List[str] | None = None) -> None:
         print(f"Output: {output_dir}")
         if summary.get("overall_status") != "pass":
             # Don't prune on failure: we may need the artefacts.
+            sys.exit(1)
+        _prune_after_auto_run(output_dir, auto_output, 30)
+        return
+
+    if args.command == "verify-round4":
+        from .verify_round4 import run_verify_round4
+
+        data_dir = Path(args.data_dir).resolve() if args.data_dir else default_data_dir_for_round(4).resolve()
+        if args.output_dir:
+            output_dir = Path(args.output_dir).resolve()
+            auto_output = False
+        else:
+            output_dir = _timestamped_dir(Path.cwd() / "backtests", "r4_verification")
+            auto_output = True
+        days = tuple(int(day) for day in args.days) if args.days else tuple(get_round_spec(4).default_days)
+        report = run_verify_round4(
+            data_dir=data_dir,
+            output_dir=output_dir,
+            days=days,
+            trader_path=Path(args.trader).resolve(),
+            skip_mc=bool(args.skip_mc),
+            full=bool(args.full),
+        )
+        summary = report.get("summary", {})
+        print(f"Verify Round 4 status: {summary.get('overall_status')}")
+        print(f"  passed: {summary.get('passed')}  failed: {summary.get('failed')}  skipped: {summary.get('skipped')}")
+        print(f"Output: {output_dir}")
+        if summary.get("overall_status") != "pass":
             sys.exit(1)
         _prune_after_auto_run(output_dir, auto_output, 30)
         return

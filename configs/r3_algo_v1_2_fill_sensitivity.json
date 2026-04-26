@@ -7,7 +7,7 @@
   "traders": [
     {
       "name": "r3_v1_2",
-      "path": "strategies/r3_algo_v1_2_candidate.py"
+      "path": "strategies/archive/round3/r3_algo_v1_2_candidate.py"
     },
     {
       "name": "noop",

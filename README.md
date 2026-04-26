@@ -1,8 +1,8 @@
 # Prosperity Backtester
 
-Prosperity Backtester: Now round-aware and ready for Round 3 historical replay, Round 3 option diagnostics, coherent Round 3 Monte Carlo, and early Round 3 trader research, while preserving the existing Round 1 and Round 2 workflows.
+Prosperity Backtester: round-aware historical replay, diagnostics, Monte Carlo, and research workflows for Rounds 1 to 4.
 
-`strategies/r3_algo_v1.py` is the active Round 3 research trader. The tracked `examples/noop_round3_trader.py` file remains a smoke fixture only.
+`strategies/r4_algo_v1_candidate.py` is the active Round 4 research candidate. Round 3 trader files are archived for benchmark reproduction only.
 
 ## Quick start
 
@@ -19,6 +19,32 @@ Install the React dashboard dependencies only if you want the optional UI:
 npm ci --prefix dashboard
 npm test --prefix dashboard
 npm run build --prefix dashboard
+```
+
+## Round 4 path
+
+Inspect the imported Round 4 capsule:
+
+```bash
+python -m prosperity_backtester inspect --round 4 --data-dir data/round4 --days 1 2 3 --json
+```
+
+Run counterparty research:
+
+```bash
+python -m prosperity_backtester r4-counterparty-research --data-dir data/round4 --output-dir backtests/r4_counterparty_research_latest
+```
+
+Run the Round 4 candidate:
+
+```bash
+python -m prosperity_backtester replay strategies/r4_algo_v1_candidate.py --round 4 --data-dir data/round4 --days 1 2 3 --fill-mode base
+```
+
+Run the Round 4 verification smoke:
+
+```bash
+python -m prosperity_backtester verify-round4 --data-dir data/round4 --output-dir backtests/r4_verification_fast
 ```
 
 ## Round 3 path
@@ -49,10 +75,10 @@ Run a deterministic Round 3 replay smoke:
 python -m prosperity_backtester replay examples/noop_round3_trader.py --round 3 --data-dir data/round3 --days 0 1 2 --fill-mode base
 ```
 
-Run the active Round 3 research trader:
+Run the archived Round 3 research trader:
 
 ```bash
-python -m prosperity_backtester replay strategies/r3_algo_v1.py --round 3 --data-dir data/round3 --days 0 1 2 --fill-mode base
+python -m prosperity_backtester replay strategies/archive/round3/r3_algo_v1_2_candidate.py --round 3 --data-dir data/round3 --days 0 1 2 --fill-mode base
 ```
 
 Run a coherent Round 3 Monte Carlo smoke:
@@ -97,7 +123,7 @@ python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_resea
 ## Repository map
 
 - `prosperity_backtester/`: replay, Monte Carlo, round registry, reporting, storage, and server code
-- `data/`: tracked Round 1, Round 2, and Round 3 public fixtures
+- `data/`: tracked Round 1, Round 2, Round 3, and Round 4 public fixtures
 - `configs/`: checked-in smoke and scenario configs
 - `examples/`: smoke helpers and legacy examples
 - `docs/`: workflow, assumptions, architecture, and output notes
@@ -108,13 +134,14 @@ python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_resea
 - Round 3 historical replay trades the observed books and marks positions to observed mids.
 - Round 3 vouchers are not cash-settled or exercised inside historical replay.
 - Round 3 option theory is used for diagnostics and coherent synthetic generation, not as a replay price source.
-- Round 3 Monte Carlo currently uses the classic Python backend.
+- Round 3 and Round 4 option-chain Monte Carlo currently use the classic Python path.
 - Passive fills remain approximate across all rounds.
 - Round 2 access and MAF logic remain available, but are intentionally isolated from Round 3.
 
 ## Documentation
 
 - [docs/ROUND3.md](docs/ROUND3.md): Round 3 products, data, TTE mapping, diagnostics, and caveats
+- [docs/ROUND4.md](docs/ROUND4.md): Round 4 products, counterparty fields, data validation, and research workflow
 - [docs/ROUND3_HARDENING_REPORT.md](docs/ROUND3_HARDENING_REPORT.md): verification and performance proof for this hardening pass
 - [docs/WORKFLOWS.md](docs/WORKFLOWS.md): practical replay and Monte Carlo workflows
 - [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md): exact behaviour versus local modelling assumptions

@@ -1,0 +1,64 @@
+{
+  "name": "round4_fill_sensitivity",
+  "round": 4,
+  "data_dir": "data/round4",
+  "days": [1, 2, 3],
+  "fill_model": "base",
+  "traders": [
+    {
+      "name": "r4_all_names",
+      "path": "strategies/r4_algo_v1_candidate.py"
+    },
+    {
+      "name": "r4_no_names",
+      "path": "strategies/r4_algo_v1_candidate.py",
+      "overrides": {
+        "CONFIG.use_counterparties": false
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "base",
+      "fill_model": "base",
+      "tags": ["fills", "baseline"]
+    },
+    {
+      "name": "no_passive",
+      "fill_model": "base",
+      "tags": ["fills", "conservative"],
+      "perturbation": {
+        "trade_matching_mode": "none"
+      }
+    },
+    {
+      "name": "worse_only",
+      "fill_model": "base",
+      "tags": ["fills", "queue"],
+      "perturbation": {
+        "trade_matching_mode": "worse"
+      }
+    },
+    {
+      "name": "adverse_fill",
+      "fill_model": "low_fill_quality",
+      "tags": ["fills", "adverse", "stress"],
+      "perturbation": {
+        "passive_fill_scale": 0.7,
+        "missed_fill_additive": 0.08,
+        "adverse_selection_ticks": 1,
+        "slippage_multiplier": 1.25
+      }
+    },
+    {
+      "name": "wide_crossing",
+      "fill_model": "empirical_conservative",
+      "tags": ["crossing", "stress"],
+      "perturbation": {
+        "spread_shift_ticks": 1,
+        "voucher_spread_shift_ticks": 1
+      }
+    }
+  ],
+  "mc_sessions": 0
+}

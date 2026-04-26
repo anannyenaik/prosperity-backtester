@@ -1,6 +1,6 @@
 # Round 3 Trader Research
 
-Result: `strategies/r3_algo_v1.py` is a conservative first serious Round 3 trader, but it is not yet a final submission candidate because 32-session Monte Carlo is slightly negative.
+Result: Round 3 trader files are archived for documented benchmark reproduction. `strategies/archive/round3/r3_algo_v1_2_candidate.py` is the final archived v1.2 candidate, not an active submission path.
 
 ## Strategy Design
 
@@ -94,10 +94,10 @@ Monte Carlo, 32 sessions:
 ## Test Commands
 
 ```bash
-python -m prosperity_backtester replay strategies/r3_algo_v1.py --round 3 --data-dir data/round3 --days 0 1 2 --fill-mode base --output-dir backtests/r3_algo_v1_replay_cap60_wide_hedge
-python -m prosperity_backtester scenario-compare configs/r3_algo_v1_fill_sensitivity.json --output-dir backtests/r3_algo_v1_fill_sensitivity_candidate
-python -m prosperity_backtester scenario-compare configs/r3_algo_v1_research.json --output-dir backtests/r3_algo_v1_research_scenarios_candidate
-python -m prosperity_backtester monte-carlo strategies/r3_algo_v1.py --round 3 --data-dir data/round3 --days 0 --sessions 32 --sample-sessions 4 --synthetic-tick-limit 250 --output-dir backtests/r3_algo_v1_mc32_cap60_wide_hedge
+python -m prosperity_backtester replay strategies/archive/round3/rejected/r3_algo_v1_anchor_contaminated_rejected.py --round 3 --data-dir data/round3 --days 0 1 2 --fill-mode base --output-dir backtests/r3_algo_v1_replay_cap60_wide_hedge
+python -m prosperity_backtester scenario-compare configs/archive/round3/rejected/r3_algo_v1_fill_sensitivity.json --output-dir backtests/r3_algo_v1_fill_sensitivity_candidate
+python -m prosperity_backtester scenario-compare configs/archive/round3/rejected/r3_algo_v1_research.json --output-dir backtests/r3_algo_v1_research_scenarios_candidate
+python -m prosperity_backtester monte-carlo strategies/archive/round3/rejected/r3_algo_v1_anchor_contaminated_rejected.py --round 3 --data-dir data/round3 --days 0 --sessions 32 --sample-sessions 4 --synthetic-tick-limit 250 --output-dir backtests/r3_algo_v1_mc32_cap60_wide_hedge
 ```
 
 ## V2 Ideas
@@ -109,13 +109,17 @@ python -m prosperity_backtester monte-carlo strategies/r3_algo_v1.py --round 3 -
 
 ## V2 Candidate Test Pass (2026-04-25)
 
-`strategies/r3_algo_v1.py` was preserved as `strategies/r3_algo_v1_aggressive_baseline.py` and
-a blueprint-aligned variant was written to `strategies/r3_algo_v2_candidate.py` to test the
+The historical v1 strategy is now archived as
+`strategies/archive/round3/rejected/r3_algo_v1_anchor_contaminated_rejected.py`, with the
+aggressive baseline copy archived as
+`strategies/archive/round3/rejected/r3_algo_v1_aggressive_anchor_contaminated_rejected.py`.
+A blueprint-aligned rejected variant is archived as
+`strategies/archive/round3/rejected/r3_algo_v2_rejected.py`; it tested the
 hypothesis that the published blueprint (slow-EMA Hydrogel, fixed `BASE_IV=0.239` smile,
 canonical delta bands, passive-leaning vouchers) would beat the aggressive baseline on
 robustness.
 
-### Audit findings (current `r3_algo_v1.py` vs blueprint)
+### Audit findings (archived v1 vs blueprint)
 
 - Hydrogel cap: code is `60` soft; blueprint after teammate feedback wants `150` soft / `200` hard. Confirmed: `60`.
 - Hydrogel fair: code uses `0.62 * 9991 + 0.28 * live_ewma + 0.10 * mid` (anchor-heavy); blueprint wants slow-EMA-dominant with `α=0.0002`. Confirmed: anchor-heavy.
@@ -216,9 +220,10 @@ rewards a fixed `9991` anchor. That makes the harness a poor test of the bluepri
 
 ## Persistent Hydrogel Mean-Shift Harness and v1.2 Candidate (2026-04-25)
 
-Decision: keep `strategies/r3_algo_v1.py` unchanged as the best current historical
-baseline. Add `strategies/r3_algo_v1_2_candidate.py` as the single serious candidate
-for final-simulation robustness review. Do not call v1.2 final-sim proven yet.
+Decision after cleanup: `strategies/archive/round3/r3_algo_v1_2_candidate.py` is the archived
+Round 3 v1.2 candidate. v1 remains a documented historical benchmark only, archived
+as `strategies/archive/round3/rejected/r3_algo_v1_anchor_contaminated_rejected.py`.
+Do not call v1.2 final-sim proven yet.
 
 Harness change:
 
@@ -275,8 +280,64 @@ Interpretation:
 - v1.2 is therefore a stronger final-simulation robustness candidate, not a proven final
   submission.
 
+## v1.3 Candidate Rejection (2026-04-25)
+
+Decision: v1.3 is rejected. `strategies/archive/round3/r3_algo_v1_2_candidate.py` remains the archived
+v1.2 benchmark. The tested code is archived at
+`strategies/archive/round3/rejected/r3_algo_v1_3_rejected.py`.
+
+v1.3 kept the v1.2 voucher model unchanged and changed only Hydrogel controls:
+
+- nonlinear inventory skew, milder near flat and stronger near cap.
+- a stable-shift risk floor when live slow EMA drifted from `9991` but fast-vs-slow trend
+  was small.
+- damped drift uncertainty in stable shifted regimes.
+
+Replay and fill results:
+
+| Strategy | Replay | Conservative queue | Harsh adverse | Breaches |
+| --- | ---: | ---: | ---: | ---: |
+| v1.2 | 21,870.50 | 13,264.50 | 7,508.50 | 0 |
+| rejected v1.3 | 21,993.50 | 13,291.50 | 7,487.50 | 0 |
+
+MC32:
+
+| Strategy | Mean | p05 | Min | Max | Win rate |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| v1.2 | -215.33 | -2,309.66 | -2,982.57 | 2,307.73 | 50.0% |
+| rejected v1.3 | -221.56 | -2,309.66 | -2,982.57 | 2,239.73 | 50.0% |
+
+Persistent synthetic HYDROGEL mean-shift, 16 sessions per shift:
+
+| Shift | v1.2 mean / p05 / min / max / win | rejected v1.3 mean / p05 / min / max / win |
+| ---: | ---: | ---: |
+| -100 | 584.98 / -1,368.52 / -1,639.67 / 2,642.82 / 62.5% | 584.98 / -1,368.52 / -1,639.67 / 2,642.82 / 62.5% |
+| -60 | 809.42 / -1,396.32 / -1,930.69 / 3,734.02 / 62.5% | 809.42 / -1,396.32 / -1,930.69 / 3,734.02 / 62.5% |
+| -30 | -275.85 / -3,960.13 / -4,415.90 / 2,128.64 / 50.0% | -260.38 / -3,960.13 / -4,415.90 / 2,250.38 / 50.0% |
+| 0 | 891.46 / -1,472.99 / -1,500.53 / 2,931.71 / 75.0% | 901.69 / -1,472.99 / -1,500.53 / 2,985.71 / 75.0% |
+| +30 | 738.23 / -1,747.14 / -2,829.61 / 4,422.36 / 62.5% | 731.42 / -1,730.89 / -2,764.61 / 4,364.36 / 62.5% |
+| +60 | 251.33 / -2,895.81 / -3,610.22 / 3,321.14 / 62.5% | 255.86 / -2,895.81 / -3,610.22 / 3,321.14 / 62.5% |
+| +100 | 1,751.50 / 224.22 / 50.48 / 4,756.39 / 100.0% | 1,751.50 / 224.22 / 50.48 / 4,756.39 / 100.0% |
+
+Interpretation:
+
+- v1.3 adds 123.00 replay PnL and 27.00 conservative-queue PnL, all from Hydrogel.
+- Harsh adverse is 21.00 worse and MC mean is 6.23 worse, with no p05 improvement.
+- Mean-shift tails are mostly identical and do not prove a new final-simulation edge.
+- The small public replay gain is not enough to promote v1.3 over v1.2.
+
+Hidden-alpha and options-signal check:
+
+- Central voucher cross-strike residuals show one-tick mean reversion historically, which
+  v1.2 already captures with leave-one-out central IV and bounded residual offsets.
+- A fixed-vol voucher-implied Velvet spot residual was weak: about 0.02 one-tick
+  correlation and 0.01 five-tick correlation to Velvet moves.
+- Smile slope had a larger historical correlation to Velvet moves, but it is not accepted:
+  it is fragile, likely surface/underlying co-movement, and was not validated after spread,
+  hedge cost, MC, and mean-shift stress.
+
 Next highest-EV task:
 
-- Run a fresh MC seed batch and a second mean-shift batch for v1 vs v1.2.
-- If v1.2 keeps the tail advantage without a new breach or severe replay loss, promote it
-  over v1 for final-simulation risk. Otherwise keep v1 as the active historical baseline.
+- Build a small diagnostic replay that logs Hydrogel live-fair distance, fast-slow gap,
+  inventory, and realised markout by fill bucket, then use it to identify one robust
+  Hydrogel entry/exit improvement rather than changing more constants blindly.

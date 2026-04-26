@@ -1,0 +1,129 @@
+{
+  "name": "round4_research_scenarios",
+  "round": 4,
+  "data_dir": "data/round4",
+  "days": [1, 2, 3],
+  "fill_model": "base",
+  "traders": [
+    {
+      "name": "r4_all_names",
+      "path": "strategies/r4_algo_v1_candidate.py"
+    },
+    {
+      "name": "r4_no_names",
+      "path": "strategies/r4_algo_v1_candidate.py",
+      "overrides": {
+        "CONFIG.use_counterparties": false
+      }
+    },
+    {
+      "name": "r4_velvet_names_only",
+      "path": "strategies/r4_algo_v1_candidate.py",
+      "overrides": {
+        "CONFIG.use_counterparties": true,
+        "CONFIG.use_velvet_names": true,
+        "CONFIG.use_option_names": false,
+        "CONFIG.use_hydrogel_names": false
+      }
+    },
+    {
+      "name": "r4_option_names_only",
+      "path": "strategies/r4_algo_v1_candidate.py",
+      "overrides": {
+        "CONFIG.use_counterparties": true,
+        "CONFIG.use_velvet_names": false,
+        "CONFIG.use_option_names": true,
+        "CONFIG.use_hydrogel_names": false
+      }
+    },
+    {
+      "name": "r4_no_deep_itm",
+      "path": "strategies/r4_algo_v1_candidate.py",
+      "overrides": {
+        "CONFIG.use_deep_itm": false
+      }
+    },
+    {
+      "name": "r4_wide_crossing",
+      "path": "strategies/r4_algo_v1_candidate.py",
+      "overrides": {
+        "CONFIG.crossing_aggression": "wide"
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "historical_base",
+      "fill_model": "base",
+      "tags": ["historical", "base"]
+    },
+    {
+      "name": "spread_widening",
+      "fill_model": "empirical_conservative",
+      "tags": ["spread", "stress"],
+      "perturbation": {
+        "spread_shift_ticks": 1,
+        "voucher_spread_shift_ticks": 1,
+        "scenario_name": "spread_widening"
+      }
+    },
+    {
+      "name": "liquidity_thinning",
+      "fill_model": "empirical_conservative",
+      "tags": ["liquidity", "stress"],
+      "perturbation": {
+        "order_book_volume_scale": 0.75,
+        "option_liquidity_scale": 0.70,
+        "underlying_liquidity_scale": 0.80,
+        "hydrogel_liquidity_scale": 0.80,
+        "scenario_name": "liquidity_thinning"
+      }
+    },
+    {
+      "name": "velvet_up_iv_up",
+      "fill_model": "base",
+      "tags": ["velvet", "iv"],
+      "perturbation": {
+        "shock_tick": 100,
+        "underlying_shock": 100.0,
+        "vol_shift": 0.02,
+        "synthetic_tick_limit": 300,
+        "scenario_name": "velvet_up_iv_up"
+      }
+    },
+    {
+      "name": "velvet_down_iv_down",
+      "fill_model": "base",
+      "tags": ["velvet", "iv"],
+      "perturbation": {
+        "shock_tick": 100,
+        "underlying_shock": -100.0,
+        "vol_shift": -0.02,
+        "synthetic_tick_limit": 300,
+        "scenario_name": "velvet_down_iv_down"
+      }
+    },
+    {
+      "name": "counterparty_weakened",
+      "fill_model": "base",
+      "tags": ["counterparty", "stress"],
+      "perturbation": {
+        "counterparty_edge_strength": 0.125,
+        "synthetic_tick_limit": 300,
+        "scenario_name": "counterparty_weakened"
+      }
+    },
+    {
+      "name": "counterparty_sign_flipped",
+      "fill_model": "base",
+      "tags": ["counterparty", "failure_mode"],
+      "perturbation": {
+        "counterparty_edge_strength": 0.25,
+        "counterparty_edge_sign": -1.0,
+        "synthetic_tick_limit": 300,
+        "scenario_name": "counterparty_sign_flipped"
+      }
+    }
+  ],
+  "mc_sessions": 0
+}

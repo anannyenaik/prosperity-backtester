@@ -162,14 +162,8 @@ def test_round3_cli_accepts_round3_and_uses_round_defaults(tmp_path):
     assert payload["days"][0]["validation"]["price_rows"] == 120000
     assert "option_diagnostics" in payload
 
-    invalid = subprocess.run(
-        [sys.executable, "-m", "prosperity_backtester", "inspect", "--round", "4"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    assert invalid.returncode != 0
-    assert "invalid choice" in invalid.stderr.lower()
+    round4_args = parser.parse_args(["inspect", "--round", "4"])
+    assert _days_from_args(round4_args) == (1, 2, 3)
 
 
 def test_round3_replay_noop_smoke(tmp_path):

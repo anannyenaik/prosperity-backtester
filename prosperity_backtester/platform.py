@@ -67,6 +67,9 @@ class PerturbationConfig:
     voucher_spread_shift_ticks: int = 0
     underlying_liquidity_scale: float = 1.0
     hydrogel_liquidity_scale: float = 1.0
+    counterparty_flow_enabled: bool = True
+    counterparty_edge_strength: float = 0.0
+    counterparty_edge_sign: float = 1.0
     scenario_name: str = "custom"
 
     def to_dict(self) -> Dict[str, object]:
@@ -1310,7 +1313,7 @@ def run_market_session(
         "fair_value": fair_summary,
         "behaviour": behaviour.get("summary", {}),
     }
-    if round_spec.round_number == 3 and include_option_diagnostics:
+    if round_spec.round_number in (3, 4) and include_option_diagnostics:
         summary["option_diagnostics"] = compute_option_diagnostics(market_days, round_spec=round_spec)
     artefacts = SessionArtefacts(
         run_name=run_name,
@@ -1363,12 +1366,12 @@ def generate_synthetic_market_days(
     round_spec = round_spec or get_round_spec(1)
     rng = random.Random(seed)
     tick_limit = None if perturb.synthetic_tick_limit in (None, 0) else max(1, int(perturb.synthetic_tick_limit))
-    if round_spec.round_number == 3:
+    if round_spec.round_number in (3, 4):
         if round3_context is not None:
             context = round3_context
         else:
             if not historical_market_days:
-                raise ValueError("Round 3 synthetic generation requires historical_market_days for calibration")
+                raise ValueError(f"Round {round_spec.round_number} synthetic generation requires historical_market_days for calibration")
             context = prepare_round3_synthetic_context(
                 historical_market_days,
                 round_spec=round_spec,
@@ -1542,24 +1545,37 @@ def summarise_monte_carlo_sessions(session_artefacts: List[SessionArtefacts]) ->
             "max": max(vals),
         }
     p05 = quantile(0.05)
+    p01 = quantile(0.01)
+    p10 = quantile(0.10)
     p25 = quantile(0.25)
     p75 = quantile(0.75)
+    p90 = quantile(0.90)
+    p99 = quantile(0.99)
     tail = [value for value in pnl_values if value <= p05]
     drawdowns = [float(session.summary.get("max_drawdown", 0.0)) for session in session_artefacts]
     gross_values = [float(session.summary.get("gross_pnl_before_maf", session.summary["final_pnl"])) for session in session_artefacts]
     maf_costs = [float(session.summary.get("maf_cost", 0.0)) for session in session_artefacts]
+    std = statistics.pstdev(pnl_values) if len(pnl_values) > 1 else 0.0
+    mean = statistics.fmean(pnl_values)
+    mean_ci_half_width = 0.0 if len(pnl_values) <= 1 else 1.96 * std / math.sqrt(len(pnl_values))
     return {
         "session_count": len(session_artefacts),
-        "mean": statistics.fmean(pnl_values),
-        "std": statistics.pstdev(pnl_values) if len(pnl_values) > 1 else 0.0,
+        "mean": mean,
+        "std": std,
+        "p01": p01,
         "p05": p05,
+        "p10": p10,
         "p25": p25,
         "p50": quantile(0.50),
         "p75": p75,
+        "p90": p90,
         "p95": quantile(0.95),
+        "p99": p99,
         "expected_shortfall_05": statistics.fmean(tail) if tail else p05,
         "min": min(pnl_values),
         "max": max(pnl_values),
+        "win_rate": sum(1 for value in pnl_values if value > 0) / len(pnl_values),
+        "mean_confidence_interval_95": [mean - mean_ci_half_width, mean + mean_ci_half_width],
         "gross_mean_before_maf": statistics.fmean(gross_values),
         "mean_maf_cost": statistics.fmean(maf_costs),
         "positive_rate": sum(1 for value in pnl_values if value > 0) / len(pnl_values),

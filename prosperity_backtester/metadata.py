@@ -89,6 +89,7 @@ def _voucher_meta(
     strike: int,
     *,
     include_in_surface_fit: bool,
+    round_label: str = "Round 3",
 ) -> ProductMeta:
     symbol = f"VEV_{strike}"
     stability_note = (
@@ -101,7 +102,7 @@ def _voucher_meta(
         short_name=symbol.replace("VEV_", "V"),
         tick_size=1,
         position_limit=300,
-        style="Round 3 call voucher on VELVETFRUIT_EXTRACT",
+        style=f"{round_label} call voucher on VELVETFRUIT_EXTRACT",
         default_fair=None,
         notes=(
             "Historical replay should trade the observed voucher book and mark to observed mid.",
@@ -188,6 +189,47 @@ _ROUND3_PRODUCT_METADATA: Dict[str, ProductMeta] = {
     "VEV_6500": _voucher_meta(6500, include_in_surface_fit=False),
 }
 
+_ROUND4_PRODUCT_METADATA: Dict[str, ProductMeta] = {
+    "HYDROGEL_PACK": ProductMeta(
+        symbol="HYDROGEL_PACK",
+        short_name="HYDROGEL",
+        tick_size=1,
+        position_limit=200,
+        style="Round 4 independent delta-1 product with named trade counterparties",
+        default_fair=9_960.0,
+        notes=(
+            "Round 4 keeps the Round 3 product set and adds buyer/seller names on market trades.",
+            "HYDROGEL_PACK should be modelled independently of VELVETFRUIT_EXTRACT.",
+        ),
+        asset_class="delta1",
+        diagnostics_group="delta1",
+    ),
+    "VELVETFRUIT_EXTRACT": ProductMeta(
+        symbol="VELVETFRUIT_EXTRACT",
+        short_name="VELVET",
+        tick_size=1,
+        position_limit=200,
+        style="Round 4 underlying for the voucher chain with named trade counterparties",
+        default_fair=5_250.0,
+        notes=(
+            "Underlying for all Round 4 VEV_* vouchers.",
+            "Counterparty flow should be used as bounded alpha, not a hard-coded replay sequence.",
+        ),
+        asset_class="delta1",
+        diagnostics_group="underlying",
+    ),
+    "VEV_4000": _voucher_meta(4000, include_in_surface_fit=False, round_label="Round 4"),
+    "VEV_4500": _voucher_meta(4500, include_in_surface_fit=False, round_label="Round 4"),
+    "VEV_5000": _voucher_meta(5000, include_in_surface_fit=True, round_label="Round 4"),
+    "VEV_5100": _voucher_meta(5100, include_in_surface_fit=True, round_label="Round 4"),
+    "VEV_5200": _voucher_meta(5200, include_in_surface_fit=True, round_label="Round 4"),
+    "VEV_5300": _voucher_meta(5300, include_in_surface_fit=True, round_label="Round 4"),
+    "VEV_5400": _voucher_meta(5400, include_in_surface_fit=True, round_label="Round 4"),
+    "VEV_5500": _voucher_meta(5500, include_in_surface_fit=True, round_label="Round 4"),
+    "VEV_6000": _voucher_meta(6000, include_in_surface_fit=False, round_label="Round 4"),
+    "VEV_6500": _voucher_meta(6500, include_in_surface_fit=False, round_label="Round 4"),
+}
+
 
 ROUND_SPECS: Dict[int, RoundSpec] = {
     1: RoundSpec(
@@ -235,6 +277,25 @@ ROUND_SPECS: Dict[int, RoundSpec] = {
         notes=(
             "Voucher replay should use observed books and observed mids, not forced exercise.",
             "Option theory is diagnostic and synthetic only unless official rules say otherwise.",
+        ),
+    ),
+    4: RoundSpec(
+        round_number=4,
+        name="Round 4 - The More The Merrier",
+        products=tuple(_ROUND4_PRODUCT_METADATA),
+        product_metadata=_ROUND4_PRODUCT_METADATA,
+        default_data_dir="data/round4",
+        default_days=(1, 2, 3),
+        timestamp_step=_TIMESTAMP_STEP,
+        ticks_per_day=_TICKS_PER_DAY,
+        currency=_CURRENCY,
+        has_manual_challenge=True,
+        tte_days_by_historical_day={1: 7, 2: 6, 3: 5},
+        final_tte_days=4,
+        notes=(
+            "Round 4 uses the same algorithmic products as Round 3.",
+            "Historical market trades contain buyer and seller counterparty names.",
+            "Final simulation voucher pricing should use TTE=4/365 unless later official rules supersede it.",
         ),
     ),
 }

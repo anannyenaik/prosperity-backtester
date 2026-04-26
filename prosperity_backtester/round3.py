@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import random
 import statistics
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Mapping, Sequence
 
 from .dataset import BookSnapshot, DayDataset, TradePrint
@@ -51,6 +51,42 @@ def voucher_strike_map() -> Dict[str, int]:
         symbol: parse_voucher_symbol(symbol)
         for symbol in ROUND3_VOUCHERS
     }
+
+
+def voucher_symbols(round_spec: RoundSpec | None = None) -> tuple[str, ...]:
+    spec = round_spec or ROUND3
+    return tuple(
+        product
+        for product, meta in spec.product_metadata.items()
+        if meta.asset_class == "option"
+    )
+
+
+def surface_fit_voucher_symbols(round_spec: RoundSpec | None = None) -> tuple[str, ...]:
+    spec = round_spec or ROUND3
+    return tuple(
+        product
+        for product, meta in spec.product_metadata.items()
+        if meta.asset_class == "option" and bool(meta.include_in_surface_fit)
+    )
+
+
+def underlying_symbol(round_spec: RoundSpec | None = None) -> str:
+    spec = round_spec or ROUND3
+    for product, meta in spec.product_metadata.items():
+        if meta.diagnostics_group == "underlying":
+            return product
+    return ROUND3_UNDERLYING
+
+
+def hydrogel_symbol(round_spec: RoundSpec | None = None) -> str:
+    spec = round_spec or ROUND3
+    if ROUND3_HYDROGEL in spec.product_metadata:
+        return ROUND3_HYDROGEL
+    for product, meta in spec.product_metadata.items():
+        if meta.asset_class == "delta1" and meta.diagnostics_group == "delta1":
+            return product
+    return ROUND3_HYDROGEL
 
 
 def option_metadata(symbol: str, *, round_spec: RoundSpec | None = None) -> ProductMeta:
@@ -482,8 +518,12 @@ def compute_option_diagnostics(
     round_spec: RoundSpec | None = None,
 ) -> Dict[str, object]:
     spec = round_spec or ROUND3
-    if spec.round_number != 3:
+    if spec.round_number not in (3, 4):
         return {"days": []}
+    vouchers = voucher_symbols(spec)
+    surface_fit_vouchers = surface_fit_voucher_symbols(spec)
+    underlying = underlying_symbol(spec)
+    hydrogel = hydrogel_symbol(spec)
     days_payload: List[Dict[str, object]] = []
     for day_dataset in market_days:
         try:
@@ -511,20 +551,20 @@ def compute_option_diagnostics(
                 "underlying_moves": [],
                 "voucher_moves": [],
             }
-            for symbol in ROUND3_VOUCHERS
+            for symbol in vouchers
         }
         iv_by_timestamp: Dict[int, Dict[str, float]] = {}
         included_day_ivs: Dict[int, List[float]] = {}
         previous_underlying_mid: float | None = None
         previous_hydrogel_mid: float | None = None
-        previous_voucher_mid: Dict[str, float | None] = {symbol: None for symbol in ROUND3_VOUCHERS}
+        previous_voucher_mid: Dict[str, float | None] = {symbol: None for symbol in vouchers}
         hydrogel_moves: List[float] = []
         underlying_moves_for_hydrogel: List[float] = []
 
         for timestamp in day_dataset.timestamps:
             snapshots = day_dataset.books_by_timestamp.get(timestamp, {})
-            underlying_snapshot = snapshots.get(ROUND3_UNDERLYING)
-            hydrogel_snapshot = snapshots.get(ROUND3_HYDROGEL)
+            underlying_snapshot = snapshots.get(underlying)
+            hydrogel_snapshot = snapshots.get(hydrogel)
             underlying_mid = None if underlying_snapshot is None else underlying_snapshot.mid
             hydrogel_mid = None if hydrogel_snapshot is None else hydrogel_snapshot.mid
             underlying_move = None if underlying_mid is None or previous_underlying_mid is None else float(underlying_mid) - previous_underlying_mid
@@ -542,7 +582,7 @@ def compute_option_diagnostics(
                     previous_hydrogel_mid = float(hydrogel_mid)
                 continue
             timestamp_ivs: Dict[str, float] = {}
-            for symbol in ROUND3_VOUCHERS:
+            for symbol in vouchers:
                 meta = option_metadata(symbol, round_spec=spec)
                 strike = float(meta.strike or parse_voucher_symbol(symbol))
                 option_snapshot = snapshots.get(symbol)
@@ -600,7 +640,7 @@ def compute_option_diagnostics(
 
         for timestamp in day_dataset.timestamps:
             snapshots = day_dataset.books_by_timestamp.get(timestamp, {})
-            underlying_snapshot = snapshots.get(ROUND3_UNDERLYING)
+            underlying_snapshot = snapshots.get(underlying)
             if underlying_snapshot is None or underlying_snapshot.mid is None:
                 continue
             spot = float(underlying_snapshot.mid)
@@ -624,7 +664,7 @@ def compute_option_diagnostics(
                 previous_surface = surface
             fit_source_counts[fit_source] = fit_source_counts.get(fit_source, 0) + 1
 
-            for symbol in ROUND3_VOUCHERS:
+            for symbol in vouchers:
                 meta = option_metadata(symbol, round_spec=spec)
                 strike = float(meta.strike or parse_voucher_symbol(symbol))
                 option_snapshot = snapshots.get(symbol)
@@ -688,7 +728,7 @@ def compute_option_diagnostics(
             row["residual_zscore"] = zscores[idx] if 0 <= idx < len(zscores) else None
 
         voucher_rows: List[Dict[str, object]] = []
-        for symbol in ROUND3_VOUCHERS:
+        for symbol in vouchers:
             meta = option_metadata(symbol, round_spec=spec)
             strikes = float(meta.strike or parse_voucher_symbol(symbol))
             values = stats[symbol]
@@ -767,11 +807,11 @@ def compute_option_diagnostics(
             }
         )
     return {
-        "round": 3,
-        "underlying": ROUND3_UNDERLYING,
+        "round": spec.round_number,
+        "underlying": underlying,
         "days": days_payload,
         "final_tte_days": final_tte_days(round_spec=spec),
-        "surface_fit_vouchers": list(ROUND3_SURFACE_FIT_VOUCHERS),
+        "surface_fit_vouchers": list(surface_fit_vouchers),
     }
 
 
@@ -831,6 +871,8 @@ class Delta1Calibration:
     trade_active_prob: float
     second_trade_prob: float
     trade_quantities: tuple[int, ...]
+    trade_buyers: tuple[str, ...] = ()
+    trade_sellers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -843,6 +885,8 @@ class VoucherCalibration:
     trade_active_prob: float
     second_trade_prob: float
     trade_quantities: tuple[int, ...]
+    trade_buyers: tuple[str, ...] = ()
+    trade_sellers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -854,6 +898,7 @@ class Round3SyntheticContext:
     vouchers: Dict[str, VoucherCalibration]
     surface_iv_by_strike: Dict[int, float]
     option_diagnostics: Dict[str, object]
+    counterparty_edge_by_product_side: Dict[tuple[str, str, str], float] = field(default_factory=dict)
 
 
 def _build_book_template(snapshot: BookSnapshot) -> BookTemplate | None:
@@ -873,9 +918,11 @@ def _build_book_template(snapshot: BookSnapshot) -> BookTemplate | None:
     )
 
 
-def _trade_stats(market_days: Sequence[DayDataset], symbol: str, tick_count: int) -> tuple[float, float, tuple[int, ...]]:
+def _trade_stats(market_days: Sequence[DayDataset], symbol: str, tick_count: int) -> tuple[float, float, tuple[int, ...], tuple[str, ...], tuple[str, ...]]:
     counts: List[int] = []
     quantities: List[int] = []
+    buyers: List[str] = []
+    sellers: List[str] = []
     for day_dataset in market_days:
         for timestamp in day_dataset.timestamps[:tick_count]:
             trades = list(day_dataset.trades_by_timestamp.get(timestamp, {}).get(symbol, []))
@@ -884,15 +931,19 @@ def _trade_stats(market_days: Sequence[DayDataset], symbol: str, tick_count: int
             for trade in trades:
                 if int(trade.quantity) > 0:
                     quantities.append(int(trade.quantity))
+                if trade.buyer:
+                    buyers.append(str(trade.buyer))
+                if trade.seller:
+                    sellers.append(str(trade.seller))
     if not counts:
-        return 0.0, 0.0, (1, 2, 3)
+        return 0.0, 0.0, (1, 2, 3), (), ()
     active = sum(1 for count in counts if count > 0)
     second = sum(1 for count in counts if count > 1)
     active_prob = active / len(counts)
     second_prob = 0.0 if active == 0 else second / active
     if not quantities:
         quantities = [1, 2, 3]
-    return active_prob, second_prob, tuple(quantities)
+    return active_prob, second_prob, tuple(quantities), tuple(buyers), tuple(sellers)
 
 
 def _delta1_calibration(market_days: Sequence[DayDataset], symbol: str, tick_count: int, fallback_start: float) -> Delta1Calibration:
@@ -916,7 +967,7 @@ def _delta1_calibration(market_days: Sequence[DayDataset], symbol: str, tick_cou
             else:
                 changes.append(current_mid - previous_mid)
             previous_mid = current_mid
-    active_prob, second_prob, quantities = _trade_stats(market_days, symbol, tick_count)
+    active_prob, second_prob, quantities, buyers, sellers = _trade_stats(market_days, symbol, tick_count)
     if not starts:
         starts = [float(fallback_start)]
     if not changes:
@@ -930,6 +981,8 @@ def _delta1_calibration(market_days: Sequence[DayDataset], symbol: str, tick_cou
         trade_active_prob=active_prob,
         second_trade_prob=second_prob,
         trade_quantities=quantities,
+        trade_buyers=buyers,
+        trade_sellers=sellers,
     )
 
 
@@ -939,15 +992,19 @@ def _voucher_calibration(
     strike: int,
     surface_iv_by_strike: Mapping[int, float],
     tick_count: int,
+    *,
+    round_spec: RoundSpec | None = None,
 ) -> VoucherCalibration:
+    spec = round_spec or ROUND3
+    underlying = underlying_symbol(spec)
     templates: List[BookTemplate] = []
     residuals: List[float] = []
     for day_dataset in market_days:
-        tte = historical_tte_days(day_dataset.day)
+        tte = historical_tte_days(day_dataset.day, round_spec=spec)
         t_years = tte_years(tte)
         for timestamp in day_dataset.timestamps[:tick_count]:
             option_snapshot = day_dataset.books_by_timestamp.get(timestamp, {}).get(symbol)
-            underlying_snapshot = day_dataset.books_by_timestamp.get(timestamp, {}).get(ROUND3_UNDERLYING)
+            underlying_snapshot = day_dataset.books_by_timestamp.get(timestamp, {}).get(underlying)
             if option_snapshot is None:
                 continue
             template = _build_book_template(option_snapshot)
@@ -962,7 +1019,7 @@ def _voucher_calibration(
                 float(surface_iv_by_strike.get(strike, 0.25)),
             )
             residuals.append(float(option_snapshot.mid) - model_mid)
-    active_prob, second_prob, quantities = _trade_stats(market_days, symbol, tick_count)
+    active_prob, second_prob, quantities, buyers, sellers = _trade_stats(market_days, symbol, tick_count)
     if not templates:
         templates = [BookTemplate(spread=1, bid_price_offsets=(0,), bid_volumes=(10,), ask_price_offsets=(0,), ask_volumes=(10,))]
     if not residuals:
@@ -976,7 +1033,43 @@ def _voucher_calibration(
         trade_active_prob=active_prob,
         second_trade_prob=second_prob,
         trade_quantities=quantities,
+        trade_buyers=buyers,
+        trade_sellers=sellers,
     )
+
+
+def _counterparty_edge_calibration(
+    market_days: Sequence[DayDataset],
+    *,
+    round_spec: RoundSpec,
+    horizon_ticks: int = 20,
+    min_count: int = 12,
+) -> Dict[tuple[str, str, str], float]:
+    edges: Dict[tuple[str, str, str], List[float]] = {}
+    horizon_ms = max(1, int(horizon_ticks)) * int(round_spec.timestamp_step)
+    for day_dataset in market_days:
+        for timestamp in day_dataset.timestamps:
+            snapshots_now = day_dataset.books_by_timestamp.get(timestamp, {})
+            snapshots_future = day_dataset.books_by_timestamp.get(timestamp + horizon_ms, {})
+            if not snapshots_future:
+                continue
+            for product, trades in day_dataset.trades_by_timestamp.get(timestamp, {}).items():
+                now_snapshot = snapshots_now.get(product)
+                future_snapshot = snapshots_future.get(product)
+                if now_snapshot is None or future_snapshot is None or now_snapshot.mid is None or future_snapshot.mid is None:
+                    continue
+                move = float(future_snapshot.mid) - float(now_snapshot.mid)
+                for trade in trades:
+                    if trade.buyer:
+                        edges.setdefault((product, str(trade.buyer), "buy"), []).append(move)
+                    if trade.seller:
+                        edges.setdefault((product, str(trade.seller), "sell"), []).append(-move)
+    output: Dict[tuple[str, str, str], float] = {}
+    for key, values in edges.items():
+        if len(values) < min_count:
+            continue
+        output[key] = max(-3.0, min(3.0, float(statistics.fmean(values))))
+    return output
 
 
 def prepare_round3_synthetic_context(
@@ -989,8 +1082,11 @@ def prepare_round3_synthetic_context(
     effective_tick_count = spec.ticks_per_day if tick_count is None else max(1, int(tick_count))
     diagnostics = compute_option_diagnostics(market_days, round_spec=spec)
     surface = _surface_from_option_diagnostics(diagnostics)
-    hydrogel = _delta1_calibration(market_days, ROUND3_HYDROGEL, effective_tick_count, fallback_start=9_960.0)
-    underlying = _delta1_calibration(market_days, ROUND3_UNDERLYING, effective_tick_count, fallback_start=5_250.0)
+    hydrogel_product = hydrogel_symbol(spec)
+    underlying_product = underlying_symbol(spec)
+    vouchers = voucher_symbols(spec)
+    hydrogel = _delta1_calibration(market_days, hydrogel_product, effective_tick_count, fallback_start=9_960.0)
+    underlying = _delta1_calibration(market_days, underlying_product, effective_tick_count, fallback_start=5_250.0)
     vouchers = {
         symbol: _voucher_calibration(
             market_days,
@@ -998,8 +1094,9 @@ def prepare_round3_synthetic_context(
             parse_voucher_symbol(symbol),
             surface,
             effective_tick_count,
+            round_spec=spec,
         )
-        for symbol in ROUND3_VOUCHERS
+        for symbol in vouchers
     }
     return Round3SyntheticContext(
         round_spec=spec,
@@ -1009,6 +1106,7 @@ def prepare_round3_synthetic_context(
         vouchers=vouchers,
         surface_iv_by_strike=surface,
         option_diagnostics=diagnostics,
+        counterparty_edge_by_product_side=_counterparty_edge_calibration(market_days, round_spec=spec),
     )
 
 
@@ -1100,6 +1198,55 @@ def _sample_trade_price_and_qty(
     return market_buy, price, quantity
 
 
+def _sample_named_counterparties(
+    calibration,
+    *,
+    market_buy: bool,
+    rng: random.Random,
+    enabled: bool,
+) -> tuple[str, str]:
+    if not enabled:
+        return ("BOT_TAKER", "") if market_buy else ("", "BOT_TAKER")
+    buyers = tuple(name for name in getattr(calibration, "trade_buyers", ()) if name)
+    sellers = tuple(name for name in getattr(calibration, "trade_sellers", ()) if name)
+    buyer = str(rng.choice(buyers)) if buyers else ("BOT_TAKER" if market_buy else "")
+    seller = str(rng.choice(sellers)) if sellers else ("" if market_buy else "BOT_TAKER")
+    if buyer and seller and buyer == seller:
+        alternatives = [name for name in sellers if name != buyer]
+        if alternatives:
+            seller = str(rng.choice(alternatives))
+    return buyer, seller
+
+
+def _apply_counterparty_edge(
+    path: List[float],
+    *,
+    tick: int,
+    product: str,
+    buyer: str,
+    seller: str,
+    context: Round3SyntheticContext,
+    perturbation,
+    horizon_ticks: int = 20,
+) -> None:
+    strength = float(getattr(perturbation, "counterparty_edge_strength", 0.0))
+    if strength == 0.0:
+        return
+    sign = float(getattr(perturbation, "counterparty_edge_sign", 1.0))
+    total_path_move = 0.0
+    if buyer:
+        total_path_move += float(context.counterparty_edge_by_product_side.get((product, buyer, "buy"), 0.0))
+    if seller:
+        total_path_move -= float(context.counterparty_edge_by_product_side.get((product, seller, "sell"), 0.0))
+    total_path_move = max(-2.0, min(2.0, total_path_move * strength * sign))
+    if abs(total_path_move) <= 1e-12:
+        return
+    stop = min(len(path), int(tick) + max(2, int(horizon_ticks)) + 1)
+    for index in range(int(tick) + 1, stop):
+        decay = 1.0 - ((index - int(tick) - 1) / max(1.0, float(horizon_ticks)))
+        path[index] = max(0.0, path[index] + total_path_move * max(0.0, decay))
+
+
 def _adjusted_option_iv(
     base_iv: float,
     *,
@@ -1155,6 +1302,7 @@ def generate_round3_day(
     t_years = tte_years(synthetic_tte_days(day, session_day_index, round_spec=context.round_spec))
     books_by_timestamp: Dict[int, Dict[str, BookSnapshot]] = {}
     trades_by_timestamp: Dict[int, Dict[str, List[TradePrint]]] = {}
+    named_flow_enabled = bool(getattr(perturbation, "counterparty_flow_enabled", context.round_spec.round_number == 4))
     for tick, timestamp in enumerate(timestamps):
         per_product: Dict[str, BookSnapshot] = {}
         tick_trades: Dict[str, List[TradePrint]] = {}
@@ -1190,11 +1338,26 @@ def generate_round3_day(
             if sampled is None:
                 continue
             market_buy, trade_price, quantity = sampled
+            buyer, seller = _sample_named_counterparties(
+                context.hydrogel,
+                market_buy=market_buy,
+                rng=market_rng,
+                enabled=named_flow_enabled,
+            )
+            _apply_counterparty_edge(
+                hydrogel_path,
+                tick=tick,
+                product=ROUND3_HYDROGEL,
+                buyer=buyer,
+                seller=seller,
+                context=context,
+                perturbation=perturbation,
+            )
             tick_trades.setdefault(ROUND3_HYDROGEL, []).append(
                 TradePrint(
                     timestamp=timestamp,
-                    buyer="BOT_TAKER" if market_buy else "",
-                    seller="" if market_buy else "BOT_TAKER",
+                    buyer=buyer,
+                    seller=seller,
                     symbol=ROUND3_HYDROGEL,
                     price=trade_price,
                     quantity=quantity,
@@ -1233,11 +1396,26 @@ def generate_round3_day(
             if sampled is None:
                 continue
             market_buy, trade_price, quantity = sampled
+            buyer, seller = _sample_named_counterparties(
+                context.underlying,
+                market_buy=market_buy,
+                rng=market_rng,
+                enabled=named_flow_enabled,
+            )
+            _apply_counterparty_edge(
+                underlying_path,
+                tick=tick,
+                product=ROUND3_UNDERLYING,
+                buyer=buyer,
+                seller=seller,
+                context=context,
+                perturbation=perturbation,
+            )
             tick_trades.setdefault(ROUND3_UNDERLYING, []).append(
                 TradePrint(
                     timestamp=timestamp,
-                    buyer="BOT_TAKER" if market_buy else "",
-                    seller="" if market_buy else "BOT_TAKER",
+                    buyer=buyer,
+                    seller=seller,
                     symbol=ROUND3_UNDERLYING,
                     price=trade_price,
                     quantity=quantity,
@@ -1297,11 +1475,17 @@ def generate_round3_day(
                 if sampled is None:
                     continue
                 market_buy, trade_price, quantity = sampled
+                buyer, seller = _sample_named_counterparties(
+                    calibration,
+                    market_buy=market_buy,
+                    rng=market_rng,
+                    enabled=named_flow_enabled,
+                )
                 tick_trades.setdefault(symbol, []).append(
                     TradePrint(
                         timestamp=timestamp,
-                        buyer="BOT_TAKER" if market_buy else "",
-                        seller="" if market_buy else "BOT_TAKER",
+                        buyer=buyer,
+                        seller=seller,
                         symbol=symbol,
                         price=trade_price,
                         quantity=quantity,

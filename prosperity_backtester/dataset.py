@@ -336,6 +336,10 @@ def load_round3_day(data_dir: Path, day: int) -> DayDataset:
     return load_round_day(data_dir, day, round_number=3)
 
 
+def load_round4_day(data_dir: Path, day: int) -> DayDataset:
+    return load_round_day(data_dir, day, round_number=4)
+
+
 def load_round1_dataset(data_dir: Path, days: Iterable[int] = (-2, -1, 0)) -> Dict[int, DayDataset]:
     return load_round_dataset(data_dir, days, round_number=1)
 
@@ -346,6 +350,10 @@ def load_round2_dataset(data_dir: Path, days: Iterable[int] = (-1, 0, 1)) -> Dic
 
 def load_round3_dataset(data_dir: Path, days: Iterable[int] = (0, 1, 2)) -> Dict[int, DayDataset]:
     return load_round_dataset(data_dir, days, round_number=3)
+
+
+def load_round4_dataset(data_dir: Path, days: Iterable[int] = (1, 2, 3)) -> Dict[int, DayDataset]:
+    return load_round_dataset(data_dir, days, round_number=4)
 
 
 def inspect_dataset_days(

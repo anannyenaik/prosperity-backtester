@@ -1,0 +1,62 @@
+{
+  "name": "r3_algo_v1_fill_sensitivity",
+  "round": 3,
+  "data_dir": "data/round3",
+  "days": [0, 1, 2],
+  "fill_model": "base",
+  "traders": [
+    {
+      "name": "r3_v1",
+      "path": "strategies/archive/round3/rejected/r3_algo_v1_anchor_contaminated_rejected.py"
+    },
+    {
+      "name": "noop",
+      "path": "examples/noop_round3_trader.py"
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "base",
+      "fill_model": "base",
+      "description": "Standard local passive-fill baseline.",
+      "tags": ["fills", "baseline"]
+    },
+    {
+      "name": "no_passive",
+      "fill_model": "base",
+      "description": "Aggressive visible fills only. Passive trade-print matching is disabled.",
+      "tags": ["fills", "conservative"],
+      "perturbation": {
+        "trade_matching_mode": "none"
+      }
+    },
+    {
+      "name": "worse_only",
+      "fill_model": "base",
+      "description": "Passive fills require trade prints through the resting order price. Same-price prints are ignored.",
+      "tags": ["fills", "queue"],
+      "perturbation": {
+        "trade_matching_mode": "worse"
+      }
+    },
+    {
+      "name": "conservative_queue",
+      "fill_model": "empirical_conservative",
+      "description": "Lower passive conversion, higher queue pressure and conservative product-level overrides.",
+      "tags": ["fills", "queue", "conservative"]
+    },
+    {
+      "name": "harsh_adverse",
+      "fill_model": "low_fill_quality",
+      "description": "Lower passive conversion with extra adverse selection and missed passive fills.",
+      "tags": ["fills", "adverse", "stress"],
+      "perturbation": {
+        "passive_fill_scale": 0.7,
+        "missed_fill_additive": 0.08,
+        "adverse_selection_ticks": 1,
+        "slippage_multiplier": 1.25
+      }
+    }
+  ],
+  "mc_sessions": 0
+}

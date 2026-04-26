@@ -1,0 +1,87 @@
+{
+  "name": "round4_mc_validation",
+  "round": 4,
+  "data_dir": "data/round4",
+  "days": [1],
+  "fill_model": "base",
+  "traders": [
+    {
+      "name": "r4_all_names",
+      "path": "strategies/r4_algo_v1_candidate.py"
+    },
+    {
+      "name": "r4_no_names",
+      "path": "strategies/r4_algo_v1_candidate.py",
+      "overrides": {
+        "CONFIG.use_counterparties": false
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "mc_smoke_base",
+      "fill_model": "base",
+      "perturbation": {
+        "synthetic_tick_limit": 300,
+        "counterparty_edge_strength": 0.25,
+        "scenario_name": "mc_smoke_base"
+      }
+    },
+    {
+      "name": "mc_no_counterparty_flow",
+      "fill_model": "base",
+      "perturbation": {
+        "synthetic_tick_limit": 300,
+        "counterparty_flow_enabled": false,
+        "scenario_name": "mc_no_counterparty_flow"
+      }
+    },
+    {
+      "name": "mc_passive_harsh",
+      "fill_model": "low_fill_quality",
+      "perturbation": {
+        "synthetic_tick_limit": 300,
+        "passive_fill_scale": 0.7,
+        "missed_fill_additive": 0.08,
+        "counterparty_edge_strength": 0.25,
+        "scenario_name": "mc_passive_harsh"
+      }
+    },
+    {
+      "name": "mc_counterparty_sign_flipped",
+      "fill_model": "base",
+      "perturbation": {
+        "synthetic_tick_limit": 300,
+        "counterparty_edge_strength": 0.25,
+        "counterparty_edge_sign": -1.0,
+        "scenario_name": "mc_counterparty_sign_flipped"
+      }
+    },
+    {
+      "name": "mc_hydrogel_mean_shift_down",
+      "fill_model": "base",
+      "perturbation": {
+        "synthetic_tick_limit": 300,
+        "shock_tick": 50,
+        "hydrogel_shock": -60.0,
+        "counterparty_edge_strength": 0.25,
+        "scenario_name": "mc_hydrogel_mean_shift_down"
+      }
+    },
+    {
+      "name": "mc_hydrogel_mean_shift_up",
+      "fill_model": "base",
+      "perturbation": {
+        "synthetic_tick_limit": 300,
+        "shock_tick": 50,
+        "hydrogel_shock": 60.0,
+        "counterparty_edge_strength": 0.25,
+        "scenario_name": "mc_hydrogel_mean_shift_up"
+      }
+    }
+  ],
+  "mc_sessions": 8,
+  "mc_sample_sessions": 2,
+  "mc_seed": 20260426,
+  "mc_workers": 1
+}

@@ -6,16 +6,12 @@
   "fill_model": "base",
   "traders": [
     {
-      "name": "r3_v1",
-      "path": "strategies/r3_algo_v1.py"
-    },
-    {
-      "name": "r3_v1_1",
-      "path": "strategies/r3_algo_v1_1_candidate.py"
-    },
-    {
       "name": "r3_v1_2",
-      "path": "strategies/r3_algo_v1_2_candidate.py"
+      "path": "strategies/archive/round3/r3_algo_v1_2_candidate.py"
+    },
+    {
+      "name": "r3_v1_3_rejected",
+      "path": "strategies/archive/round3/rejected/r3_algo_v1_3_rejected.py"
     }
   ],
   "scenarios": [

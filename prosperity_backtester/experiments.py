@@ -67,6 +67,7 @@ class TraderSpec:
 DEFAULT_DATA_DIR = Path(__file__).parent.parent / "data" / "round1"
 DEFAULT_ROUND2_DATA_DIR = Path(__file__).parent.parent / "data" / "round2"
 DEFAULT_ROUND3_DATA_DIR = Path(__file__).parent.parent / "data" / "round3"
+DEFAULT_ROUND4_DATA_DIR = Path(__file__).parent.parent / "data" / "round4"
 DEFAULT_EXPORT_DIR = Path(__file__).parent.parent / "live_exports"
 
 _MC_DIAGNOSTICS_PATH_ENV = "PROSPERITY_MC_DIAGNOSTICS_PATH"
@@ -502,7 +503,7 @@ def _run_monte_carlo_chunk(task: Dict[str, object]) -> Dict[str, object]:
         raise RuntimeError("Rust Monte Carlo backend is orchestrated outside the Python chunk runner")
     streaming_context = (
         prepare_streaming_simulation_context(perturbation)
-        if backend == "streaming" and round_spec.round_number != 3
+        if backend == "streaming" and round_spec.round_number not in (3, 4)
         else None
     )
     round3_context = task.get("round3_context")
@@ -512,7 +513,7 @@ def _run_monte_carlo_chunk(task: Dict[str, object]) -> Dict[str, object]:
     for session_idx in session_indices:
         trader = _instantiate_worker_trader(module, trader_spec.path)
         capture_full_output = session_idx < sample_sessions
-        if backend == "streaming" and round_spec.round_number != 3 and not capture_full_output:
+        if backend == "streaming" and round_spec.round_number not in (3, 4) and not capture_full_output:
             result, session_profile = run_streaming_synthetic_session(
                 trader=trader,
                 trader_name=trader_spec.name,
@@ -634,10 +635,10 @@ def _run_monte_carlo_profiled(
         access_scenario=access_scenario,
         print_trader_output=print_trader_output,
     )
-    if round_spec.round_number == 3 and resolved_backend == "streaming":
+    if round_spec.round_number in (3, 4) and resolved_backend == "streaming":
         resolved_backend = "classic"
-    if round_spec.round_number == 3 and resolved_backend == "rust":
-        raise ValueError("Rust Monte Carlo backend does not support Round 3")
+    if round_spec.round_number in (3, 4) and resolved_backend == "rust":
+        raise ValueError(f"Rust Monte Carlo backend does not support Round {round_spec.round_number}")
     worker_count = max(1, int(workers))
     if worker_count > 1:
         worker_count = min(worker_count, sessions, os.cpu_count() or worker_count)
@@ -646,7 +647,7 @@ def _run_monte_carlo_profiled(
     path_band_method: Dict[str, object] | None = None
     results: List[SessionArtefacts]
     round3_context = None
-    if round_spec.round_number == 3:
+    if round_spec.round_number in (3, 4):
         calibration_data_dir = data_dir or default_data_dir_for_round(round_number)
         historical_map = load_round_dataset(
             calibration_data_dir,

@@ -1,0 +1,642 @@
+{
+  "schema_version": 1,
+  "round": 4,
+  "source_capsule_name": "Round 4 Data Capsule.zip",
+  "source_capsule_sha256": "1f75effd5f3f1cd2ef75a00bdf478b6aba9a07a38f67362e4f75deb4f3131dec",
+  "wiki_capsule_name": "Round 4 Wiki.zip",
+  "wiki_capsule_sha256": "ae363c5dc76894e9ef7cdf15053a10b521309d172c937fbaf951925752bdb3e9",
+  "import_date": "2026-04-26",
+  "currency": "XIRECS",
+  "expected_products": [
+    "HYDROGEL_PACK",
+    "VELVETFRUIT_EXTRACT",
+    "VEV_4000",
+    "VEV_4500",
+    "VEV_5000",
+    "VEV_5100",
+    "VEV_5200",
+    "VEV_5300",
+    "VEV_5400",
+    "VEV_5500",
+    "VEV_6000",
+    "VEV_6500"
+  ],
+  "files": [
+    {
+      "name": "prices_round_4_day_1.csv",
+      "size_bytes": 6517921,
+      "sha256": "90e673b99e3eb9b5a0bb92456bf221471ef2dee2d253e25a648e8772de6b3bc1",
+      "header": [
+        "day",
+        "timestamp",
+        "product",
+        "bid_price_1",
+        "bid_volume_1",
+        "bid_price_2",
+        "bid_volume_2",
+        "bid_price_3",
+        "bid_volume_3",
+        "ask_price_1",
+        "ask_volume_1",
+        "ask_price_2",
+        "ask_volume_2",
+        "ask_price_3",
+        "ask_volume_3",
+        "mid_price",
+        "profit_and_loss"
+      ],
+      "row_count": 120000,
+      "timestamp_min": 0,
+      "timestamp_max": 999900,
+      "timestamp_count": 10000,
+      "timestamp_step_ok": true,
+      "products_seen": [
+        "HYDROGEL_PACK",
+        "VELVETFRUIT_EXTRACT",
+        "VEV_4000",
+        "VEV_4500",
+        "VEV_5000",
+        "VEV_5100",
+        "VEV_5200",
+        "VEV_5300",
+        "VEV_5400",
+        "VEV_5500",
+        "VEV_6000",
+        "VEV_6500"
+      ],
+      "duplicate_book_rows": 0,
+      "missing_product_timestamps": 0,
+      "empty_book_rows": 0,
+      "one_sided_book_rows": 0,
+      "crossed_book_rows": 0
+    },
+    {
+      "name": "prices_round_4_day_2.csv",
+      "size_bytes": 6516304,
+      "sha256": "5ff44e653772eb0b63085999be42ec8f6b07bfa722536621f086a90b6eaacff6",
+      "header": [
+        "day",
+        "timestamp",
+        "product",
+        "bid_price_1",
+        "bid_volume_1",
+        "bid_price_2",
+        "bid_volume_2",
+        "bid_price_3",
+        "bid_volume_3",
+        "ask_price_1",
+        "ask_volume_1",
+        "ask_price_2",
+        "ask_volume_2",
+        "ask_price_3",
+        "ask_volume_3",
+        "mid_price",
+        "profit_and_loss"
+      ],
+      "row_count": 120000,
+      "timestamp_min": 0,
+      "timestamp_max": 999900,
+      "timestamp_count": 10000,
+      "timestamp_step_ok": true,
+      "products_seen": [
+        "HYDROGEL_PACK",
+        "VELVETFRUIT_EXTRACT",
+        "VEV_4000",
+        "VEV_4500",
+        "VEV_5000",
+        "VEV_5100",
+        "VEV_5200",
+        "VEV_5300",
+        "VEV_5400",
+        "VEV_5500",
+        "VEV_6000",
+        "VEV_6500"
+      ],
+      "duplicate_book_rows": 0,
+      "missing_product_timestamps": 0,
+      "empty_book_rows": 0,
+      "one_sided_book_rows": 0,
+      "crossed_book_rows": 0
+    },
+    {
+      "name": "prices_round_4_day_3.csv",
+      "size_bytes": 6479586,
+      "sha256": "f42a2a716d8f0e1fbcd01425b80e16a949e56d81a4b376adb764d006b6a556c4",
+      "header": [
+        "day",
+        "timestamp",
+        "product",
+        "bid_price_1",
+        "bid_volume_1",
+        "bid_price_2",
+        "bid_volume_2",
+        "bid_price_3",
+        "bid_volume_3",
+        "ask_price_1",
+        "ask_volume_1",
+        "ask_price_2",
+        "ask_volume_2",
+        "ask_price_3",
+        "ask_volume_3",
+        "mid_price",
+        "profit_and_loss"
+      ],
+      "row_count": 120000,
+      "timestamp_min": 0,
+      "timestamp_max": 999900,
+      "timestamp_count": 10000,
+      "timestamp_step_ok": true,
+      "products_seen": [
+        "HYDROGEL_PACK",
+        "VELVETFRUIT_EXTRACT",
+        "VEV_4000",
+        "VEV_4500",
+        "VEV_5000",
+        "VEV_5100",
+        "VEV_5200",
+        "VEV_5300",
+        "VEV_5400",
+        "VEV_5500",
+        "VEV_6000",
+        "VEV_6500"
+      ],
+      "duplicate_book_rows": 0,
+      "missing_product_timestamps": 0,
+      "empty_book_rows": 0,
+      "one_sided_book_rows": 0,
+      "crossed_book_rows": 0
+    },
+    {
+      "name": "trades_round_4_day_1.csv",
+      "size_bytes": 73311,
+      "sha256": "38e3ec0e68786592e137e60271659782af899f256766ea94368f2fefe8d3a2cb",
+      "header": [
+        "timestamp",
+        "buyer",
+        "seller",
+        "symbol",
+        "currency",
+        "price",
+        "quantity"
+      ],
+      "row_count": 1407,
+      "timestamp_min": 4500,
+      "timestamp_max": 998500,
+      "timestamp_count": 1053,
+      "products_seen": [
+        "HYDROGEL_PACK",
+        "VELVETFRUIT_EXTRACT",
+        "VEV_4000",
+        "VEV_4500",
+        "VEV_5000",
+        "VEV_5100",
+        "VEV_5200",
+        "VEV_5300",
+        "VEV_5400",
+        "VEV_5500",
+        "VEV_6000",
+        "VEV_6500"
+      ],
+      "currencies": {
+        "XIRECS": 1407
+      },
+      "quantity_signs": {
+        "positive": 1407
+      },
+      "buyer_count": 7,
+      "seller_count": 6,
+      "empty_buyer_rows": 0,
+      "empty_seller_rows": 0,
+      "unique_counterparties": [
+        "Mark 01",
+        "Mark 14",
+        "Mark 22",
+        "Mark 38",
+        "Mark 49",
+        "Mark 55",
+        "Mark 67"
+      ],
+      "top_buyers": [
+        [
+          "Mark 01",
+          469
+        ],
+        [
+          "Mark 14",
+          408
+        ],
+        [
+          "Mark 38",
+          267
+        ],
+        [
+          "Mark 55",
+          186
+        ],
+        [
+          "Mark 67",
+          58
+        ],
+        [
+          "Mark 22",
+          13
+        ],
+        [
+          "Mark 49",
+          6
+        ]
+      ],
+      "top_sellers": [
+        [
+          "Mark 22",
+          461
+        ],
+        [
+          "Mark 14",
+          356
+        ],
+        [
+          "Mark 38",
+          277
+        ],
+        [
+          "Mark 55",
+          198
+        ],
+        [
+          "Mark 01",
+          81
+        ],
+        [
+          "Mark 49",
+          34
+        ]
+      ]
+    },
+    {
+      "name": "trades_round_4_day_2.csv",
+      "size_bytes": 69732,
+      "sha256": "106351fe4a458cfcdb70de0ff7b1d7433e75948ee1485481399b81c57dbea829",
+      "header": [
+        "timestamp",
+        "buyer",
+        "seller",
+        "symbol",
+        "currency",
+        "price",
+        "quantity"
+      ],
+      "row_count": 1333,
+      "timestamp_min": 900,
+      "timestamp_max": 998800,
+      "timestamp_count": 977,
+      "products_seen": [
+        "HYDROGEL_PACK",
+        "VELVETFRUIT_EXTRACT",
+        "VEV_4000",
+        "VEV_5200",
+        "VEV_5300",
+        "VEV_5400",
+        "VEV_5500",
+        "VEV_6000",
+        "VEV_6500"
+      ],
+      "currencies": {
+        "XIRECS": 1333
+      },
+      "quantity_signs": {
+        "positive": 1333
+      },
+      "buyer_count": 7,
+      "seller_count": 6,
+      "empty_buyer_rows": 0,
+      "empty_seller_rows": 0,
+      "unique_counterparties": [
+        "Mark 01",
+        "Mark 14",
+        "Mark 22",
+        "Mark 38",
+        "Mark 49",
+        "Mark 55",
+        "Mark 67"
+      ],
+      "top_buyers": [
+        [
+          "Mark 01",
+          481
+        ],
+        [
+          "Mark 14",
+          325
+        ],
+        [
+          "Mark 38",
+          229
+        ],
+        [
+          "Mark 55",
+          218
+        ],
+        [
+          "Mark 67",
+          61
+        ],
+        [
+          "Mark 22",
+          13
+        ],
+        [
+          "Mark 49",
+          6
+        ]
+      ],
+      "top_sellers": [
+        [
+          "Mark 22",
+          458
+        ],
+        [
+          "Mark 14",
+          343
+        ],
+        [
+          "Mark 38",
+          210
+        ],
+        [
+          "Mark 55",
+          193
+        ],
+        [
+          "Mark 01",
+          92
+        ],
+        [
+          "Mark 49",
+          37
+        ]
+      ]
+    },
+    {
+      "name": "trades_round_4_day_3.csv",
+      "size_bytes": 79098,
+      "sha256": "6c7829ff5c6652757f34c5a4b32aedbc08b5cdd234f8e7899ce7fc99d6e1f905",
+      "header": [
+        "timestamp",
+        "buyer",
+        "seller",
+        "symbol",
+        "currency",
+        "price",
+        "quantity"
+      ],
+      "row_count": 1541,
+      "timestamp_min": 1700,
+      "timestamp_max": 997500,
+      "timestamp_count": 1030,
+      "products_seen": [
+        "HYDROGEL_PACK",
+        "VELVETFRUIT_EXTRACT",
+        "VEV_4000",
+        "VEV_4500",
+        "VEV_5000",
+        "VEV_5100",
+        "VEV_5200",
+        "VEV_5300",
+        "VEV_5400",
+        "VEV_5500",
+        "VEV_6000",
+        "VEV_6500"
+      ],
+      "currencies": {
+        "XIRECS": 1541
+      },
+      "quantity_signs": {
+        "positive": 1541
+      },
+      "buyer_count": 7,
+      "seller_count": 6,
+      "empty_buyer_rows": 0,
+      "empty_seller_rows": 0,
+      "unique_counterparties": [
+        "Mark 01",
+        "Mark 14",
+        "Mark 22",
+        "Mark 38",
+        "Mark 49",
+        "Mark 55",
+        "Mark 67"
+      ],
+      "top_buyers": [
+        [
+          "Mark 01",
+          649
+        ],
+        [
+          "Mark 14",
+          394
+        ],
+        [
+          "Mark 38",
+          237
+        ],
+        [
+          "Mark 55",
+          194
+        ],
+        [
+          "Mark 67",
+          46
+        ],
+        [
+          "Mark 22",
+          16
+        ],
+        [
+          "Mark 49",
+          5
+        ]
+      ],
+      "top_sellers": [
+        [
+          "Mark 22",
+          623
+        ],
+        [
+          "Mark 14",
+          346
+        ],
+        [
+          "Mark 38",
+          258
+        ],
+        [
+          "Mark 55",
+          209
+        ],
+        [
+          "Mark 01",
+          71
+        ],
+        [
+          "Mark 49",
+          34
+        ]
+      ]
+    }
+  ],
+  "validation": {
+    "days": [
+      {
+        "day": 1,
+        "price_rows": 120000,
+        "trade_rows": 1407,
+        "timestamps": 10000,
+        "timestamp_min": 0,
+        "timestamp_max": 999900,
+        "timestamp_step_ok": true,
+        "products_seen": [
+          "HYDROGEL_PACK",
+          "VELVETFRUIT_EXTRACT",
+          "VEV_4000",
+          "VEV_4500",
+          "VEV_5000",
+          "VEV_5100",
+          "VEV_5200",
+          "VEV_5300",
+          "VEV_5400",
+          "VEV_5500",
+          "VEV_6000",
+          "VEV_6500"
+        ],
+        "duplicate_book_rows": 0,
+        "missing_product_timestamps": 0,
+        "empty_book_rows": 0,
+        "one_sided_book_rows": 0,
+        "crossed_book_rows": 0,
+        "trade_products_seen": [
+          "HYDROGEL_PACK",
+          "VELVETFRUIT_EXTRACT",
+          "VEV_4000",
+          "VEV_4500",
+          "VEV_5000",
+          "VEV_5100",
+          "VEV_5200",
+          "VEV_5300",
+          "VEV_5400",
+          "VEV_5500",
+          "VEV_6000",
+          "VEV_6500"
+        ],
+        "trade_currencies": {
+          "XIRECS": 1407
+        },
+        "trade_quantity_signs": {
+          "positive": 1407
+        },
+        "counterparty_count": 7,
+        "empty_buyer_rows": 0,
+        "empty_seller_rows": 0
+      },
+      {
+        "day": 2,
+        "price_rows": 120000,
+        "trade_rows": 1333,
+        "timestamps": 10000,
+        "timestamp_min": 0,
+        "timestamp_max": 999900,
+        "timestamp_step_ok": true,
+        "products_seen": [
+          "HYDROGEL_PACK",
+          "VELVETFRUIT_EXTRACT",
+          "VEV_4000",
+          "VEV_4500",
+          "VEV_5000",
+          "VEV_5100",
+          "VEV_5200",
+          "VEV_5300",
+          "VEV_5400",
+          "VEV_5500",
+          "VEV_6000",
+          "VEV_6500"
+        ],
+        "duplicate_book_rows": 0,
+        "missing_product_timestamps": 0,
+        "empty_book_rows": 0,
+        "one_sided_book_rows": 0,
+        "crossed_book_rows": 0,
+        "trade_products_seen": [
+          "HYDROGEL_PACK",
+          "VELVETFRUIT_EXTRACT",
+          "VEV_4000",
+          "VEV_5200",
+          "VEV_5300",
+          "VEV_5400",
+          "VEV_5500",
+          "VEV_6000",
+          "VEV_6500"
+        ],
+        "trade_currencies": {
+          "XIRECS": 1333
+        },
+        "trade_quantity_signs": {
+          "positive": 1333
+        },
+        "counterparty_count": 7,
+        "empty_buyer_rows": 0,
+        "empty_seller_rows": 0
+      },
+      {
+        "day": 3,
+        "price_rows": 120000,
+        "trade_rows": 1541,
+        "timestamps": 10000,
+        "timestamp_min": 0,
+        "timestamp_max": 999900,
+        "timestamp_step_ok": true,
+        "products_seen": [
+          "HYDROGEL_PACK",
+          "VELVETFRUIT_EXTRACT",
+          "VEV_4000",
+          "VEV_4500",
+          "VEV_5000",
+          "VEV_5100",
+          "VEV_5200",
+          "VEV_5300",
+          "VEV_5400",
+          "VEV_5500",
+          "VEV_6000",
+          "VEV_6500"
+        ],
+        "duplicate_book_rows": 0,
+        "missing_product_timestamps": 0,
+        "empty_book_rows": 0,
+        "one_sided_book_rows": 0,
+        "crossed_book_rows": 0,
+        "trade_products_seen": [
+          "HYDROGEL_PACK",
+          "VELVETFRUIT_EXTRACT",
+          "VEV_4000",
+          "VEV_4500",
+          "VEV_5000",
+          "VEV_5100",
+          "VEV_5200",
+          "VEV_5300",
+          "VEV_5400",
+          "VEV_5500",
+          "VEV_6000",
+          "VEV_6500"
+        ],
+        "trade_currencies": {
+          "XIRECS": 1541
+        },
+        "trade_quantity_signs": {
+          "positive": 1541
+        },
+        "counterparty_count": 7,
+        "empty_buyer_rows": 0,
+        "empty_seller_rows": 0
+      }
+    ]
+  }
+}
