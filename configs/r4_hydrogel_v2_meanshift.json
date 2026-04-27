@@ -1,0 +1,80 @@
+{
+  "name": "r4_hydrogel_v2_meanshift",
+  "round": 3,
+  "data_dir": "data/round3",
+  "days": [0],
+  "fill_model": "base",
+  "traders": [
+    {
+      "name": "baseline_r4",
+      "path": "strategies/r4_trader.py"
+    },
+    {
+      "name": "rejected_v1",
+      "path": "strategies/r4_hydrogel_candidate.py"
+    },
+    {
+      "name": "v2_blend25",
+      "path": "strategies/r4_hydrogel_candidate_v2.py"
+    },
+    {
+      "name": "v2_first_mid",
+      "path": "strategies/r4_hydrogel_candidate_v2.py",
+      "overrides": {"HYDRO_PARAMS.warm_start_mode": "first_mid"}
+    },
+    {
+      "name": "v2_anchor75",
+      "path": "strategies/r4_hydrogel_candidate_v2.py",
+      "overrides": {"HYDRO_PARAMS.warm_start_mode": "control_75"}
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "shift_neutral",
+      "fill_model": "base",
+      "description": "Synthetic baseline with no Hydrogel shift.",
+      "tags": ["meanshift", "baseline"],
+      "perturbation": {"synthetic_tick_limit": 500, "shock_tick": 1}
+    },
+    {
+      "name": "shift_minus_100",
+      "fill_model": "base",
+      "tags": ["meanshift", "down", "stress", "wide"],
+      "perturbation": {"synthetic_tick_limit": 500, "shock_tick": 1, "hydrogel_shock": -100.0}
+    },
+    {
+      "name": "shift_minus_60",
+      "fill_model": "base",
+      "tags": ["meanshift", "down", "stress"],
+      "perturbation": {"synthetic_tick_limit": 500, "shock_tick": 1, "hydrogel_shock": -60.0}
+    },
+    {
+      "name": "shift_minus_30",
+      "fill_model": "base",
+      "tags": ["meanshift", "down"],
+      "perturbation": {"synthetic_tick_limit": 500, "shock_tick": 1, "hydrogel_shock": -30.0}
+    },
+    {
+      "name": "shift_plus_30",
+      "fill_model": "base",
+      "tags": ["meanshift", "up"],
+      "perturbation": {"synthetic_tick_limit": 500, "shock_tick": 1, "hydrogel_shock": 30.0}
+    },
+    {
+      "name": "shift_plus_60",
+      "fill_model": "base",
+      "tags": ["meanshift", "up", "stress"],
+      "perturbation": {"synthetic_tick_limit": 500, "shock_tick": 1, "hydrogel_shock": 60.0}
+    },
+    {
+      "name": "shift_plus_100",
+      "fill_model": "base",
+      "tags": ["meanshift", "up", "stress", "wide"],
+      "perturbation": {"synthetic_tick_limit": 500, "shock_tick": 1, "hydrogel_shock": 100.0}
+    }
+  ],
+  "mc_sessions": 64,
+  "mc_sample_sessions": 0,
+  "mc_seed": 20260427,
+  "mc_workers": 4
+}
