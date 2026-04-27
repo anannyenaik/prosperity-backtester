@@ -56,6 +56,7 @@ def test_data_validation_matches_known_r3_counts():
             assert len(entry["sha256"]) == 64
 
 
+@pytest.mark.slow
 def test_option_diagnostics_proof_is_clean_and_finite():
     result = option_diagnostics_proof(ROUND3_DATA, (0,))
     assert result.status == "pass", result.error
@@ -66,6 +67,7 @@ def test_option_diagnostics_proof_is_clean_and_finite():
     _walk_finite(diagnostics)
 
 
+@pytest.mark.slow
 def test_mc_coherence_proof_catches_basic_invariants():
     result = mc_coherence_proof(ROUND3_DATA)
     assert result.status == "pass", result.error
@@ -73,6 +75,7 @@ def test_mc_coherence_proof_catches_basic_invariants():
     assert result.detail["products_match_r3_set"] is True
 
 
+@pytest.mark.slow
 def test_replay_correctness_fixtures_pass(tmp_path: Path):
     results = replay_correctness_checks(tmp_path, NOOP_TRADER, ROUND3_DATA)
     assert all(r.status == "pass" for r in results), "\n".join(

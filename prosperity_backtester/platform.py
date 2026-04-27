@@ -64,10 +64,16 @@ class PerturbationConfig:
     skew_shift: float = 0.0
     option_residual_noise_scale: float = 1.0
     option_liquidity_scale: float = 1.0
+    option_liquidity_scale_by_product: Dict[str, float] = field(default_factory=dict)
     voucher_spread_shift_ticks: int = 0
+    voucher_spread_shift_ticks_by_product: Dict[str, int] = field(default_factory=dict)
     underlying_liquidity_scale: float = 1.0
     hydrogel_liquidity_scale: float = 1.0
+    trade_count_scale: float = 1.0
+    stale_voucher_mid_probability: float = 0.0
     counterparty_flow_enabled: bool = True
+    counterparty_name_mode: str = "calibrated"
+    counterparty_seed: int = 0
     counterparty_edge_strength: float = 0.0
     counterparty_edge_sign: float = 1.0
     scenario_name: str = "custom"

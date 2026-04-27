@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from prosperity_backtester.dataset import load_round_dataset
 from prosperity_backtester.datamodel import Order
 from prosperity_backtester.dataset import BookSnapshot, TradePrint
@@ -13,7 +15,10 @@ from prosperity_backtester.counterparty_research import _recommendation_rows
 from prosperity_backtester.fill_models import resolve_fill_model
 from prosperity_backtester.metadata import get_round_spec, products_for_round
 from prosperity_backtester.platform import PerturbationConfig, ProductLedger, _execute_order_batch, generate_synthetic_market_days
+from prosperity_backtester.r4_mc_validation import R4_MC_PRESETS, run_round4_mc_validation
+from prosperity_backtester.round3 import prepare_round3_synthetic_context
 from prosperity_backtester.round2 import NO_ACCESS_SCENARIO
+from prosperity_backtester.verify_round4 import _replay_summary_hash
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -54,6 +59,39 @@ def _run_single_order(
         rng=random.Random(7),
     )
     return fills, residual, limit_breach, ledger
+
+
+def _price_signature(day_dataset):
+    return [
+        (
+            timestamp,
+            product,
+            snapshot.mid,
+            snapshot.reference_fair,
+            snapshot.bids[:1],
+            snapshot.asks[:1],
+        )
+        for timestamp in day_dataset.timestamps
+        for product, snapshot in sorted(day_dataset.books_by_timestamp.get(timestamp, {}).items())
+    ]
+
+
+def _name_signature(day_dataset):
+    return [
+        (timestamp, product, trade.buyer, trade.seller)
+        for timestamp in day_dataset.timestamps
+        for product, trades in sorted(day_dataset.trades_by_timestamp.get(timestamp, {}).items())
+        for trade in trades
+    ]
+
+
+def _top_depth(day_dataset, product):
+    total = 0
+    for timestamp in day_dataset.timestamps[:20]:
+        snapshot = day_dataset.books_by_timestamp.get(timestamp, {}).get(product)
+        if snapshot is not None and snapshot.bids and snapshot.asks:
+            total += int(snapshot.bids[0][1]) + int(snapshot.asks[0][1])
+    return total
 
 
 def test_round4_registry_and_loader_preserve_counterparties():
@@ -199,6 +237,52 @@ def test_round4_counterparty_recommendation_does_not_turn_below_cost_follow_into
     assert by_name["Mark 22"]["follow_fade_ignore"] == "fade"
 
 
+def test_round4_counterparty_recommendation_hard_filters():
+    rows = _recommendation_rows(
+        [
+            {
+                "counterparty": "Low Count",
+                "product": "VELVETFRUIT_EXTRACT",
+                "product_group": "velvet",
+                "side": "buy",
+                "count": 29,
+                "raw_markout_20": 2.0,
+                "estimated_spread_adverse_cost_20": 0.1,
+                "stability": "stable",
+            },
+            {
+                "counterparty": "Mixed",
+                "product": "VELVETFRUIT_EXTRACT",
+                "product_group": "velvet",
+                "side": "buy",
+                "count": 40,
+                "raw_markout_20": 2.0,
+                "estimated_spread_adverse_cost_20": 0.1,
+                "stability": "mixed",
+            },
+            {
+                "counterparty": "Weak Fade",
+                "product": "VELVETFRUIT_EXTRACT",
+                "product_group": "velvet",
+                "side": "sell",
+                "count": 40,
+                "raw_markout_20": -0.05,
+                "estimated_spread_adverse_cost_20": 0.2,
+                "stability": "stable",
+            },
+        ]
+    )
+    by_name = {row["counterparty"]: row for row in rows}
+
+    assert by_name["Low Count"]["follow_fade_ignore"] == "ignore"
+    assert by_name["Low Count"]["reason"] == "count_below_minimum_30"
+    assert by_name["Mixed"]["follow_fade_ignore"] == "ignore"
+    assert by_name["Mixed"]["reason"] == "day_signs_conflict"
+    assert by_name["Weak Fade"]["follow_fade_ignore"] == "ignore"
+    assert by_name["Weak Fade"]["reason"] == "negative_raw_markout_below_fade_cost_or_not_stable"
+
+
+@pytest.mark.slow
 def test_round4_cli_inspect_and_counterparty_research(tmp_path):
     inspect = subprocess.run(
         [
@@ -265,10 +349,13 @@ def test_round4_cli_inspect_and_counterparty_research(tmp_path):
     )
     manifest = json.loads((manifest_dir / "manifest_report.json").read_text(encoding="utf-8"))
     assert manifest["status"] == "pass"
+    assert manifest["scope_status"] == "partial"
     assert manifest["days"][0]["trade_rows"] == 1407
     assert (manifest_dir / "spread_depth_summary.csv").is_file()
+    assert (manifest_dir / "trade_size_summary.csv").is_file()
 
 
+@pytest.mark.slow
 def test_round4_verify_skip_mc_writes_report(tmp_path):
     output_dir = tmp_path / "verify"
     subprocess.run(
@@ -298,9 +385,133 @@ def test_round4_verify_skip_mc_writes_report(tmp_path):
     assert report["summary"]["overall_status"] == "pass"
     assert report["replay_scope"]["historical_tick_limit"] == 1200
     assert report["replay_scope"]["truncated"] is True
+    assert report["manifest_result"]["artefact"] == "manifest/manifest_report.json"
+    assert report["no_op_replay_sanity"]["status"] == "pass"
+    assert report["commands"]
     assert (output_dir / "manifest" / "manifest_report.json").is_file()
 
 
+def test_round4_replay_hash_is_stable_and_config_sensitive():
+    payload = {"final_pnl": 0, "fill_count": 0, "fill_channels": {}, "candidate_promoted": False}
+    first = _replay_summary_hash(
+        replay_payload=payload,
+        days=(1,),
+        historical_tick_limit=300,
+        fill_model_name="base",
+        perturbation=PerturbationConfig(),
+        data_hash="data",
+        git_commit="commit",
+        git_dirty=False,
+    )
+    repeat = _replay_summary_hash(
+        replay_payload=dict(payload),
+        days=(1,),
+        historical_tick_limit=300,
+        fill_model_name="base",
+        perturbation=PerturbationConfig(),
+        data_hash="data",
+        git_commit="commit",
+        git_dirty=False,
+    )
+    changed_config = _replay_summary_hash(
+        replay_payload=payload,
+        days=(1,),
+        historical_tick_limit=300,
+        fill_model_name="base",
+        perturbation=PerturbationConfig(trade_matching_mode="none"),
+        data_hash="data",
+        git_commit="commit",
+        git_dirty=False,
+    )
+
+    assert first == repeat
+    assert first != changed_config
+
+
+def test_round4_mc_name_shuffle_preserves_price_path_and_changes_names():
+    spec = get_round_spec(4)
+    dataset = load_round_dataset(ROUND4_DATA, (1,), round_number=4)
+    context = prepare_round3_synthetic_context([dataset[1]], round_spec=spec, tick_count=120)
+    base = generate_synthetic_market_days(
+        days=(1,),
+        seed=20260426,
+        perturb=PerturbationConfig(synthetic_tick_limit=120, counterparty_edge_strength=0.0),
+        round_spec=spec,
+        round3_context=context,
+    )[0]
+    shuffled = generate_synthetic_market_days(
+        days=(1,),
+        seed=20260426,
+        perturb=PerturbationConfig(synthetic_tick_limit=120, counterparty_edge_strength=0.0, counterparty_name_mode="shuffled"),
+        round_spec=spec,
+        round3_context=context,
+    )[0]
+
+    assert _price_signature(base) == _price_signature(shuffled)
+    assert _name_signature(base) != _name_signature(shuffled)
+
+
+def test_round4_mc_trade_thinning_stale_mid_and_strike_liquidity_transforms():
+    spec = get_round_spec(4)
+    dataset = load_round_dataset(ROUND4_DATA, (1,), round_number=4)
+    context = prepare_round3_synthetic_context([dataset[1]], round_spec=spec, tick_count=120)
+    base = generate_synthetic_market_days(
+        days=(1,),
+        seed=20260426,
+        perturb=PerturbationConfig(synthetic_tick_limit=120),
+        round_spec=spec,
+        round3_context=context,
+    )[0]
+    thinned = generate_synthetic_market_days(
+        days=(1,),
+        seed=20260426,
+        perturb=PerturbationConfig(synthetic_tick_limit=120, trade_count_scale=0.0),
+        round_spec=spec,
+        round3_context=context,
+    )[0]
+    stale = generate_synthetic_market_days(
+        days=(1,),
+        seed=20260426,
+        perturb=PerturbationConfig(synthetic_tick_limit=120, stale_voucher_mid_probability=1.0),
+        round_spec=spec,
+        round3_context=context,
+    )[0]
+    thin_deep_itm = generate_synthetic_market_days(
+        days=(1,),
+        seed=20260426,
+        perturb=PerturbationConfig(synthetic_tick_limit=120, option_liquidity_scale_by_product={"VEV_4000": 0.25}),
+        round_spec=spec,
+        round3_context=context,
+    )[0]
+
+    base_trades = sum(len(trades) for by_product in base.trades_by_timestamp.values() for trades in by_product.values())
+    thinned_trades = sum(len(trades) for by_product in thinned.trades_by_timestamp.values() for trades in by_product.values())
+    assert thinned_trades == 0
+    assert thinned_trades < base_trades
+    assert _price_signature(stale) != _price_signature(base)
+    assert _top_depth(thin_deep_itm, "VEV_4000") < _top_depth(base, "VEV_4000")
+    assert _top_depth(thin_deep_itm, "VEV_5000") == _top_depth(base, "VEV_5000")
+
+
+def test_round4_day_held_out_counterparty_calibration_excludes_held_day():
+    spec = get_round_spec(4)
+    dataset = load_round_dataset(ROUND4_DATA, (1, 2), round_number=4)
+    held_out_context = prepare_round3_synthetic_context(
+        [dataset[1], dataset[2]],
+        round_spec=spec,
+        tick_count=60,
+        counterparty_market_days=[dataset[2]],
+    )
+    day2_only_context = prepare_round3_synthetic_context(
+        [dataset[2]],
+        round_spec=spec,
+        tick_count=60,
+    )
+
+    assert held_out_context.counterparty_edge_by_product_side == day2_only_context.counterparty_edge_by_product_side
+
+
+@pytest.mark.slow
 def test_round4_synthetic_mc_has_named_flow_and_is_deterministic(tmp_path):
     spec = get_round_spec(4)
     dataset = load_round_dataset(ROUND4_DATA, (1,), round_number=4)
@@ -361,3 +572,37 @@ def test_round4_synthetic_mc_has_named_flow_and_is_deterministic(tmp_path):
         for product, snapshot in sorted(synthetic_again.books_by_timestamp.get(ts, {}).items())
     ]
     assert first_signature == second_signature
+
+
+@pytest.mark.slow
+def test_round4_mc_validation_report_is_honest_and_serialisable(tmp_path, monkeypatch):
+    monkeypatch.setitem(
+        R4_MC_PRESETS,
+        "fast",
+        {
+            "sessions": 1,
+            "sample_sessions": 1,
+            "tick_limit": 30,
+            "days": "requested_days",
+            "seed_policy": "test seed policy",
+            "expected_runtime_band": "test",
+            "decision_use": "test",
+        },
+    )
+
+    report = run_round4_mc_validation(
+        data_dir=ROUND4_DATA,
+        output_dir=tmp_path / "mc_validation",
+        days=(1,),
+        preset="fast",
+        seed=20260426,
+    )
+
+    assert report["status"] == "pass"
+    assert report["decision_grade"] is True
+    assert report["decision_grade_blockers"] == []
+    assert (tmp_path / "mc_validation" / "mc_validation_report.json").is_file()
+    assert (tmp_path / "mc_validation" / "mc_validation_report.md").is_file()
+    assert (tmp_path / "mc_validation" / "metric_comparison_summary.csv").is_file()
+    assert (tmp_path / "mc_validation" / "scenario_suite_summary.csv").is_file()
+    json.loads((tmp_path / "mc_validation" / "mc_validation_report.json").read_text(encoding="utf-8"))

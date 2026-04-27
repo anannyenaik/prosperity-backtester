@@ -6,6 +6,8 @@ import sys
 from functools import lru_cache
 from pathlib import Path
 
+import pytest
+
 from prosperity_backtester.__main__ import build_parser, _days_from_args
 from prosperity_backtester.dataset import load_round3_dataset, load_round_dataset
 from prosperity_backtester.experiments import TraderSpec, default_data_dir_for_round, run_compare, run_replay
@@ -101,6 +103,7 @@ def test_round3_registry_and_metadata():
     assert get_round_spec(2).products
 
 
+@pytest.mark.slow
 def test_round3_dataset_loader_reads_real_capsule_files():
     dataset = load_round3_dataset(ROUND3_DATA, days=(0, 1, 2))
 
@@ -131,6 +134,7 @@ def test_round3_dataset_loader_reads_real_capsule_files():
     assert zero_price_rows > 0
 
 
+@pytest.mark.slow
 def test_round3_cli_accepts_round3_and_uses_round_defaults(tmp_path):
     parser = build_parser()
     replay_args = parser.parse_args(["replay", "tests/fixtures/noop_round3_trader.py", "--round", "3"])
@@ -166,6 +170,7 @@ def test_round3_cli_accepts_round3_and_uses_round_defaults(tmp_path):
     assert _days_from_args(round4_args) == (1, 2, 3)
 
 
+@pytest.mark.slow
 def test_round3_replay_noop_smoke(tmp_path):
     artefact = run_replay(
         trader_spec=TraderSpec(name="noop_round3", path=NOOP_ROUND3),
@@ -224,6 +229,7 @@ def test_round3_rejects_round2_access_flags():
     assert "does not support Round 2 access or MAF flags" in result.stderr
 
 
+@pytest.mark.slow
 def test_round3_compare_two_noop_traders_has_exact_zero_diff(tmp_path):
     rows = run_compare(
         trader_specs=[
@@ -542,6 +548,7 @@ def test_round3_option_helpers_behave_robustly():
     assert delta is not None and 0.0 < delta < 1.0
 
 
+@pytest.mark.slow
 def test_round3_option_diagnostics_expose_surface_and_chain_fields():
     historical = _round3_historical_days()
     diagnostics = compute_option_diagnostics([historical[0]], round_spec=get_round_spec(3))
@@ -611,6 +618,7 @@ def _round3_synthetic_day(perturbation: PerturbationConfig, *, seed: int = 20260
     )[0]
 
 
+@pytest.mark.slow
 def test_round3_synthetic_market_keeps_chain_coherent():
     perturbation = PerturbationConfig(
         synthetic_tick_limit=20,

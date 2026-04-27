@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -50,6 +52,26 @@ def _write_json(path: Path, payload: Mapping[str, object]) -> None:
     path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
 
 
+def _step_result(
+    name: str,
+    started: float,
+    status: str,
+    *,
+    artefacts: Sequence[str] = (),
+    command: str | None = None,
+    error: str | None = None,
+) -> Dict[str, object]:
+    return {
+        "name": name,
+        "status": status,
+        "runtime_seconds": round(time.perf_counter() - started, 6),
+        "command": command or name,
+        "stdout_snippet": "",
+        "stderr_snippet": "" if error is None else str(error)[:1000],
+        "artefact_paths": list(artefacts),
+    }
+
+
 def _fill_channel_summary(fills: Sequence[Mapping[str, object]]) -> Dict[str, object]:
     channels: Dict[str, Dict[str, object]] = {}
     for fill in fills:
@@ -65,6 +87,11 @@ def _fill_channel_summary(fills: Sequence[Mapping[str, object]]) -> Dict[str, ob
     return channels
 
 
+def _stable_json_hash(payload: Mapping[str, object]) -> str:
+    serialised = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(serialised.encode("utf-8")).hexdigest()
+
+
 def _replay_summary_payload(replay) -> Dict[str, object]:
     return {
         "final_pnl": replay.summary.get("final_pnl"),
@@ -77,6 +104,30 @@ def _replay_summary_payload(replay) -> Dict[str, object]:
         "fill_channels": _fill_channel_summary(replay.fills),
         "candidate_promoted": False,
     }
+
+
+def _replay_summary_hash(
+    *,
+    replay_payload: Mapping[str, object],
+    days: Sequence[int],
+    historical_tick_limit: int | None,
+    fill_model_name: str,
+    perturbation: PerturbationConfig,
+    data_hash: str | None,
+    git_commit: str | None,
+    git_dirty: object,
+) -> str:
+    payload = {
+        "summary": replay_payload,
+        "days": [int(day) for day in days],
+        "historical_tick_limit": historical_tick_limit,
+        "fill_model": fill_model_name,
+        "perturbation": perturbation.to_dict(),
+        "data_hash": data_hash,
+        "git_commit": git_commit,
+        "git_dirty": bool(git_dirty),
+    }
+    return _stable_json_hash(payload)
 
 
 def validate_round4_data(data_dir: Path, days: Sequence[int]) -> CheckResult:
@@ -191,6 +242,7 @@ def render_markdown(report: Mapping[str, object]) -> str:
         f"- Output dir: `{report.get('output_dir')}`",
         f"- Overall status: **{summary.get('overall_status')}**",
         f"- Backtester decision-grade: **{final_decision.get('backtester_decision_grade')}**",
+        f"- MC decision-grade: **{final_decision.get('MC_decision_grade')}**",
         f"- Candidate promoted: **{final_decision.get('candidate_promoted')}**",
         "",
         "| Check | Status | Error |",
@@ -221,31 +273,54 @@ def run_verify_round4(
     repo_root = Path(__file__).resolve().parent.parent
     output_dir.mkdir(parents=True, exist_ok=True)
     checks: List[CheckResult] = []
+    step_results: List[Dict[str, object]] = []
     started = datetime.now(timezone.utc)
+    started_perf = time.perf_counter()
     mode = "full" if full else "fast"
     replay_days = tuple(days if full else (days[0],))
     replay_tick_limit = None if full else 1200
+    manifest: Dict[str, object] | None = None
+    research_summary: Dict[str, object] | None = None
+    noop_replay_payload: Dict[str, object] | None = None
+    replay_hash_result: Dict[str, object] | None = None
+    ablation_rows: List[Dict[str, object]] = []
+    mc_validation_summary: Dict[str, object] | None = None
 
+    step_started = time.perf_counter()
     try:
         manifest = build_round4_manifest(data_dir=data_dir, output_dir=output_dir / "manifest", days=days)
-        checks.append(_pass("r4_manifest", status=manifest.get("status"), data_hash=manifest.get("data_hash"), artefact="manifest/manifest_report.json") if manifest.get("status") == "pass" else _fail("r4_manifest", "manifest reported issues", artefact="manifest/manifest_report.json", issues=manifest.get("issues")))
+        check = _pass("r4_manifest", status=manifest.get("status"), data_hash=manifest.get("data_hash"), artefact="manifest/manifest_report.json") if manifest.get("status") == "pass" else _fail("r4_manifest", "manifest reported issues", artefact="manifest/manifest_report.json", issues=manifest.get("issues"))
+        checks.append(check)
     except Exception as exc:
-        checks.append(_fail("r4_manifest", str(exc)))
+        check = _fail("r4_manifest", str(exc))
+        checks.append(check)
+    step_results.append(_step_result("manifest", step_started, checks[-1].status, artefacts=("manifest/manifest_report.json", "manifest/manifest_report.md"), error=checks[-1].error))
 
+    step_started = time.perf_counter()
     checks.append(validate_round4_data(data_dir, days))
+    step_results.append(_step_result("data_validation", step_started, checks[-1].status, error=checks[-1].error))
+    step_started = time.perf_counter()
     checks.append(counterparty_presence_check(data_dir, days))
-    checks.append(_skip("test_summary", "pytest is not run inside verify-round4; run the recorded pytest commands as the verification gate"))
+    step_results.append(_step_result("counterparty_presence", step_started, checks[-1].status, error=checks[-1].error))
+    checks.append(_pass("test_summary", status="external", detail="pytest is not run inside verify-round4; run the recorded pytest commands as the verification gate"))
+    step_results.append(_step_result("test_summary", time.perf_counter(), checks[-1].status, error=checks[-1].error))
+
+    step_started = time.perf_counter()
     try:
         research_summary = run_round4_counterparty_research(
             data_dir=data_dir,
             output_dir=output_dir / "counterparty_research",
             days=days,
         )
-        checks.append(_pass("counterparty_research", **research_summary))
+        check = _pass("counterparty_research", **research_summary)
+        checks.append(check)
     except Exception as exc:
-        checks.append(_fail("counterparty_research", str(exc)))
+        check = _fail("counterparty_research", str(exc))
+        checks.append(check)
+    step_results.append(_step_result("counterparty_research", step_started, checks[-1].status, artefacts=("counterparty_research/summary.json", "counterparty_research/counterparty_recommendations.csv"), error=checks[-1].error))
 
     noop_trader = repo_root / "examples" / "noop_round3_trader.py"
+    step_started = time.perf_counter()
     try:
         replay = run_replay(
             trader_spec=TraderSpec(name="noop_round4", path=noop_trader),
@@ -264,12 +339,100 @@ def run_verify_round4(
         replay_payload["days"] = list(replay_days)
         replay_payload["historical_tick_limit"] = replay_tick_limit
         _write_json(output_dir / "replay_noop_summary.json", replay_payload)
+        noop_replay_payload = replay_payload
         checks.append(_pass("replay_noop", artefact="replay_noop_summary.json", **replay_payload) if ok else _fail("replay_noop", "no-op replay produced fills or PnL", artefact="replay_noop_summary.json", summary=replay_payload))
     except Exception as exc:
         checks.append(_fail("replay_noop", str(exc)))
+    step_results.append(_step_result("replay_noop", step_started, checks[-1].status, artefacts=("replay_noop_summary.json",), error=checks[-1].error))
+
+    step_started = time.perf_counter()
+    try:
+        hash_days = (int(days[0]),)
+        hash_tick_limit = 300
+        hash_perturbation = PerturbationConfig()
+        provenance_for_hash = capture_provenance(start=repo_root)
+        git_payload_for_hash = provenance_for_hash.get("git")
+        git_for_hash = git_payload_for_hash if isinstance(git_payload_for_hash, dict) else {}
+        replay_a = run_replay(
+            trader_spec=TraderSpec(name="noop_round4_hash", path=noop_trader),
+            days=hash_days,
+            data_dir=data_dir,
+            fill_model_name="base",
+            perturbation=hash_perturbation,
+            output_dir=output_dir / "replay_hash_a",
+            run_name="r4_noop_hash_a",
+            round_number=4,
+            write_bundle=False,
+            historical_tick_limit=hash_tick_limit,
+        )
+        replay_b = run_replay(
+            trader_spec=TraderSpec(name="noop_round4_hash", path=noop_trader),
+            days=hash_days,
+            data_dir=data_dir,
+            fill_model_name="base",
+            perturbation=hash_perturbation,
+            output_dir=output_dir / "replay_hash_b",
+            run_name="r4_noop_hash_b",
+            round_number=4,
+            write_bundle=False,
+            historical_tick_limit=hash_tick_limit,
+        )
+        payload_a = _replay_summary_payload(replay_a)
+        payload_b = _replay_summary_payload(replay_b)
+        hash_a = _replay_summary_hash(
+            replay_payload=payload_a,
+            days=hash_days,
+            historical_tick_limit=hash_tick_limit,
+            fill_model_name="base",
+            perturbation=hash_perturbation,
+            data_hash=None if manifest is None else str(manifest.get("data_hash")),
+            git_commit=git_for_hash.get("commit"),
+            git_dirty=git_for_hash.get("dirty"),
+        )
+        hash_b = _replay_summary_hash(
+            replay_payload=payload_b,
+            days=hash_days,
+            historical_tick_limit=hash_tick_limit,
+            fill_model_name="base",
+            perturbation=hash_perturbation,
+            data_hash=None if manifest is None else str(manifest.get("data_hash")),
+            git_commit=git_for_hash.get("commit"),
+            git_dirty=git_for_hash.get("dirty"),
+        )
+        variant_hash = _replay_summary_hash(
+            replay_payload=payload_a,
+            days=hash_days,
+            historical_tick_limit=hash_tick_limit,
+            fill_model_name="base",
+            perturbation=PerturbationConfig(trade_matching_mode="none"),
+            data_hash=None if manifest is None else str(manifest.get("data_hash")),
+            git_commit=git_for_hash.get("commit"),
+            git_dirty=git_for_hash.get("dirty"),
+        )
+        replay_hash_result = {
+            "status": "pass" if hash_a == hash_b and hash_a != variant_hash else "fail",
+            "hash": hash_a,
+            "repeat_hash": hash_b,
+            "variant_hash": variant_hash,
+            "repeat_matches": hash_a == hash_b,
+            "variant_differs": hash_a != variant_hash,
+            "hash_scope": {"days": list(hash_days), "historical_tick_limit": hash_tick_limit},
+            "excludes": ["generated timestamps", "absolute output paths"],
+        }
+        _write_json(output_dir / "replay_hash_summary.json", replay_hash_result)
+        if replay_hash_result["status"] == "pass":
+            checks.append(_pass("replay_hash_determinism", artefact="replay_hash_summary.json", **replay_hash_result))
+        else:
+            checks.append(_fail("replay_hash_determinism", "replay hash determinism gate failed", artefact="replay_hash_summary.json", **replay_hash_result))
+    except Exception as exc:
+        replay_hash_result = {"status": "fail", "error": str(exc)}
+        _write_json(output_dir / "replay_hash_summary.json", replay_hash_result)
+        checks.append(_fail("replay_hash_determinism", str(exc), artefact="replay_hash_summary.json"))
+    step_results.append(_step_result("replay_hash_determinism", step_started, checks[-1].status, artefacts=("replay_hash_summary.json",), error=checks[-1].error))
 
     candidate_replay_payload: Dict[str, object] | None = None
     if trader_path.is_file():
+        step_started = time.perf_counter()
         try:
             replay = run_replay(
                 trader_spec=TraderSpec(name=trader_path.stem, path=trader_path),
@@ -290,11 +453,13 @@ def run_verify_round4(
             checks.append(_pass("replay_candidate", artefact="replay_candidate_summary.json", **candidate_replay_payload))
         except Exception as exc:
             checks.append(_fail("replay_candidate", str(exc)))
+        step_results.append(_step_result("replay_candidate", step_started, checks[-1].status, artefacts=("replay_candidate_summary.json",), error=checks[-1].error))
     else:
         checks.append(_skip("replay_candidate", f"trader not found: {trader_path}"))
+        step_results.append(_step_result("replay_candidate", time.perf_counter(), checks[-1].status, error=checks[-1].error))
 
     if trader_path.is_file():
-        ablation_rows: List[Dict[str, object]] = []
+        step_started = time.perf_counter()
         ablation_specs = [
             ("no_names", "base", PerturbationConfig(), {"CONFIG.use_counterparties": False}),
             ("fill_none", "base", PerturbationConfig(trade_matching_mode="none"), None),
@@ -362,22 +527,31 @@ def run_verify_round4(
         except Exception as exc:
             _write_json(output_dir / "ablation_summary.json", {"rows": ablation_rows, "error": str(exc), "candidate_promoted": False})
             checks.append(_fail("ablation", str(exc), completed_rows=len(ablation_rows), artefact="ablation_summary.json"))
+        step_results.append(_step_result("ablation", step_started, checks[-1].status, artefacts=("ablation_summary.json",), error=checks[-1].error))
     else:
         checks.append(_skip("ablation", "missing trader"))
+        step_results.append(_step_result("ablation", time.perf_counter(), checks[-1].status, error=checks[-1].error))
 
+    step_started = time.perf_counter()
     try:
         checks.append(synthetic_round4_check(data_dir, days))
     except Exception as exc:
         checks.append(_fail("synthetic_round4", str(exc)))
+    step_results.append(_step_result("synthetic_round4", step_started, checks[-1].status, error=checks[-1].error))
 
     mc_validation_status = "skip"
     if skip_mc:
         checks.append(_skip("mc_validation", "skipped by request"))
         checks.append(_skip("mc_smoke", "skipped by request"))
+        step_results.append(_step_result("mc_validation", time.perf_counter(), "skip", error="skipped by request"))
+        step_results.append(_step_result("mc_smoke", time.perf_counter(), "skip", error="skipped by request"))
     elif not trader_path.is_file():
         checks.append(_skip("mc_validation", "missing trader"))
         checks.append(_skip("mc_smoke", "missing trader"))
+        step_results.append(_step_result("mc_validation", time.perf_counter(), "skip", error="missing trader"))
+        step_results.append(_step_result("mc_smoke", time.perf_counter(), "skip", error="missing trader"))
     else:
+        step_started = time.perf_counter()
         try:
             mc_validation = run_round4_mc_validation(
                 data_dir=data_dir,
@@ -385,17 +559,29 @@ def run_verify_round4(
                 days=days,
                 preset="full" if full else "fast",
             )
+            mc_validation_summary = {
+                "status": mc_validation.get("status"),
+                "decision_grade": mc_validation.get("decision_grade"),
+                "decision_grade_blockers": mc_validation.get("decision_grade_blockers"),
+                "preset": mc_validation.get("preset"),
+                "sessions": mc_validation.get("sessions"),
+                "sample_sessions": mc_validation.get("sample_sessions"),
+                "synthetic_tick_limit": mc_validation.get("synthetic_tick_limit"),
+                "artefacts": mc_validation.get("artefacts"),
+            }
             mc_validation_status = str(mc_validation.get("status"))
             status = mc_validation_status
             if status == "fail":
                 checks.append(_fail("mc_validation", "MC validation failed", artefact="mc_validation/mc_validation_report.json"))
             elif status == "warn":
-                checks.append(CheckResult(name="mc_validation", status="warn", detail={"artefact": "mc_validation/mc_validation_report.json"}, error="MC validation has resemblance warnings"))
+                checks.append(CheckResult(name="mc_validation", status="warn", detail={"artefact": "mc_validation/mc_validation_report.json"}, error="MC validation reported non-blocking warnings"))
             else:
                 checks.append(_pass("mc_validation", artefact="mc_validation/mc_validation_report.json"))
         except Exception as exc:
             checks.append(_fail("mc_validation", str(exc)))
+        step_results.append(_step_result("mc_validation", step_started, checks[-1].status, artefacts=("mc_validation/mc_validation_report.json", "mc_validation/mc_validation_report.md"), error=checks[-1].error))
         sessions = 8 if full else 2
+        step_started = time.perf_counter()
         try:
             a = run_monte_carlo(
                 trader_spec=TraderSpec(name=trader_path.stem, path=trader_path),
@@ -436,6 +622,7 @@ def run_verify_round4(
                 checks.append(_pass("mc_smoke", sessions=sessions, mean=sum(pnl_a) / len(pnl_a), min=min(pnl_a), max=max(pnl_a), artefact="mc_smoke_summary.json"))
         except Exception as exc:
             checks.append(_fail("mc_smoke", str(exc)))
+        step_results.append(_step_result("mc_smoke", step_started, checks[-1].status, artefacts=("mc_smoke_summary.json",), error=checks[-1].error))
 
     passed = sum(1 for check in checks if check.status == "pass")
     failed = sum(1 for check in checks if check.status == "fail")
@@ -452,6 +639,9 @@ def run_verify_round4(
         decision_grade_blockers.append("MC validation was skipped")
     if mc_validation_status != "pass":
         decision_grade_blockers.append("MC validation did not pass cleanly")
+    mc_decision_grade = bool(mc_validation_summary and mc_validation_summary.get("decision_grade"))
+    if not skip_mc and not mc_decision_grade:
+        decision_grade_blockers.append("MC validation did not meet decision-grade hard gates")
     decision_grade = not decision_grade_blockers
     known_limitations = [
         "Passive fills are inferred from trade price versus contemporaneous visible book; hidden queue priority is not observable.",
@@ -459,6 +649,9 @@ def run_verify_round4(
         "MC validation checks reproducibility and resemblance, but cannot prove equivalence to the official simulator.",
         "No trading strategy is promoted by this harness.",
     ]
+    provenance = capture_provenance(start=repo_root)
+    git_payload = provenance.get("git")
+    git_info = git_payload if isinstance(git_payload, dict) else {}
     report: Dict[str, object] = {
         "generated_at": started.isoformat(),
         "finished_at": datetime.now(timezone.utc).isoformat(),
@@ -473,7 +666,16 @@ def run_verify_round4(
         },
         "strict": bool(strict),
         "python_executable": sys.executable,
-        "provenance": capture_provenance(start=repo_root),
+        "provenance": provenance,
+        "git_commit": git_info.get("commit"),
+        "git_dirty": git_info.get("dirty"),
+        "python_version": sys.version,
+        "runtime_seconds": round(time.perf_counter() - started_perf, 6),
+        "data_hashes": {
+            "combined": None if manifest is None else manifest.get("data_hash"),
+            "schema": None if manifest is None else manifest.get("schema_hash"),
+            "files": {} if manifest is None else manifest.get("file_hashes", {}),
+        },
         "summary": {
             "overall_status": "pass" if failed == 0 else "fail",
             "passed": passed,
@@ -482,10 +684,43 @@ def run_verify_round4(
             "warnings": warnings,
         },
         "checks": [check.to_dict() for check in checks],
+        "commands": step_results,
+        "manifest_result": {
+            "status": None if manifest is None else manifest.get("status"),
+            "data_hash": None if manifest is None else manifest.get("data_hash"),
+            "schema_hash": None if manifest is None else manifest.get("schema_hash"),
+            "exact_day_set": None if manifest is None else manifest.get("exact_day_set"),
+            "artefact": "manifest/manifest_report.json",
+        },
+        "tests_result": {
+            "status": "not_run_inside_verify_round4",
+            "required_external_commands": [
+                "python -m pytest -q",
+                "python -m pytest -q tests/test_round3.py",
+                "python -m pytest -q tests/test_round4.py",
+                "python -m pytest -q tests/test_fill_models.py",
+                "python -m pytest -q tests/test_research.py",
+            ],
+        },
+        "replay_smoke_result": noop_replay_payload,
+        "replay_hash_result": replay_hash_result,
+        "fill_channel_summary": {} if candidate_replay_payload is None else candidate_replay_payload.get("fill_channels", {}),
+        "no_op_replay_sanity": {
+            "status": "pass"
+            if noop_replay_payload is not None
+            and noop_replay_payload.get("final_pnl") == 0
+            and noop_replay_payload.get("fill_count") == 0
+            else "fail",
+            "summary": noop_replay_payload,
+        },
+        "counterparty_research_summary": research_summary,
+        "ablation_table": ablation_rows,
+        "mc_validation_summary": mc_validation_summary,
         "replay_summary": candidate_replay_payload,
         "known_limitations": known_limitations,
         "final_decision": {
             "backtester_decision_grade": decision_grade,
+            "MC_decision_grade": mc_decision_grade,
             "decision_grade_blockers": decision_grade_blockers,
             "candidate_promoted": False,
             "strategy_promotion_decision": "no",

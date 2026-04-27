@@ -8,8 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, Sequence
 
-from .dataset import DayDataset, load_round_dataset
+from .dataset import PRICE_SCHEMA, TRADE_SCHEMA, DayDataset, load_round_dataset
 from .metadata import get_round_spec
+from .provenance import capture_provenance
 
 
 EXPECTED_R4_TRADE_ROWS = {1: 1407, 2: 1333, 3: 1541}
@@ -63,6 +64,11 @@ def _combined_hash(file_hashes: Mapping[str, Mapping[str, object]]) -> str:
         h.update(name.encode("utf-8"))
         h.update(str(row.get("sha256", "missing")).encode("utf-8"))
     return h.hexdigest()
+
+
+def _schema_hash() -> str:
+    payload = {"prices": PRICE_SCHEMA, "trades": TRADE_SCHEMA}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
 def _trade_counterparties(day_dataset: DayDataset) -> tuple[Dict[str, object], List[Dict[str, object]]]:
@@ -154,6 +160,31 @@ def _spread_depth_rows(day_dataset: DayDataset) -> tuple[Dict[str, object], List
     return day_payload, rows
 
 
+def _trade_size_rows(day_dataset: DayDataset) -> tuple[Dict[str, object], List[Dict[str, object]]]:
+    sizes_by_product: Dict[str, List[float]] = {product: [] for product in day_dataset.products}
+    prices_by_product: Dict[str, List[float]] = {product: [] for product in day_dataset.products}
+    for timestamp in day_dataset.timestamps:
+        for product, trades in day_dataset.trades_by_timestamp.get(timestamp, {}).items():
+            for trade in trades:
+                sizes_by_product.setdefault(product, []).append(float(trade.quantity))
+                prices_by_product.setdefault(product, []).append(float(trade.price))
+    rows: List[Dict[str, object]] = []
+    by_product: Dict[str, object] = {}
+    for product in sorted(day_dataset.products):
+        product_payload = {
+            "trade_size": _summary(sizes_by_product.get(product, [])),
+            "trade_price": _summary(prices_by_product.get(product, [])),
+        }
+        by_product[product] = product_payload
+        for metric, summary in product_payload.items():
+            rows.append({"day": day_dataset.day, "product": product, "metric": metric, **summary})
+    return {
+        "trade_size": _summary([value for values in sizes_by_product.values() for value in values]),
+        "trade_price": _summary([value for values in prices_by_product.values() for value in values]),
+        "by_product": by_product,
+    }, rows
+
+
 def _write_csv(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
@@ -210,7 +241,10 @@ def render_manifest_markdown(report: Mapping[str, object]) -> str:
         "",
         f"- Generated at: `{report.get('generated_at')}`",
         f"- Data hash: `{report.get('data_hash')}`",
+        f"- Schema hash: `{report.get('schema_hash')}`",
         f"- Status: **{report.get('status')}**",
+        f"- Scope: **{report.get('scope_status', 'unknown')}**",
+        f"- Exact day set 1,2,3: **{report.get('exact_day_set')}**",
         "",
         "| Day | Status | Price rows | Trade rows | Timestamps | Issues |",
         "| --- | --- | ---: | ---: | ---: | --- |",
@@ -257,6 +291,8 @@ def build_round4_manifest(
             "days_requested": list(day_tuple),
             "file_hashes": file_hashes,
             "data_hash": _combined_hash(file_hashes),
+            "schema_hash": _schema_hash(),
+            "provenance": capture_provenance(start=Path(__file__).resolve().parent.parent),
         }
         (output_dir / "manifest_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
         (output_dir / "manifest_report.md").write_text(render_manifest_markdown(report), encoding="utf-8")
@@ -266,8 +302,11 @@ def build_round4_manifest(
 
     day_reports: List[Dict[str, object]] = []
     spread_rows: List[Dict[str, object]] = []
+    trade_size_rows: List[Dict[str, object]] = []
     counterparty_rows: List[Dict[str, object]] = []
     all_issues: List[str] = []
+    expected_day_set = tuple(get_round_spec(4).default_days)
+    exact_day_set = tuple(day_tuple) == expected_day_set
     for day in day_tuple:
         day_dataset = dataset_map[day]
         status, issues = _status_for_day(day_dataset)
@@ -275,8 +314,10 @@ def build_round4_manifest(
         validation = dict(day_dataset.validation)
         counterparties, product_counterparty_rows = _trade_counterparties(day_dataset)
         spread_depth, product_spread_rows = _spread_depth_rows(day_dataset)
+        trade_size_summary, product_trade_size_rows = _trade_size_rows(day_dataset)
         counterparty_rows.extend(product_counterparty_rows)
         spread_rows.extend(product_spread_rows)
+        trade_size_rows.extend(product_trade_size_rows)
         day_reports.append(
             {
                 "day": day,
@@ -302,6 +343,7 @@ def build_round4_manifest(
                 "trade_rows_invalid_currency": validation.get("trade_rows_invalid_currency"),
                 "trade_rows_invalid_quantity": validation.get("trade_rows_invalid_quantity"),
                 "spread_depth_summary": spread_depth,
+                "trade_size_summary": trade_size_summary,
             }
         )
 
@@ -312,6 +354,9 @@ def build_round4_manifest(
         "round_name": spec.name,
         "data_dir": str(data_dir),
         "days_present": list(day_tuple),
+        "expected_day_set": list(expected_day_set),
+        "exact_day_set": exact_day_set,
+        "scope_status": "complete" if exact_day_set else "partial",
         "products_expected": list(spec.products),
         "position_limits": {product: meta.position_limit for product, meta in spec.product_metadata.items()},
         "currency": spec.currency,
@@ -321,18 +366,22 @@ def build_round4_manifest(
         "days": day_reports,
         "file_hashes": file_hashes,
         "data_hash": _combined_hash(file_hashes),
+        "schema_hash": _schema_hash(),
         "schema_status": "strict",
+        "provenance": capture_provenance(start=Path(__file__).resolve().parent.parent),
         "permissive": bool(permissive),
         "issues": all_issues,
         "artefacts": {
             "json": "manifest_report.json",
             "markdown": "manifest_report.md",
             "spread_depth_csv": "spread_depth_summary.csv",
+            "trade_size_csv": "trade_size_summary.csv",
             "counterparty_csv": "counterparties_by_product.csv",
         },
     }
     (output_dir / "manifest_report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     (output_dir / "manifest_report.md").write_text(render_manifest_markdown(report), encoding="utf-8")
     _write_csv(output_dir / "spread_depth_summary.csv", spread_rows)
+    _write_csv(output_dir / "trade_size_summary.csv", trade_size_rows)
     _write_csv(output_dir / "counterparties_by_product.csv", counterparty_rows)
     return report

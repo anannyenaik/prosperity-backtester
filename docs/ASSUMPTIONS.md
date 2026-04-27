@@ -57,8 +57,11 @@ Round 4 adds named market trades, but names are not aggressor proof:
 - `match_trades=all` allows equal-or-through prints after direction inference
 - `match_trades=worse` requires a strictly better print than the resting quote
 - `match_trades=none` disables passive trade-print fills
+- visible aggressive fills are processed before passive trade-print matching
+- passive trade-print fills execute at the submitted order price, with configured adverse/slippage stress recorded separately
+- equal-price passive fills are queue-share assumptions, not observed queue priority
 - counterparty research labels below-cost positive raw markouts as `ignore`, not `fade`
-- Round 4 MC is a seeded rejection and stress tool; it is not treated as official simulator equivalence
+- Round 4 MC is a seeded rejection and stress tool; reports are decision-grade only when deterministic replay, no-op, CRN, path trace, scenario, and sanity gates pass
 
 ## `analysis_fair`
 
@@ -84,3 +87,10 @@ Treat the result as uncertain when:
 - Round 3 voucher diagnostics are unstable at deep ITM or pinned far OTM strikes
 - the winner changes under modest stress
 - Round 4 results depend on named-counterparty effects that do not survive no-names, shuffled, sign-flipped, day-held-out, or fill-mode ablations
+
+Current Round 4 MC model-risk limitations:
+
+- hidden official queue priority is not observable
+- official final-simulation distribution is unavailable
+- fast/default presets do not prove stable p05 or p01 tail estimates by themselves
+- shuffled-name, day-held-out counterparty calibration, strike-specific liquidity, trade-count thinning, and stale-voucher-mid transforms are implemented as stress modes, not official-simulator proof

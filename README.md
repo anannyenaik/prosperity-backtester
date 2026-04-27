@@ -11,7 +11,10 @@ Runtime code uses the Python standard library only. Tests use `pytest`; the dev 
 ```bash
 python -m pip install -e ".[dev]"
 python -m pytest -q
+python -m pytest -q --runslow
 ```
+
+Slow integration tests are marked `slow` and skipped by default; `--runslow` is the extended local test gate.
 
 Install the React dashboard dependencies only if you want the optional UI:
 
@@ -53,13 +56,15 @@ Validate the Round 4 MC generator:
 python -m prosperity_backtester r4-mc-validation --data-dir data/round4 --output-dir backtests/r4_mc_validation_fast --fast
 ```
 
+`r4-mc-validation` writes JSON, Markdown, metric-comparison CSV, and scenario-smoke CSV artefacts. It is decision-grade as a rejection and stress tool when hard gates pass: deterministic seeded paths, different-seed variation, common-random-number seed policy, no-op zero PnL, simple-inventory fills, path traces, scenario transforms, and public/synthetic resemblance checks. It still does not claim official hidden-queue or final-simulation distribution equivalence.
+
 Run the Round 4 verification smoke:
 
 ```bash
 python -m prosperity_backtester verify-round4 --data-dir data/round4 --output-dir backtests/r4_verification_fast --fast
 ```
 
-Fast and skip-MC verification validate the full manifest and research outputs, then replay a bounded day-1 window for runtime. The JSON report records the exact `replay_scope`. Use `--full` for full-day replay and broader ablations.
+Fast and skip-MC verification validate the full manifest and research outputs, then replay a bounded day-1 window for runtime. The JSON report records the exact `replay_scope`, internal step runtimes, artefact paths, data hashes, no-op replay sanity, fill-channel summary, ablation table, MC validation summary, `backtester_decision_grade`, and `candidate_promoted`. Use `--full` for full-day replay and broader ablations. Strict mode exits non-zero while any blocker remains.
 
 ## Round 3 path
 
@@ -150,6 +155,7 @@ python -m prosperity_backtester round2-scenarios configs/round2_all_in_one_resea
 - Round 3 option theory is used for diagnostics and coherent synthetic generation, not as a replay price source.
 - Round 3 and Round 4 option-chain Monte Carlo currently use the classic Python path.
 - Passive fills remain approximate across all rounds.
+- Round 4 MC is a decision-grade rejection/stress harness when `r4-mc-validation` hard gates pass; it is not an official simulator oracle.
 - Round 2 access and MAF logic remain available, but are intentionally isolated from Round 3.
 
 ## Documentation

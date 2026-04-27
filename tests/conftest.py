@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -11,5 +13,23 @@ if str(ROOT) not in sys.path:
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
-        "slow: marks tests as slow integration runs (deselect with -m 'not slow')",
+        "slow: marks tests as slow integration runs (run with --runslow)",
     )
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--runslow",
+        action="store_true",
+        default=False,
+        help="run tests marked slow",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--runslow"):
+        return
+    skip_slow = pytest.mark.skip(reason="slow integration test; run with --runslow")
+    for item in items:
+        if "slow" in item.keywords:
+            item.add_marker(skip_slow)

@@ -633,6 +633,7 @@ def build_parser() -> argparse.ArgumentParser:
     r4_mc_validation.add_argument("--days", nargs="*", default=None, help="Day list. Defaults to 1 2 3.")
     r4_mc_validation.add_argument("--fast", action="store_true", help="Use the fast validation preset.")
     r4_mc_validation.add_argument("--full", action="store_true", help="Use the fuller validation preset.")
+    r4_mc_validation.add_argument("--heavy", action="store_true", help="Use the optional heavy validation preset.")
     r4_mc_validation.add_argument("--seed", type=int, default=20260426)
 
     verify4 = sub.add_parser(
@@ -1026,7 +1027,7 @@ def main(argv: List[str] | None = None) -> None:
 
         output_dir = Path(args.output_dir).resolve() if args.output_dir else (Path.cwd() / "backtests" / "r4_mc_validation_latest").resolve()
         days = tuple(int(day) for day in args.days) if args.days else tuple(get_round_spec(4).default_days)
-        preset = "full" if args.full else "fast"
+        preset = "heavy" if args.heavy else "full" if args.full else "fast" if args.fast else "default"
         report = run_round4_mc_validation(
             data_dir=Path(args.data_dir).resolve(),
             output_dir=output_dir,

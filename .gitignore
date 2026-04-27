@@ -33,6 +33,8 @@ analysis/benchmark_outputs_*.json
 .vscode/settings.json
 .idea/
 .claude/
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
 
 r3_vol_smile/
 r3_smile_advanced/

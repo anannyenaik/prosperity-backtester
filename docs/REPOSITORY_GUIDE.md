@@ -10,7 +10,7 @@ This guide is the fastest way to understand the active submission surface.
 | `backtests/` | Generated output root | Default destination for timestamped run bundles. |
 | `configs/` | Core support | Checked-in Round 2 and Round 3 smoke and scenario configs. |
 | `dashboard/` | Optional | React review UI source. |
-| `data/` | Core | Tracked Round 1, Round 2, and Round 3 public CSV fixtures. |
+| `data/` | Core | Tracked Round 1, Round 2, Round 3, and Round 4 public CSV fixtures. |
 | `docs/` | Core | Workflow, assumptions, architecture, and round notes. |
 | `examples/` | Core support | Smoke helpers and historical examples. |
 | `prosperity_backtester/` | Core | Main Python package. |
@@ -36,6 +36,7 @@ This guide is the fastest way to understand the active submission surface.
 | `prosperity_backtester/metadata.py` | Round registry, `ProductMeta`, and `RoundSpec`. |
 | `prosperity_backtester/round2.py` | Round 2 access and MAF assumptions. |
 | `prosperity_backtester/round3.py` | Round 3 voucher helpers, diagnostics, and coherent synthetic generation. |
+| `prosperity_backtester/r4_manifest.py` | Round 4 manifest, data hashes, schema checks, spread/depth and trade-size summaries. |
 | `prosperity_backtester/datamodel.py` | Prosperity-compatible state and order classes. |
 | `prosperity_backtester/trader_adapter.py` | Trader loading and compatibility shims. |
 
@@ -49,6 +50,8 @@ This guide is the fastest way to understand the active submission surface.
 | `prosperity_backtester/behavior.py` | Behaviour summaries such as fills, cap usage, and markouts. |
 | `prosperity_backtester/mc_backends.py` | Monte Carlo backend selection. |
 | `prosperity_backtester/simulate.py` | Legacy synthetic helpers used by non-Round-3 paths. |
+| `prosperity_backtester/counterparty_research.py` | Round 4 participant-side markouts and recommendation labels. |
+| `prosperity_backtester/r4_mc_validation.py` | Round 4 MC validation reports, scenario-smoke rows, transform checks, and decision-grade gates. |
 
 ### Reporting
 
@@ -67,12 +70,16 @@ This guide is the fastest way to understand the active submission surface.
 | `configs/round3_mc_smoke.json` | Minimal Round 3 Monte Carlo smoke config. |
 | `configs/round3_research_scenarios.json` | Round 3 research scenario pack. |
 | `docs/ROUND3.md` | Round 3 rules, data, and fidelity notes. |
+| `docs/ROUND4.md` | Round 4 replay assumptions, named-counterparty semantics, MC presets, gates, and limitations. |
 
 ## Tests
 
 | File | What it covers |
 | --- | --- |
 | `tests/test_round3.py` | Round 3 metadata, data loading, replay, passive fills, option helpers, and coherent Monte Carlo. |
+| `tests/test_round4.py` | Round 4 data, named passive fills, manifest, research, verify-round4, and MC validation honesty checks. |
 | `tests/test_round2.py` | Round 2 access assumptions and scenario outputs. |
 | `tests/test_platform.py` | Replay, Monte Carlo, and output-profile behaviour. |
 | `tests/test_output_hardening.py` | Bundle contract and storage hardening. |
+
+Slow integration tests are marked `slow` and skipped by default. Run `python -m pytest -q --runslow` for the extended local suite.

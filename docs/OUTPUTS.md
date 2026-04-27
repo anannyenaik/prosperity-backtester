@@ -1,10 +1,10 @@
 # Outputs
 
-Result: every workflow writes a bundle directory built around `dashboard.json` and `manifest.json`.
+Result: replay, comparison, Monte Carlo, and scenario workflows write dashboard bundles. Round 4 audit commands write smaller JSON, Markdown, and CSV report directories.
 
 ## Bundle contract
 
-Every bundle is expected to contain:
+Dashboard bundles are expected to contain:
 
 - `dashboard.json`: canonical review payload
 - `manifest.json`: lightweight metadata, file inventory, bundle stats, provenance, and source-data references when available
@@ -54,6 +54,10 @@ Round 3 manifests may additionally carry:
 | `scenario_compare` | Ranking under configured stress scenarios | `scenario_results.csv`, `scenario_winners.csv`, `robustness_ranking.csv`, `scenario_pairwise_mc.csv` |
 | `round2_scenarios` | Ranking under MAF and extra-access assumptions | `round2_scenarios.csv`, `round2_winners.csv`, `round2_pairwise_mc.csv`, `round2_maf_sensitivity.csv` |
 | `round3_verification` | Round 3 trustworthiness sweep | `verification_report.json`, `verification_report.md`, plus child run directories for each subprocess command |
+| `round4_manifest` | Round 4 data/schema audit | `manifest_report.json`, `manifest_report.md`, `spread_depth_summary.csv`, `trade_size_summary.csv`, `counterparties_by_product.csv` |
+| `round4_counterparty_research` | Participant-side markout research | `summary.json`, `counterparty_product_side_day.csv`, `counterparty_product_side_pooled.csv`, `cross_product_markouts.csv`, `counterparty_recommendations.csv` |
+| `round4_mc_validation` | Seeded MC validation and blocker report | `mc_validation_report.json`, `mc_validation_report.md`, `metric_comparison_summary.csv`, `scenario_suite_summary.csv`, child MC bundles |
+| `round4_verification` | Round 4 verification harness | `verification_report.json`, `verification_report.md`, `manifest.json`, plus internal step artefacts |
 
 ## Round 3 verification report
 
@@ -75,6 +79,27 @@ Round 3 manifests may additionally carry:
 - `caveats[]`: explicit notes about passive-fill approximation, classic-only Round 3 MC, and missing RSS capture when applicable
 
 Each subprocess writes its bundle into a sibling directory under the verification output (for example `replay_noop_days012/dashboard.json`), so the harness output is self-contained and replayable.
+
+## Round 4 verification report
+
+`verify-round4` writes:
+
+- `verification_report.json`: structured report with provenance, git commit, dirty flag, Python version, data hashes, schema hash, manifest result, external-test reminder, replay hash result, replay smoke result, fill-channel summary, no-op sanity, counterparty research summary, ablation table, MC validation summary, known limitations, final `backtester_decision_grade`, final `MC_decision_grade`, final `candidate_promoted`, and blockers.
+- `verification_report.md`: concise human-readable check table and known limitations.
+- `manifest.json`: discoverability alias for the verification bundle.
+
+Internal steps are recorded in `commands[]` with runtime, status, error snippets, and artefact paths. These are internal function steps, not shell subprocesses.
+
+## Round 4 MC validation report
+
+`r4-mc-validation` writes:
+
+- `mc_validation_report.json`: preset config, seed policy, public/synthetic metric summaries, gates, scenario-smoke rows, data hash, schema hash, runtime, model-risk limitations, and explicit decision-grade blockers when hard gates fail.
+- `mc_validation_report.md`: gate table and blockers.
+- `metric_comparison_summary.csv`: per-product public versus synthetic metric comparison.
+- `scenario_suite_summary.csv`: generated scenario smoke hashes and statuses.
+
+Reports set `decision_grade=true` and `status=pass` only when hard gates pass. Hidden queue and final-simulation unknowability are recorded as limitations rather than blockers.
 
 ## Light versus full output
 
@@ -119,3 +144,5 @@ Fill rows may include passive-fill fidelity fields:
 - `passive_match_type=same_price` for same-price queue assumptions
 - `passive_match_type=worse_price` for prints through the resting order price
 - `approximation_reason` with the local assumption used
+
+Replay hash reports exclude generated timestamps and absolute output paths. They include the replay summary, selected days, tick scope, fill model, perturbation config, data hash, git commit, and dirty flag.

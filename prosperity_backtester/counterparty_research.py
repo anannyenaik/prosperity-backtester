@@ -10,6 +10,9 @@ from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
 from .dataset import DayDataset, load_round_dataset
 from .metadata import get_round_spec
 from .platform import write_rows_csv
+from .provenance import capture_provenance
+from .r4_manifest import _combined_hash, _file_hashes
+from .r4_manifest import _schema_hash
 from .round3 import (
     black_scholes_call_price,
     implied_vol_bisection,
@@ -504,11 +507,13 @@ def run_round4_counterparty_research(
 ) -> Dict[str, object]:
     output_dir.mkdir(parents=True, exist_ok=True)
     spec = get_round_spec(4)
-    dataset = load_round_dataset(data_dir, days, round_number=4, round_spec=spec)
-    market_days = [dataset[int(day)] for day in days]
+    day_tuple = tuple(int(day) for day in days)
+    dataset = load_round_dataset(data_dir, day_tuple, round_number=4, round_spec=spec)
+    market_days = [dataset[int(day)] for day in day_tuple]
     horizons = tuple(int(horizon) for horizon in horizons)
     day_rows, pooled_rows, cross_rows = _build_product_side_rows(market_days, horizons)
     recommendation_rows = _recommendation_rows(pooled_rows)
+    file_hashes = _file_hashes(data_dir, day_tuple)
 
     write_rows_csv(output_dir / "counterparty_product_side_day.csv", day_rows)
     write_rows_csv(output_dir / "counterparty_product_side_pooled.csv", pooled_rows)
@@ -518,8 +523,19 @@ def run_round4_counterparty_research(
         "round": 4,
         "data_dir": str(data_dir),
         "output_dir": str(output_dir),
-        "days": [int(day) for day in days],
+        "days": list(day_tuple),
         "horizons": list(horizons),
+        "config_snapshot": {
+            "minimum_recommendation_count": MIN_RECOMMENDATION_COUNT,
+            "minimum_net_edge_ticks": MIN_NET_EDGE_TICKS,
+            "markout_horizons": list(horizons),
+            "participant_side_semantics": "buyer/seller are participant metadata, not aggressor proof",
+            "recommendation_policy": "follow/fade only after cost and day-stability checks; otherwise ignore",
+        },
+        "file_hashes": file_hashes,
+        "data_hash": _combined_hash(file_hashes),
+        "schema_hash": _schema_hash(),
+        "provenance": capture_provenance(start=Path(__file__).resolve().parent.parent),
         "product_side_rows": len(day_rows) + len(pooled_rows),
         "cross_product_rows": len(cross_rows),
         "recommendation_rows": len(recommendation_rows),
