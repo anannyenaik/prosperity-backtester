@@ -109,13 +109,17 @@ Validation thresholds are recorded in the JSON report. Current hard gates are ma
 
 MC decision-grade status is evidence-based. It is `true` only when hard gates pass. Hidden queue priority and official final-simulation distribution unknowability are recorded as model-risk limitations, not blockers, because conservative fill stress and scenario coverage are implemented. Fast/default presets are suitable for gates and smoke checks; use `full` or `heavy` before reading p05/p01 tails directionally.
 
-## Main Trader
+## Strategy Status
 
-Main Round 4 trader:
+Current Round 4 status note:
 
 ```bash
-strategies/r4_trader.py
+docs/ROUND4_STATUS.md
 ```
+
+Active current candidate: `strategies/r4_hydro_velvet_m4_candidate.py`.
+
+Baseline/control: `strategies/r4_trader.py`.
 
 ## Verification
 

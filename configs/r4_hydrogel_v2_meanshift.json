@@ -11,20 +11,20 @@
     },
     {
       "name": "rejected_v1",
-      "path": "strategies/r4_hydrogel_candidate.py"
+      "path": "strategies/archive/round4/rejected/r4_hydrogel_candidate.py"
     },
     {
       "name": "v2_blend25",
-      "path": "strategies/r4_hydrogel_candidate_v2.py"
+      "path": "strategies/archive/round4/accepted/r4_hydrogel_candidate_v2.py"
     },
     {
       "name": "v2_first_mid",
-      "path": "strategies/r4_hydrogel_candidate_v2.py",
+      "path": "strategies/archive/round4/accepted/r4_hydrogel_candidate_v2.py",
       "overrides": {"HYDRO_PARAMS.warm_start_mode": "first_mid"}
     },
     {
       "name": "v2_anchor75",
-      "path": "strategies/r4_hydrogel_candidate_v2.py",
+      "path": "strategies/archive/round4/accepted/r4_hydrogel_candidate_v2.py",
       "overrides": {"HYDRO_PARAMS.warm_start_mode": "control_75"}
     }
   ],

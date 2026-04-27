@@ -4,7 +4,7 @@ Result: reject final Hydro promotion for now. The copied candidate improves publ
 
 ## Files
 
-- `strategies/r4_hydrogel_candidate.py`: copied from `strategies/r4_trader.py`; only HYDROGEL_PACK logic was changed.
+- `strategies/archive/round4/rejected/r4_hydrogel_candidate.py`: copied from `strategies/r4_trader.py`; only HYDROGEL_PACK logic was changed. Archived after rejection.
 - `strategies/r4_trader.py`: unchanged baseline.
 - `docs/ROUND4_HYDROGEL_REPORT.md`: this report.
 
@@ -119,9 +119,9 @@ This fails the anti-overfit gate. The candidate is not a public fixed-mean scrip
 
 Passed:
 
-- `python -m py_compile strategies/r4_hydrogel_candidate.py`
+- `python -m py_compile strategies/archive/round4/rejected/r4_hydrogel_candidate.py`
 - `python -m pytest -q`: 121 passed, 15 skipped.
-- `python -m prosperity_backtester verify-round4 --data-dir data/round4 --trader strategies/r4_hydrogel_candidate.py --output-dir backtests/r4_verification_hydro --strict`: pass, decision-grade true, candidate promoted false.
+- `python -m prosperity_backtester verify-round4 --data-dir data/round4 --trader strategies/archive/round4/rejected/r4_hydrogel_candidate.py --output-dir backtests/r4_verification_hydro --strict`: pass, decision-grade true, candidate promoted false.
 
 Baseline before edits:
 

@@ -6,9 +6,9 @@ Hydro v2 keeps `strategies/r4_trader.py` unchanged, materially de-anchors the li
 
 ## Files Changed
 
-- `strategies/r4_hydrogel_candidate_v2.py`: new copied candidate; only HYDROGEL_PACK was edited.
+- `strategies/archive/round4/accepted/r4_hydrogel_candidate_v2.py`: accepted Hydro v2 reference; only HYDROGEL_PACK was edited.
 - `strategies/r4_trader.py`: unchanged baseline (R4 trader of record).
-- `strategies/r4_hydrogel_candidate.py`: unchanged (rejected v1, retained for replay reference and recoverable via `git log`).
+- `strategies/archive/round4/rejected/r4_hydrogel_candidate.py`: archived rejected v1, retained for replay reference.
 - `configs/r4_hydrogel_v2_meanshift.json`: new mean-shift MC harness config; runs all 5 reference traders, 7 shifts, 64 sessions each, common random numbers.
 - `docs/ROUND4_HYDROGEL_REPORT_V2.md`: this report.
 
@@ -257,9 +257,9 @@ Under `--match-trades none` (which kills passive matching), v2 still earns 95,17
 
 | Check | Result |
 | --- | --- |
-| `python -m py_compile strategies/r4_hydrogel_candidate_v2.py` | pass |
+| `python -m py_compile strategies/archive/round4/accepted/r4_hydrogel_candidate_v2.py` | pass |
 | `python -m pytest -q` | 121 passed, 15 skipped, 0 failed |
-| `python -m prosperity_backtester verify-round4 --data-dir data/round4 --trader strategies/r4_hydrogel_candidate_v2.py --output-dir backtests/r4_verification_hydro_v2 --strict` | pass — 12/12 gates, decision-grade `True`, candidate promoted `False` |
+| `python -m prosperity_backtester verify-round4 --data-dir data/round4 --trader strategies/archive/round4/accepted/r4_hydrogel_candidate_v2.py --output-dir backtests/r4_verification_hydro_v2 --strict` | pass - 12/12 gates, decision-grade `True`, candidate promoted `False` |
 
 ## Acceptance Gate Audit
 
@@ -284,7 +284,7 @@ Under `--match-trades none` (which kills passive matching), v2 still earns 95,17
 
 **Hydro v2 accepted for integration into the copied R4 trader only; do not yet claim full trader final.**
 
-`strategies/r4_hydrogel_candidate_v2.py` replaces `strategies/r4_hydrogel_candidate.py` as the working Hydro module. The R4 trader of record (`strategies/r4_trader.py`) remains untouched. VELVET and voucher logic are unchanged. The first-mid override is documented and retrievable via `HYDRO_PARAMS["warm_start_mode"] = "first_mid"` (or the `HYDRO_PARAMS_OVERRIDE` env var) for later use as a tail hedge if pre-final live evidence suggests a mean shift.
+`strategies/archive/round4/accepted/r4_hydrogel_candidate_v2.py` replaces the archived v1 candidate as the accepted Hydro reference. The R4 trader of record (`strategies/r4_trader.py`) remains untouched. VELVET and voucher logic are unchanged. The first-mid override is documented and retrievable via `HYDRO_PARAMS["warm_start_mode"] = "first_mid"` for later use as a tail hedge if pre-final live evidence suggests a mean shift.
 
 ## Remaining Limitations
 
@@ -297,4 +297,4 @@ Under `--match-trades none` (which kills passive matching), v2 still earns 95,17
 
 ## Exact Next Step
 
-Run a side-by-side parity replay of `strategies/r4_trader.py` and `strategies/r4_hydrogel_candidate_v2.py` on R4 days 1–3 base fill (already captured in `backtests/hydro_baseline_r4_base/` and `backtests/hydro_v2_candidate_base/`), confirm with the team that the v1 → v2 swap is the right Hydro module to promote into a final R4 trader, then begin VELVET work on a fresh copied trader. Do not modify `r4_trader.py` until the team explicitly approves the v2 swap.
+Run a side-by-side parity replay of `strategies/r4_trader.py` and `strategies/archive/round4/accepted/r4_hydrogel_candidate_v2.py` on R4 days 1–3 base fill (already captured in `backtests/hydro_baseline_r4_base/` and `backtests/hydro_v2_candidate_base/`), confirm with the team that the v1 to v2 swap is the right Hydro module to promote into a final R4 trader, then begin VELVET work on a fresh copied trader. Do not modify `r4_trader.py` until the team explicitly approves the v2 swap.
