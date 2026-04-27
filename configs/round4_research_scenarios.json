@@ -7,18 +7,18 @@
   "traders": [
     {
       "name": "r4_all_names",
-      "path": "strategies/r4_algo_v1_candidate.py"
+      "path": "strategies/r4_trader.py"
     },
     {
       "name": "r4_no_names",
-      "path": "strategies/r4_algo_v1_candidate.py",
+      "path": "strategies/r4_trader.py",
       "overrides": {
         "CONFIG.use_counterparties": false
       }
     },
     {
       "name": "r4_velvet_names_only",
-      "path": "strategies/r4_algo_v1_candidate.py",
+      "path": "strategies/r4_trader.py",
       "overrides": {
         "CONFIG.use_counterparties": true,
         "CONFIG.use_velvet_names": true,
@@ -28,7 +28,7 @@
     },
     {
       "name": "r4_option_names_only",
-      "path": "strategies/r4_algo_v1_candidate.py",
+      "path": "strategies/r4_trader.py",
       "overrides": {
         "CONFIG.use_counterparties": true,
         "CONFIG.use_velvet_names": false,
@@ -38,14 +38,14 @@
     },
     {
       "name": "r4_no_deep_itm",
-      "path": "strategies/r4_algo_v1_candidate.py",
+      "path": "strategies/r4_trader.py",
       "overrides": {
         "CONFIG.use_deep_itm": false
       }
     },
     {
       "name": "r4_wide_crossing",
-      "path": "strategies/r4_algo_v1_candidate.py",
+      "path": "strategies/r4_trader.py",
       "overrides": {
         "CONFIG.crossing_aggression": "wide"
       }

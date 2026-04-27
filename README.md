@@ -2,7 +2,7 @@
 
 Prosperity Backtester: round-aware historical replay, diagnostics, Monte Carlo, and research workflows for Rounds 1 to 4.
 
-Round 4 is backtester-first. `strategies/r4_algo_v1_candidate.py` is retained only as a rejected diagnostic fixture until the corrected replay, research, MC, and verification gates produce fresh evidence. Round 3 trader files are archived for benchmark reproduction only.
+Round 4 is backtester-first. `strategies/r4_trader.py` is the main Round 4 trader file. Round 3 trader files are archived for benchmark reproduction only.
 
 ## Quick start
 
@@ -44,10 +44,10 @@ Run counterparty research:
 python -m prosperity_backtester r4-counterparty-research --data-dir data/round4 --output-dir backtests/r4_counterparty_research_latest
 ```
 
-Replay the rejected Round 4 fixture as a diagnostic only:
+Replay the main Round 4 trader:
 
 ```bash
-python -m prosperity_backtester replay strategies/r4_algo_v1_candidate.py --round 4 --data-dir data/round4 --days 1 2 3 --fill-mode base
+python -m prosperity_backtester replay strategies/r4_trader.py --round 4 --data-dir data/round4 --days 1 2 3 --fill-mode base
 ```
 
 Validate the Round 4 MC generator:

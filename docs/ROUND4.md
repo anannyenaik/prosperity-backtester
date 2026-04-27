@@ -109,15 +109,13 @@ Validation thresholds are recorded in the JSON report. Current hard gates are ma
 
 MC decision-grade status is evidence-based. It is `true` only when hard gates pass. Hidden queue priority and official final-simulation distribution unknowability are recorded as model-risk limitations, not blockers, because conservative fill stress and scenario coverage are implemented. Fast/default presets are suitable for gates and smoke checks; use `full` or `heavy` before reading p05/p01 tails directionally.
 
-## Candidate Fixture
+## Main Trader
 
-Rejected diagnostic fixture:
+Main Round 4 trader:
 
 ```bash
-strategies/r4_algo_v1_candidate.py
+strategies/r4_trader.py
 ```
-
-Do not treat this file as active strategy work. It is present so replay, ablation, and MC gates have a non-trivial fixture. No constants should be tuned from this task.
 
 ## Verification
 

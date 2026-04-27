@@ -16,11 +16,11 @@ Run counterparty research as infrastructure, not strategy tuning:
 python -m prosperity_backtester r4-counterparty-research --data-dir data/round4 --output-dir backtests/r4_counterparty_research_latest
 ```
 
-Replay no-op and the rejected fixture only as simulator diagnostics:
+Replay no-op and the main Round 4 trader:
 
 ```bash
 python -m prosperity_backtester replay examples/noop_round3_trader.py --round 4 --data-dir data/round4 --days 1 2 3 --fill-mode base --output-dir backtests/r4_noop_replay_latest
-python -m prosperity_backtester replay strategies/r4_algo_v1_candidate.py --round 4 --data-dir data/round4 --days 1 2 3 --fill-mode base --output-dir backtests/r4_candidate_replay_latest
+python -m prosperity_backtester replay strategies/r4_trader.py --round 4 --data-dir data/round4 --days 1 2 3 --fill-mode base --output-dir backtests/r4_trader_replay_latest
 ```
 
 Validate MC. A `pass` status means the rejection/stress hard gates passed; it is still not proof of official simulator equivalence:
@@ -39,7 +39,7 @@ python -m prosperity_backtester verify-round4 --data-dir data/round4 --output-di
 python -m prosperity_backtester verify-round4 --data-dir data/round4 --output-dir backtests/r4_verification_strict --strict
 ```
 
-`--fast` truncates replay and ablation to a day-1 tick window and records it in `replay_scope`. `--full` removes replay truncation. `--skip-mc` records MC as skipped and still writes reports. `--strict` exits non-zero while any blocker remains. No Round 4 command promotes `strategies/r4_algo_v1_candidate.py`.
+`--fast` truncates replay and ablation to a day-1 tick window and records it in `replay_scope`. `--full` removes replay truncation. `--skip-mc` records MC as skipped and still writes reports. `--strict` exits non-zero while any blocker remains.
 
 Slow pytest integration tests are skipped by default and marked explicitly:
 

@@ -7,11 +7,11 @@
   "traders": [
     {
       "name": "r4_all_names",
-      "path": "strategies/r4_algo_v1_candidate.py"
+      "path": "strategies/r4_trader.py"
     },
     {
       "name": "r4_no_names",
-      "path": "strategies/r4_algo_v1_candidate.py",
+      "path": "strategies/r4_trader.py",
       "overrides": {
         "CONFIG.use_counterparties": false
       }

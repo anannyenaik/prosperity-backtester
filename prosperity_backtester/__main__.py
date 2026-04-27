@@ -644,7 +644,7 @@ def build_parser() -> argparse.ArgumentParser:
     verify4.add_argument("--data-dir", default=None, help="Round 4 data directory. Defaults to data/round4.")
     verify4.add_argument("--output-dir", default=None, help="Output directory. Defaults to backtests/<timestamp>_r4_verification.")
     verify4.add_argument("--days", nargs="*", default=None, help="Day list. Defaults to 1 2 3.")
-    verify4.add_argument("--trader", default="strategies/r4_algo_v1_candidate.py")
+    verify4.add_argument("--trader", default="strategies/r4_trader.py")
     verify4.add_argument("--skip-mc", action="store_true")
     verify4.add_argument("--fast", action="store_true", help="Use the fast verification preset.")
     verify4.add_argument("--full", action="store_true", help="Use a larger smoke sample than the default fast run.")
