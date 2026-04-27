@@ -29,7 +29,6 @@ except ImportError:
     from prosperity_backtester.datamodel import OrderDepth, UserId, TradingState, Order
 import math
 import json
-import os
 
 ## GENERAL ##  ## GENERAL ##  ## GENERAL ##  ## GENERAL ##  ## GENERAL ##
 POS_LIMITS = {
@@ -123,16 +122,6 @@ HYDRO_PARAMS = {
     "live_regime_size_scale": 0.55,
 }
 
-# Optional override hook for the ablation harness.
-# Submission default is empty -> no-op. Reads only environment, no files.
-try:
-    _override_raw = os.environ.get("HYDRO_PARAMS_OVERRIDE", "")
-    if _override_raw:
-        _override = json.loads(_override_raw)
-        if isinstance(_override, dict):
-            HYDRO_PARAMS.update(_override)
-except Exception:
-    pass
 
 
 def clamp(value, lo, hi):
