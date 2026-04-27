@@ -349,6 +349,64 @@ def _data_scope_context(
     return payload
 
 
+def _truncate_day_dataset(dataset: DayDataset, tick_limit: int | None) -> DayDataset:
+    if tick_limit is None or tick_limit <= 0 or len(dataset.timestamps) <= tick_limit:
+        return dataset
+
+    timestamps = list(dataset.timestamps[:tick_limit])
+    timestamp_step = get_round_spec(dataset.round_number).timestamp_step
+    books_by_timestamp = {
+        timestamp: dataset.books_by_timestamp[timestamp]
+        for timestamp in timestamps
+        if timestamp in dataset.books_by_timestamp
+    }
+    trades_by_timestamp = {
+        timestamp: dataset.trades_by_timestamp.get(timestamp, {})
+        for timestamp in timestamps
+        if timestamp in dataset.trades_by_timestamp
+    }
+    validation = dict(dataset.validation)
+    validation.update(
+        {
+            "truncated": True,
+            "truncation_tick_limit": int(tick_limit),
+            "original_timestamps": dataset.validation.get("timestamps", len(dataset.timestamps)),
+            "original_price_rows": dataset.validation.get("price_rows"),
+            "original_trade_rows": dataset.validation.get("trade_rows"),
+            "timestamps": len(timestamps),
+            "price_rows": sum(len(products) for products in books_by_timestamp.values()),
+            "trade_rows": sum(
+                len(trades)
+                for by_product in trades_by_timestamp.values()
+                for trades in by_product.values()
+            ),
+            "timestamp_min": min(timestamps) if timestamps else None,
+            "timestamp_max": max(timestamps) if timestamps else None,
+        }
+    )
+    validation["timestamp_step_ok"] = all(
+        (right - left) == timestamp_step for left, right in zip(timestamps, timestamps[1:])
+    )
+    metadata = dict(dataset.metadata)
+    metadata.update(
+        {
+            "truncated": True,
+            "truncation_tick_limit": int(tick_limit),
+            "original_timestamp_count": len(dataset.timestamps),
+        }
+    )
+    return DayDataset(
+        day=dataset.day,
+        timestamps=timestamps,
+        books_by_timestamp=books_by_timestamp,
+        trades_by_timestamp=trades_by_timestamp,
+        validation=validation,
+        metadata=metadata,
+        round_number=dataset.round_number,
+        products=dataset.products,
+    )
+
+
 def _mc_runtime_context(
     *,
     workers: int,
@@ -396,13 +454,14 @@ def run_replay(
     write_bundle: bool = True,
     output_options: OutputOptions | None = None,
     print_trader_output: bool = False,
+    historical_tick_limit: int | None = None,
 ) -> SessionArtefacts:
     output_options = output_options or OutputOptions()
     access_scenario = access_scenario or NO_ACCESS_SCENARIO
     round_spec = get_round_spec(round_number)
     _validate_access_usage(round_spec, access_scenario)
     datasets_map = load_round_dataset(data_dir, days, round_number=round_number, round_spec=round_spec)
-    datasets = [datasets_map[day] for day in days]
+    datasets = [_truncate_day_dataset(datasets_map[day], historical_tick_limit) for day in days]
     live_export = load_live_export(live_export_path) if live_export_path is not None else None
     if live_export is not None:
         datasets = [live_export.day_dataset]
@@ -439,6 +498,8 @@ def run_replay(
                 source="live_export" if live_export is not None else "historical",
             ),
         }
+        if historical_tick_limit is not None:
+            runtime_context["historical_tick_limit"] = int(historical_tick_limit)
         if live_export_path is not None:
             runtime_context["live_export_path"] = str(live_export_path)
         replay_rows = compact_replay_rows(artefact, output_options)

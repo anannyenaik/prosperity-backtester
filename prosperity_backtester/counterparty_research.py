@@ -23,6 +23,8 @@ HYDROGEL = "HYDROGEL_PACK"
 CENTRAL_VOUCHERS = ("VEV_5000", "VEV_5100", "VEV_5200", "VEV_5300", "VEV_5400", "VEV_5500")
 DEEP_ITM_VOUCHERS = ("VEV_4000", "VEV_4500")
 FAR_OTM_VOUCHERS = ("VEV_6000", "VEV_6500")
+MIN_RECOMMENDATION_COUNT = 30
+MIN_NET_EDGE_TICKS = 0.15
 
 
 @dataclass
@@ -179,6 +181,10 @@ def _summarise_observations(
         row[f"markout_{horizon}_p95"] = _quantile(values, 0.95)
         row[f"markout_{horizon}_ex_largest5"] = _mean(robust_values)
         row[f"markout_{horizon}_ex_timestamp_clusters"] = _mean(cluster_values)
+        row[f"raw_markout_{horizon}"] = mean_value
+        row[f"estimated_spread_adverse_cost_{horizon}"] = spread_proxy
+        row[f"net_follow_edge_{horizon}"] = None if mean_value is None else mean_value - spread_proxy
+        row[f"net_fade_edge_{horizon}"] = None if mean_value is None else -mean_value - spread_proxy
         row[f"edge_after_cost_{horizon}"] = None if mean_value is None else mean_value - spread_proxy
     return row
 
@@ -413,42 +419,76 @@ def _recommendation_rows(pooled_rows: Sequence[Mapping[str, object]]) -> List[Di
     rows: List[Dict[str, object]] = []
     for row in pooled_rows:
         count = int(row.get("count") or 0)
-        edge = row.get("edge_after_cost_20")
-        edge_value = float(edge) if edge is not None else 0.0
+        raw_value = float(row.get("raw_markout_20") or row.get("markout_20") or 0.0)
+        cost_value = float(row.get("estimated_spread_adverse_cost_20") or 0.0)
+        follow_edge = raw_value - cost_value
+        fade_edge = -raw_value - cost_value
         product_group = str(row.get("product_group"))
         stability = str(row.get("stability") or "insufficient")
-        if count < 20 or stability == "mixed" or abs(edge_value) < 0.15:
+        reason = ""
+        confidence_flag = "low"
+        stability_flag = stability
+        if count < MIN_RECOMMENDATION_COUNT:
             decision = "ignore"
+            reason = f"count_below_minimum_{MIN_RECOMMENDATION_COUNT}"
+        elif stability == "mixed":
+            decision = "ignore"
+            reason = "day_signs_conflict"
+        elif raw_value > 0.0:
+            if follow_edge > MIN_NET_EDGE_TICKS and stability == "stable":
+                decision = "follow"
+                reason = "positive_raw_markout_net_of_cost_and_day_stable"
+                confidence_flag = "medium"
+            else:
+                decision = "ignore"
+                reason = "positive_raw_markout_below_cost_or_not_stable"
+        elif raw_value < 0.0:
+            if fade_edge > MIN_NET_EDGE_TICKS and stability == "stable":
+                decision = "fade"
+                reason = "negative_raw_markout_supports_cost_adjusted_fade"
+                confidence_flag = "medium"
+            else:
+                decision = "ignore"
+                reason = "negative_raw_markout_below_fade_cost_or_not_stable"
         else:
-            decision = "follow" if edge_value > 0 else "fade"
+            decision = "ignore"
+            reason = "zero_raw_markout"
         if decision == "ignore":
             recommended_use = "ignore"
             suggested_clip = 0.0
-        elif product_group == "velvet":
-            recommended_use = "bounded_fair_value_lean"
-            suggested_clip = min(1.0, max(0.25, abs(edge_value)))
-        elif product_group.startswith("voucher"):
-            recommended_use = "threshold_confirmation"
-            suggested_clip = min(0.5, max(0.1, abs(edge_value) * 0.5))
-        elif product_group == "hydrogel":
-            recommended_use = "ignore_unless_retested"
-            suggested_clip = min(0.5, max(0.1, abs(edge_value) * 0.5))
         else:
-            recommended_use = "ignore"
-            suggested_clip = 0.0
+            recommended_use = decision
+            net_edge = follow_edge if decision == "follow" else fade_edge
+            if product_group == "velvet":
+                suggested_clip = min(1.0, max(0.25, abs(net_edge)))
+            elif product_group.startswith("voucher"):
+                suggested_clip = min(0.5, max(0.1, abs(net_edge) * 0.5))
+            elif product_group == "hydrogel":
+                suggested_clip = min(0.5, max(0.1, abs(net_edge) * 0.5))
+            else:
+                suggested_clip = 0.0
         rows.append({
             "counterparty": row.get("counterparty"),
             "product": row.get("product"),
             "product_group": product_group,
             "side": row.get("side"),
             "follow_fade_ignore": decision,
-            "edge_ticks_after_cost": edge_value,
+            "recommended_use": recommended_use,
+            "reason": reason,
+            "raw_signed_markout_20": raw_value,
+            "estimated_spread_adverse_cost_20": cost_value,
+            "net_follow_edge_20": follow_edge,
+            "net_fade_edge_20": fade_edge,
+            "edge_ticks_after_cost": follow_edge if decision != "fade" else fade_edge,
             "count": count,
+            "minimum_count_threshold": MIN_RECOMMENDATION_COUNT,
             "day_1_markout": row.get("day_1_markout"),
             "day_2_markout": row.get("day_2_markout"),
             "day_3_markout": row.get("day_3_markout"),
             "stability": stability,
-            "recommended_use": recommended_use,
+            "stability_flag": stability_flag,
+            "confidence_flag": confidence_flag,
+            "markout_interpretation": "participant_side_not_aggressor_inference",
             "suggested_clip": round(float(suggested_clip), 4),
         })
     rows.sort(key=lambda item: (item["follow_fade_ignore"] == "ignore", -abs(float(item["edge_ticks_after_cost"])), -int(item["count"])))

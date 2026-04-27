@@ -2,7 +2,7 @@
 
 Prosperity Backtester: round-aware historical replay, diagnostics, Monte Carlo, and research workflows for Rounds 1 to 4.
 
-`strategies/r4_algo_v1_candidate.py` is the active Round 4 research candidate. Round 3 trader files are archived for benchmark reproduction only.
+Round 4 is backtester-first. `strategies/r4_algo_v1_candidate.py` is retained only as a rejected diagnostic fixture until the corrected replay, research, MC, and verification gates produce fresh evidence. Round 3 trader files are archived for benchmark reproduction only.
 
 ## Quick start
 
@@ -29,23 +29,37 @@ Inspect the imported Round 4 capsule:
 python -m prosperity_backtester inspect --round 4 --data-dir data/round4 --days 1 2 3 --json
 ```
 
+Build the stricter Round 4 manifest:
+
+```bash
+python -m prosperity_backtester r4-manifest --data-dir data/round4 --output-dir backtests/r4_manifest_latest
+```
+
 Run counterparty research:
 
 ```bash
 python -m prosperity_backtester r4-counterparty-research --data-dir data/round4 --output-dir backtests/r4_counterparty_research_latest
 ```
 
-Run the Round 4 candidate:
+Replay the rejected Round 4 fixture as a diagnostic only:
 
 ```bash
 python -m prosperity_backtester replay strategies/r4_algo_v1_candidate.py --round 4 --data-dir data/round4 --days 1 2 3 --fill-mode base
 ```
 
+Validate the Round 4 MC generator:
+
+```bash
+python -m prosperity_backtester r4-mc-validation --data-dir data/round4 --output-dir backtests/r4_mc_validation_fast --fast
+```
+
 Run the Round 4 verification smoke:
 
 ```bash
-python -m prosperity_backtester verify-round4 --data-dir data/round4 --output-dir backtests/r4_verification_fast
+python -m prosperity_backtester verify-round4 --data-dir data/round4 --output-dir backtests/r4_verification_fast --fast
 ```
+
+Fast and skip-MC verification validate the full manifest and research outputs, then replay a bounded day-1 window for runtime. The JSON report records the exact `replay_scope`. Use `--full` for full-day replay and broader ablations.
 
 ## Round 3 path
 

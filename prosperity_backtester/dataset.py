@@ -86,6 +86,10 @@ class ValidationReport:
     trade_rows_invalid_quantity: int
     price_level_parse_errors: int
     volume_parse_errors: int
+    zero_price_levels: int
+    negative_price_levels: int
+    zero_or_negative_price_levels: int
+    zero_or_negative_mid_rows: int
 
     def to_dict(self) -> Dict[str, object]:
         return asdict(self)
@@ -170,6 +174,10 @@ def load_round_day(
     crossed_book_rows = 0
     price_level_parse_errors = 0
     volume_parse_errors = 0
+    zero_price_levels = 0
+    negative_price_levels = 0
+    zero_or_negative_price_levels = 0
+    zero_or_negative_mid_rows = 0
 
     with prices_path.open("r", encoding="utf-8") as handle:
         reader = csv.reader(handle, delimiter=";")
@@ -202,6 +210,11 @@ def load_round_day(
                 volume_parse_errors += 1
                 raise
             mid = float(cols[15]) if cols[15] else None
+            if mid is not None and mid <= 0:
+                zero_or_negative_mid_rows += 1
+            zero_price_levels += sum(1 for price, _volume in (*bids, *asks) if price == 0)
+            negative_price_levels += sum(1 for price, _volume in (*bids, *asks) if price < 0)
+            zero_or_negative_price_levels = zero_price_levels + negative_price_levels
             snapshot = BookSnapshot(
                 timestamp=ts,
                 product=product,
@@ -289,6 +302,10 @@ def load_round_day(
         trade_rows_invalid_quantity=trade_rows_invalid_quantity,
         price_level_parse_errors=price_level_parse_errors,
         volume_parse_errors=volume_parse_errors,
+        zero_price_levels=zero_price_levels,
+        negative_price_levels=negative_price_levels,
+        zero_or_negative_price_levels=zero_or_negative_price_levels,
+        zero_or_negative_mid_rows=zero_or_negative_mid_rows,
     )
     return DayDataset(
         day=day,

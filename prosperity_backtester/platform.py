@@ -274,12 +274,30 @@ def _position_limit_for(product: str, perturb: PerturbationConfig, round_spec: R
     return max(1, int(round(base * perturb.inventory_limit_scale)))
 
 
-def _market_sell_trade(trade: TradePrint) -> bool:
-    return bool(trade.seller) and not bool(trade.buyer)
+def _infer_market_trade_direction(trade: TradePrint, snapshot: BookSnapshot) -> tuple[str, str]:
+    """Infer the aggressor direction without treating names as side markers.
 
+    Older synthetic/public files sometimes encode direction with one empty
+    counterparty field. Round 4 public files populate both buyer and seller, so
+    names are metadata there and price-versus-book is the only defensible cue.
+    """
+    has_buyer = bool(trade.buyer)
+    has_seller = bool(trade.seller)
+    if has_seller and not has_buyer:
+        return "sell", "legacy_empty_buyer"
+    if has_buyer and not has_seller:
+        return "buy", "legacy_empty_seller"
 
-def _market_buy_trade(trade: TradePrint) -> bool:
-    return bool(trade.buyer) and not bool(trade.seller)
+    best_bid = snapshot.bids[0][0] if snapshot.bids else None
+    best_ask = snapshot.asks[0][0] if snapshot.asks else None
+    price = float(trade.price)
+    if best_bid is not None and best_ask is not None and best_bid >= best_ask:
+        return "ambiguous", "crossed_book"
+    if best_ask is not None and price >= float(best_ask):
+        return "buy", "price_at_or_above_ask"
+    if best_bid is not None and price <= float(best_bid):
+        return "sell", "price_at_or_below_bid"
+    return "ambiguous", "inside_spread_or_missing_book"
 
 
 def _consume_passive_trades(
@@ -291,6 +309,7 @@ def _consume_passive_trades(
     snapshot: BookSnapshot,
     available_trades: List[TradePrint],
     ledger: ProductLedger,
+    position_limit: int,
     fill_model: FillModel,
     perturb: PerturbationConfig,
     access_scenario: AccessScenario,
@@ -328,31 +347,35 @@ def _consume_passive_trades(
     if side == "buy":
         better_depth = sum(v for p, v in snapshot.bids if p > order.price)
         same_depth = sum(v for p, v in snapshot.bids if p == order.price)
-        eligible = [
-            trade
-            for trade in available_trades
-            if _market_sell_trade(trade)
-            and trade.quantity > 0
-            and (trade.price <= order.price if trade_matching_mode == "all" else trade.price < order.price)
-        ]
+        eligible = []
+        for trade in available_trades:
+            direction, reason = _infer_market_trade_direction(trade, snapshot)
+            if (
+                direction == "sell"
+                and trade.quantity > 0
+                and (trade.price <= order.price if trade_matching_mode == "all" else trade.price < order.price)
+            ):
+                eligible.append((trade, direction, reason))
         same_side_depth = better_depth + product_config.same_price_queue_share * same_depth
         adverse_ticks = product_config.passive_adverse_selection_ticks + perturb.adverse_selection_ticks
         execution_price = int(round(order.price + adverse_ticks))
     else:
         better_depth = sum(v for p, v in snapshot.asks if p < order.price)
         same_depth = sum(v for p, v in snapshot.asks if p == order.price)
-        eligible = [
-            trade
-            for trade in available_trades
-            if _market_buy_trade(trade)
-            and trade.quantity > 0
-            and (trade.price >= order.price if trade_matching_mode == "all" else trade.price > order.price)
-        ]
+        eligible = []
+        for trade in available_trades:
+            direction, reason = _infer_market_trade_direction(trade, snapshot)
+            if (
+                direction == "buy"
+                and trade.quantity > 0
+                and (trade.price >= order.price if trade_matching_mode == "all" else trade.price > order.price)
+            ):
+                eligible.append((trade, direction, reason))
         same_side_depth = better_depth + product_config.same_price_queue_share * same_depth
         adverse_ticks = product_config.passive_adverse_selection_ticks + perturb.adverse_selection_ticks
         execution_price = int(round(order.price - adverse_ticks))
 
-    eligible_volume = sum(trade.quantity for trade in eligible)
+    eligible_volume = sum(trade.quantity for trade, _direction, _reason in eligible)
     if eligible_volume <= 0:
         return 0
 
@@ -362,10 +385,15 @@ def _consume_passive_trades(
         return 0
 
     filled = 0
-    for trade in eligible:
+    for trade, direction, direction_reason in eligible:
         if filled >= target:
             break
-        take = min(target - filled, trade.quantity)
+        position_capacity = (
+            max(0, int(position_limit) - int(ledger.position))
+            if side == "buy"
+            else max(0, int(position_limit) + int(ledger.position))
+        )
+        take = min(target - filled, trade.quantity, position_capacity)
         if take <= 0:
             continue
         trade.quantity -= take
@@ -390,6 +418,10 @@ def _consume_passive_trades(
                 "source_trade_price": trade.price,
                 "passive_match_type": passive_match_type,
                 "approximation_reason": approximation_reason,
+                "market_trade_direction": direction,
+                "market_trade_direction_reason": direction_reason,
+                "market_trade_buyer": trade.buyer,
+                "market_trade_seller": trade.seller,
                 "slippage_ticks": execution_price - int(order.price),
                 "size_slippage_ticks": 0.0,
                 "adverse_selection_ticks": adverse_ticks,
@@ -412,6 +444,10 @@ def _consume_passive_trades(
                 "source_trade_price": trade.price,
                 "passive_match_type": passive_match_type,
                 "approximation_reason": approximation_reason,
+                "market_trade_direction": direction,
+                "market_trade_direction_reason": direction_reason,
+                "market_trade_buyer": trade.buyer,
+                "market_trade_seller": trade.seller,
                 "slippage_ticks": int(order.price) - execution_price,
                 "size_slippage_ticks": 0.0,
                 "adverse_selection_ticks": adverse_ticks,
@@ -463,7 +499,11 @@ def _execute_order_batch(
             remaining = qty
             while remaining > 0 and asks and asks[0][0] <= order.price:
                 ask_price, ask_qty = asks[0]
-                fill_qty = min(remaining, ask_qty)
+                max_buy = max(0, int(position_limit) - int(ledger.position))
+                if max_buy <= 0:
+                    remaining = 0
+                    break
+                fill_qty = min(remaining, ask_qty, max_buy)
                 size_slippage = product_config.size_slippage_ticks(fill_qty)
                 flat_slippage = product_config.aggressive_slippage_ticks + product_config.aggressive_adverse_selection_ticks
                 total_slippage = int(round((flat_slippage + size_slippage) * fill_model.slippage_multiplier * perturb.slippage_multiplier))
@@ -499,7 +539,11 @@ def _execute_order_batch(
             remaining = -qty
             while remaining > 0 and bids and bids[0][0] >= order.price:
                 bid_price, bid_qty = bids[0]
-                fill_qty = min(remaining, bid_qty)
+                max_sell = max(0, int(position_limit) + int(ledger.position))
+                if max_sell <= 0:
+                    remaining = 0
+                    break
+                fill_qty = min(remaining, bid_qty, max_sell)
                 size_slippage = product_config.size_slippage_ticks(fill_qty)
                 flat_slippage = product_config.aggressive_slippage_ticks + product_config.aggressive_adverse_selection_ticks
                 total_slippage = int(round((flat_slippage + size_slippage) * fill_model.slippage_multiplier * perturb.slippage_multiplier))
@@ -568,6 +612,7 @@ def _execute_order_batch(
             snapshot=passive_snapshot,
             available_trades=working_trades,
             ledger=ledger,
+            position_limit=position_limit,
             fill_model=fill_model,
             perturb=perturb,
             access_scenario=access_scenario,
@@ -1552,6 +1597,7 @@ def summarise_monte_carlo_sessions(session_artefacts: List[SessionArtefacts]) ->
     p90 = quantile(0.90)
     p99 = quantile(0.99)
     tail = [value for value in pnl_values if value <= p05]
+    tail_01 = [value for value in pnl_values if value <= p01]
     drawdowns = [float(session.summary.get("max_drawdown", 0.0)) for session in session_artefacts]
     gross_values = [float(session.summary.get("gross_pnl_before_maf", session.summary["final_pnl"])) for session in session_artefacts]
     maf_costs = [float(session.summary.get("maf_cost", 0.0)) for session in session_artefacts]
@@ -1567,11 +1613,14 @@ def summarise_monte_carlo_sessions(session_artefacts: List[SessionArtefacts]) ->
         "p10": p10,
         "p25": p25,
         "p50": quantile(0.50),
+        "median": quantile(0.50),
         "p75": p75,
         "p90": p90,
         "p95": quantile(0.95),
         "p99": p99,
         "expected_shortfall_05": statistics.fmean(tail) if tail else p05,
+        "expected_shortfall_01": statistics.fmean(tail_01) if tail_01 else p01,
+        "standard_error": 0.0 if len(pnl_values) <= 1 else std / math.sqrt(len(pnl_values)),
         "min": min(pnl_values),
         "max": max(pnl_values),
         "win_rate": sum(1 for value in pnl_values if value > 0) / len(pnl_values),

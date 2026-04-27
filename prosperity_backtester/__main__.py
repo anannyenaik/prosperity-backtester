@@ -50,7 +50,9 @@ SUBCOMMANDS = {
     "workspace-bundle",
     "verify-round3",
     "verify-round4",
+    "r4-manifest",
     "r4-counterparty-research",
+    "r4-mc-validation",
     "clean",
 }
 
@@ -601,6 +603,16 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--mc-synthetic-tick-limit", type=int, default=250)
     verify.add_argument("--skip-heavy-mc", action="store_true", help="Skip the 64-session x workers 1/2/4 sweep")
 
+    r4_manifest = sub.add_parser(
+        "r4-manifest",
+        help="Build a strict Round 4 data manifest and schema/fidelity report",
+        formatter_class=_CliFormatter,
+    )
+    r4_manifest.add_argument("--data-dir", default="data/round4")
+    r4_manifest.add_argument("--output-dir", default=None)
+    r4_manifest.add_argument("--days", nargs="*", default=None, help="Day list. Defaults to 1 2 3.")
+    r4_manifest.add_argument("--permissive", action="store_true", help="Write a failure report instead of raising on schema drift.")
+
     r4_research = sub.add_parser(
         "r4-counterparty-research",
         help="Build Round 4 counterparty markout research tables",
@@ -610,6 +622,18 @@ def build_parser() -> argparse.ArgumentParser:
     r4_research.add_argument("--output-dir", default=None)
     r4_research.add_argument("--days", nargs="*", default=None, help="Day list. Defaults to 1 2 3.")
     r4_research.add_argument("--horizons", nargs="*", default=["1", "5", "10", "20", "50", "100", "300"])
+
+    r4_mc_validation = sub.add_parser(
+        "r4-mc-validation",
+        help="Validate Round 4 synthetic MC resemblance, no-op sanity and seed determinism",
+        formatter_class=_CliFormatter,
+    )
+    r4_mc_validation.add_argument("--data-dir", default="data/round4")
+    r4_mc_validation.add_argument("--output-dir", default=None)
+    r4_mc_validation.add_argument("--days", nargs="*", default=None, help="Day list. Defaults to 1 2 3.")
+    r4_mc_validation.add_argument("--fast", action="store_true", help="Use the fast validation preset.")
+    r4_mc_validation.add_argument("--full", action="store_true", help="Use the fuller validation preset.")
+    r4_mc_validation.add_argument("--seed", type=int, default=20260426)
 
     verify4 = sub.add_parser(
         "verify-round4",
@@ -621,7 +645,9 @@ def build_parser() -> argparse.ArgumentParser:
     verify4.add_argument("--days", nargs="*", default=None, help="Day list. Defaults to 1 2 3.")
     verify4.add_argument("--trader", default="strategies/r4_algo_v1_candidate.py")
     verify4.add_argument("--skip-mc", action="store_true")
+    verify4.add_argument("--fast", action="store_true", help="Use the fast verification preset.")
     verify4.add_argument("--full", action="store_true", help="Use a larger smoke sample than the default fast run.")
+    verify4.add_argument("--strict", action="store_true", help="Exit non-zero unless all decision-grade gates pass.")
 
     clean = sub.add_parser("clean", help="Prune old timestamped backtest run directories")
     clean.add_argument("--dir", default=str(Path.cwd() / "backtests"))
@@ -957,6 +983,24 @@ def main(argv: List[str] | None = None) -> None:
                 print(f"Day {day_row['day']}: {day_row['validation']}")
         return
 
+    if args.command == "r4-manifest":
+        from .r4_manifest import build_round4_manifest
+
+        output_dir = Path(args.output_dir).resolve() if args.output_dir else (Path.cwd() / "backtests" / "r4_manifest_latest").resolve()
+        days = tuple(int(day) for day in args.days) if args.days else tuple(get_round_spec(4).default_days)
+        report = build_round4_manifest(
+            data_dir=Path(args.data_dir).resolve(),
+            output_dir=output_dir,
+            days=days,
+            permissive=bool(args.permissive),
+        )
+        print(f"Round 4 manifest status: {report.get('status')}")
+        print(f"Data hash: {report.get('data_hash')}")
+        print(f"Output: {output_dir}")
+        if report.get("status") != "pass" and not args.permissive:
+            sys.exit(1)
+        return
+
     if args.command == "r4-counterparty-research":
         from .counterparty_research import run_round4_counterparty_research
 
@@ -975,6 +1019,26 @@ def main(argv: List[str] | None = None) -> None:
         print(f"Round 4 counterparty research rows: {summary['product_side_rows']}")
         print(f"Recommendations: {summary['recommendation_rows']}")
         print(f"Output: {output_dir}")
+        return
+
+    if args.command == "r4-mc-validation":
+        from .r4_mc_validation import run_round4_mc_validation
+
+        output_dir = Path(args.output_dir).resolve() if args.output_dir else (Path.cwd() / "backtests" / "r4_mc_validation_latest").resolve()
+        days = tuple(int(day) for day in args.days) if args.days else tuple(get_round_spec(4).default_days)
+        preset = "full" if args.full else "fast"
+        report = run_round4_mc_validation(
+            data_dir=Path(args.data_dir).resolve(),
+            output_dir=output_dir,
+            days=days,
+            preset=preset,
+            seed=int(args.seed),
+        )
+        print(f"Round 4 MC validation status: {report.get('status')}")
+        print(f"Decision-grade: {report.get('decision_grade')}")
+        print(f"Output: {output_dir}")
+        if report.get("status") == "fail":
+            sys.exit(1)
         return
 
     if args.command == "workspace-bundle":
@@ -1091,12 +1155,16 @@ def main(argv: List[str] | None = None) -> None:
             trader_path=Path(args.trader).resolve(),
             skip_mc=bool(args.skip_mc),
             full=bool(args.full),
+            fast=bool(args.fast),
+            strict=bool(args.strict),
         )
         summary = report.get("summary", {})
+        final_decision = report.get("final_decision", {})
         print(f"Verify Round 4 status: {summary.get('overall_status')}")
         print(f"  passed: {summary.get('passed')}  failed: {summary.get('failed')}  skipped: {summary.get('skipped')}")
+        print(f"  decision-grade: {final_decision.get('backtester_decision_grade')}  candidate promoted: {final_decision.get('candidate_promoted')}")
         print(f"Output: {output_dir}")
-        if summary.get("overall_status") != "pass":
+        if summary.get("overall_status") != "pass" or (args.strict and not final_decision.get("backtester_decision_grade")):
             sys.exit(1)
         _prune_after_auto_run(output_dir, auto_output, 30)
         return

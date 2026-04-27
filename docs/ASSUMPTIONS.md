@@ -47,6 +47,19 @@ Round 3 adds a few important boundaries:
 - no voucher exercise or cash settlement is applied during Round 3 replay unless official rules later require it
 - the Ornamental Bio-Pods challenge is separate from the algorithmic replay engine
 
+## Round 4 assumptions
+
+Round 4 adds named market trades, but names are not aggressor proof:
+
+- buyer and seller fields are preserved exactly as counterparty metadata
+- passive fill direction is inferred from trade price versus the contemporaneous visible book
+- if both names are populated and price does not identify direction safely, the trade print is ambiguous and does not fill passive orders
+- `match_trades=all` allows equal-or-through prints after direction inference
+- `match_trades=worse` requires a strictly better print than the resting quote
+- `match_trades=none` disables passive trade-print fills
+- counterparty research labels below-cost positive raw markouts as `ignore`, not `fade`
+- Round 4 MC is a seeded rejection and stress tool; it is not treated as official simulator equivalence
+
 ## `analysis_fair`
 
 `analysis_fair` still means a local diagnostic construct:
@@ -70,3 +83,4 @@ Treat the result as uncertain when:
 - the result depends on optimistic passive fills
 - Round 3 voucher diagnostics are unstable at deep ITM or pinned far OTM strikes
 - the winner changes under modest stress
+- Round 4 results depend on named-counterparty effects that do not survive no-names, shuffled, sign-flipped, day-held-out, or fill-mode ablations

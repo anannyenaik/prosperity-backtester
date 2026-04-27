@@ -873,6 +873,9 @@ class Delta1Calibration:
     trade_quantities: tuple[int, ...]
     trade_buyers: tuple[str, ...] = ()
     trade_sellers: tuple[str, ...] = ()
+    long_run_mean: float = 0.0
+    ac1: float = 0.0
+    innovation_changes: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -950,6 +953,9 @@ def _delta1_calibration(market_days: Sequence[DayDataset], symbol: str, tick_cou
     starts: List[float] = []
     changes: List[float] = []
     templates: List[BookTemplate] = []
+    lag_left: List[float] = []
+    lag_right: List[float] = []
+    mids: List[float] = []
     for day_dataset in market_days:
         previous_mid: float | None = None
         for timestamp in day_dataset.timestamps[:tick_count]:
@@ -966,7 +972,10 @@ def _delta1_calibration(market_days: Sequence[DayDataset], symbol: str, tick_cou
                 starts.append(current_mid)
             else:
                 changes.append(current_mid - previous_mid)
+                lag_left.append(previous_mid)
+                lag_right.append(current_mid)
             previous_mid = current_mid
+            mids.append(current_mid)
     active_prob, second_prob, quantities, buyers, sellers = _trade_stats(market_days, symbol, tick_count)
     if not starts:
         starts = [float(fallback_start)]
@@ -974,6 +983,15 @@ def _delta1_calibration(market_days: Sequence[DayDataset], symbol: str, tick_cou
         changes = [0.0]
     if not templates:
         templates = [BookTemplate(spread=2, bid_price_offsets=(0,), bid_volumes=(10,), ask_price_offsets=(0,), ask_volumes=(10,))]
+    long_run_mean = float(statistics.fmean(mids)) if mids else float(fallback_start)
+    ac1_raw = _correlation(lag_left, lag_right)
+    ac1 = max(0.0, min(0.995, float(ac1_raw))) if ac1_raw is not None else 0.0
+    innovations = [
+        float(current) - (long_run_mean + ac1 * (float(previous) - long_run_mean))
+        for previous, current in zip(lag_left, lag_right)
+    ]
+    if not innovations:
+        innovations = list(changes)
     return Delta1Calibration(
         start_candidates=tuple(starts),
         step_changes=tuple(changes),
@@ -983,6 +1001,9 @@ def _delta1_calibration(market_days: Sequence[DayDataset], symbol: str, tick_cou
         trade_quantities=quantities,
         trade_buyers=buyers,
         trade_sellers=sellers,
+        long_run_mean=long_run_mean,
+        ac1=ac1,
+        innovation_changes=tuple(innovations),
     )
 
 
@@ -1130,13 +1151,22 @@ def _sample_delta_path(
     vol_scale: float = 1.0,
 ) -> List[float]:
     chosen_start = float(start if start is not None else rng.choice(calibration.start_candidates))
+    innovation_changes = tuple(getattr(calibration, "innovation_changes", ()) or ())
+    ac1 = float(getattr(calibration, "ac1", 0.0) or 0.0)
+    long_run_mean = float(getattr(calibration, "long_run_mean", 0.0) or chosen_start)
     mean_change = statistics.fmean(calibration.step_changes) if calibration.step_changes else 0.0
     path = [0.0] * tick_count
     path[0] = max(0.0, chosen_start)
     for index in range(1, tick_count):
-        sampled = float(rng.choice(calibration.step_changes))
-        delta = mean_change + (sampled - mean_change) * max(0.0, float(vol_scale))
-        path[index] = max(0.0, path[index - 1] + delta)
+        if innovation_changes and ac1 > 0.0:
+            innovation_mean = statistics.fmean(innovation_changes)
+            sampled = float(rng.choice(innovation_changes))
+            innovation = innovation_mean + (sampled - innovation_mean) * max(0.0, float(vol_scale))
+            path[index] = max(0.0, long_run_mean + ac1 * (path[index - 1] - long_run_mean) + innovation)
+        else:
+            sampled = float(rng.choice(calibration.step_changes))
+            delta = mean_change + (sampled - mean_change) * max(0.0, float(vol_scale))
+            path[index] = max(0.0, path[index - 1] + delta)
     if shock_tick is not None and shock_amount != 0.0:
         start_index = max(0, min(tick_count, int(shock_tick)))
         for index in range(start_index, tick_count):

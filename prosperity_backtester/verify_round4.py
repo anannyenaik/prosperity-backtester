@@ -13,6 +13,8 @@ from .experiments import TraderSpec, run_monte_carlo, run_replay
 from .metadata import get_round_spec, products_for_round
 from .platform import PerturbationConfig, generate_synthetic_market_days
 from .provenance import capture_provenance
+from .r4_manifest import build_round4_manifest
+from .r4_mc_validation import run_round4_mc_validation
 
 
 @dataclass
@@ -37,6 +39,44 @@ def _pass(name: str, **detail: object) -> CheckResult:
 
 def _fail(name: str, error: str, **detail: object) -> CheckResult:
     return CheckResult(name=name, status="fail", detail=dict(detail), error=error)
+
+
+def _skip(name: str, reason: str, **detail: object) -> CheckResult:
+    return CheckResult(name=name, status="skip", detail=dict(detail), error=reason)
+
+
+def _write_json(path: Path, payload: Mapping[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+
+
+def _fill_channel_summary(fills: Sequence[Mapping[str, object]]) -> Dict[str, object]:
+    channels: Dict[str, Dict[str, object]] = {}
+    for fill in fills:
+        channel = str(fill.get("kind") or "unknown")
+        bucket = channels.setdefault(channel, {"fill_count": 0, "quantity": 0, "notional": 0.0, "per_product": {}})
+        qty = abs(int(fill.get("quantity") or 0))
+        bucket["fill_count"] = int(bucket["fill_count"]) + 1
+        bucket["quantity"] = int(bucket["quantity"]) + qty
+        bucket["notional"] = float(bucket["notional"]) + qty * float(fill.get("price") or 0.0)
+        product = str(fill.get("product") or "")
+        per_product = bucket["per_product"]
+        per_product[product] = int(per_product.get(product, 0)) + 1
+    return channels
+
+
+def _replay_summary_payload(replay) -> Dict[str, object]:
+    return {
+        "final_pnl": replay.summary.get("final_pnl"),
+        "fill_count": replay.summary.get("fill_count"),
+        "order_count": replay.summary.get("order_count"),
+        "limit_breaches": replay.summary.get("limit_breaches"),
+        "max_drawdown": replay.summary.get("max_drawdown"),
+        "final_positions": replay.summary.get("final_positions"),
+        "per_product": replay.summary.get("per_product"),
+        "fill_channels": _fill_channel_summary(replay.fills),
+        "candidate_promoted": False,
+    }
 
 
 def validate_round4_data(data_dir: Path, days: Sequence[int]) -> CheckResult:
@@ -79,6 +119,9 @@ def validate_round4_data(data_dir: Path, days: Sequence[int]) -> CheckResult:
         for field_name in ("duplicate_book_rows", "missing_products_count", "crossed_book_rows", "trade_rows_unknown_symbol", "trade_rows_invalid_currency", "trade_rows_invalid_quantity"):
             if int(row[field_name] or 0) != 0:
                 failures.append(f"day {day}: {field_name}={row[field_name]}")
+        for field_name in ("negative_price_levels", "zero_or_negative_mid_rows"):
+            if int(validation.get(field_name) or 0) != 0:
+                failures.append(f"day {day}: {field_name}={validation.get(field_name)}")
         day_rows.append(row)
     manifest_path = data_dir / "manifest.json"
     if not manifest_path.is_file():
@@ -139,6 +182,7 @@ def synthetic_round4_check(data_dir: Path, days: Sequence[int]) -> CheckResult:
 
 def render_markdown(report: Mapping[str, object]) -> str:
     summary = report.get("summary") or {}
+    final_decision = report.get("final_decision") or {}
     lines = [
         "# Round 4 Verification Report",
         "",
@@ -146,6 +190,8 @@ def render_markdown(report: Mapping[str, object]) -> str:
         f"- Data dir: `{report.get('data_dir')}`",
         f"- Output dir: `{report.get('output_dir')}`",
         f"- Overall status: **{summary.get('overall_status')}**",
+        f"- Backtester decision-grade: **{final_decision.get('backtester_decision_grade')}**",
+        f"- Candidate promoted: **{final_decision.get('candidate_promoted')}**",
         "",
         "| Check | Status | Error |",
         "| --- | --- | --- |",
@@ -153,6 +199,11 @@ def render_markdown(report: Mapping[str, object]) -> str:
     for check in report.get("checks", []):
         error = str(check.get("error") or "").replace("|", "\\|")
         lines.append(f"| `{check.get('name')}` | {check.get('status')} | {error} |")
+    limitations = report.get("known_limitations") or []
+    if limitations:
+        lines.extend(["", "## Known Limitations", ""])
+        for item in limitations:
+            lines.append(f"- {item}")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -164,14 +215,26 @@ def run_verify_round4(
     trader_path: Path,
     skip_mc: bool = False,
     full: bool = False,
+    fast: bool = False,
+    strict: bool = False,
 ) -> Dict[str, object]:
     repo_root = Path(__file__).resolve().parent.parent
     output_dir.mkdir(parents=True, exist_ok=True)
     checks: List[CheckResult] = []
     started = datetime.now(timezone.utc)
+    mode = "full" if full else "fast"
+    replay_days = tuple(days if full else (days[0],))
+    replay_tick_limit = None if full else 1200
+
+    try:
+        manifest = build_round4_manifest(data_dir=data_dir, output_dir=output_dir / "manifest", days=days)
+        checks.append(_pass("r4_manifest", status=manifest.get("status"), data_hash=manifest.get("data_hash"), artefact="manifest/manifest_report.json") if manifest.get("status") == "pass" else _fail("r4_manifest", "manifest reported issues", artefact="manifest/manifest_report.json", issues=manifest.get("issues")))
+    except Exception as exc:
+        checks.append(_fail("r4_manifest", str(exc)))
 
     checks.append(validate_round4_data(data_dir, days))
     checks.append(counterparty_presence_check(data_dir, days))
+    checks.append(_skip("test_summary", "pytest is not run inside verify-round4; run the recorded pytest commands as the verification gate"))
     try:
         research_summary = run_round4_counterparty_research(
             data_dir=data_dir,
@@ -186,46 +249,153 @@ def run_verify_round4(
     try:
         replay = run_replay(
             trader_spec=TraderSpec(name="noop_round4", path=noop_trader),
-            days=days,
+            days=replay_days,
             data_dir=data_dir,
             fill_model_name="base",
             perturbation=PerturbationConfig(),
             output_dir=output_dir / "replay_noop",
             run_name="r4_noop",
             round_number=4,
+            write_bundle=False,
+            historical_tick_limit=replay_tick_limit,
         )
         ok = replay.summary["final_pnl"] == 0 and replay.summary["fill_count"] == 0
-        checks.append(_pass("replay_noop") if ok else _fail("replay_noop", "no-op replay produced fills or PnL", summary=replay.summary))
+        replay_payload = _replay_summary_payload(replay)
+        replay_payload["days"] = list(replay_days)
+        replay_payload["historical_tick_limit"] = replay_tick_limit
+        _write_json(output_dir / "replay_noop_summary.json", replay_payload)
+        checks.append(_pass("replay_noop", artefact="replay_noop_summary.json", **replay_payload) if ok else _fail("replay_noop", "no-op replay produced fills or PnL", artefact="replay_noop_summary.json", summary=replay_payload))
     except Exception as exc:
         checks.append(_fail("replay_noop", str(exc)))
 
+    candidate_replay_payload: Dict[str, object] | None = None
     if trader_path.is_file():
         try:
             replay = run_replay(
                 trader_spec=TraderSpec(name=trader_path.stem, path=trader_path),
-                days=days,
+                days=replay_days,
                 data_dir=data_dir,
                 fill_model_name="base",
                 perturbation=PerturbationConfig(),
                 output_dir=output_dir / "replay_candidate",
                 run_name="r4_candidate_replay",
                 round_number=4,
+                write_bundle=False,
+                historical_tick_limit=replay_tick_limit,
             )
-            checks.append(_pass("replay_candidate", final_pnl=replay.summary["final_pnl"], fill_count=replay.summary["fill_count"], per_product=replay.summary.get("per_product", {})))
+            candidate_replay_payload = _replay_summary_payload(replay)
+            candidate_replay_payload["days"] = list(replay_days)
+            candidate_replay_payload["historical_tick_limit"] = replay_tick_limit
+            _write_json(output_dir / "replay_candidate_summary.json", candidate_replay_payload)
+            checks.append(_pass("replay_candidate", artefact="replay_candidate_summary.json", **candidate_replay_payload))
         except Exception as exc:
             checks.append(_fail("replay_candidate", str(exc)))
     else:
-        checks.append(CheckResult(name="replay_candidate", status="skip", error=f"trader not found: {trader_path}"))
+        checks.append(_skip("replay_candidate", f"trader not found: {trader_path}"))
+
+    if trader_path.is_file():
+        ablation_rows: List[Dict[str, object]] = []
+        ablation_specs = [
+            ("no_names", "base", PerturbationConfig(), {"CONFIG.use_counterparties": False}),
+            ("fill_none", "base", PerturbationConfig(trade_matching_mode="none"), None),
+            ("fill_worse", "base", PerturbationConfig(trade_matching_mode="worse"), None),
+        ]
+        if full:
+            ablation_specs.extend(
+                [
+                    ("fill_all", "base", PerturbationConfig(trade_matching_mode="all"), None),
+                    ("adverse", "low_fill_quality", PerturbationConfig(passive_fill_scale=0.7, missed_fill_additive=0.08, adverse_selection_ticks=1), None),
+                    ("harsh_adverse", "low_fill_quality", PerturbationConfig(passive_fill_scale=0.5, missed_fill_additive=0.15, adverse_selection_ticks=2, slippage_multiplier=1.5), None),
+                    ("hydrogel_shift_down", "base", PerturbationConfig(shock_tick=50, hydrogel_shock=-60.0), None),
+                    ("hydrogel_shift_up", "base", PerturbationConfig(shock_tick=50, hydrogel_shock=60.0), None),
+                ]
+            )
+        ablation_days = replay_days
+        try:
+            for name, fill_model_name, perturbation, overrides in ablation_specs:
+                try:
+                    replay = run_replay(
+                        trader_spec=TraderSpec(name=name, path=trader_path, overrides=overrides),
+                        days=ablation_days,
+                        data_dir=data_dir,
+                        fill_model_name=fill_model_name,
+                        perturbation=perturbation,
+                        output_dir=output_dir / "ablations" / name,
+                        run_name=f"r4_ablation_{name}",
+                        round_number=4,
+                        write_bundle=False,
+                        historical_tick_limit=replay_tick_limit,
+                    )
+                    ablation_rows.append(
+                        {
+                            "name": name,
+                            "status": "pass",
+                            "days": list(ablation_days),
+                            "historical_tick_limit": replay_tick_limit,
+                            "fill_model": fill_model_name,
+                            "perturbation": perturbation.to_dict(),
+                            "final_pnl": replay.summary.get("final_pnl"),
+                            "fill_count": replay.summary.get("fill_count"),
+                            "limit_breaches": replay.summary.get("limit_breaches"),
+                            "fill_channels": _fill_channel_summary(replay.fills),
+                        }
+                    )
+                except Exception as exc:
+                    row_status = "skip" if overrides else "fail"
+                    ablation_rows.append(
+                        {
+                            "name": name,
+                            "status": row_status,
+                            "days": list(ablation_days),
+                            "historical_tick_limit": replay_tick_limit,
+                            "fill_model": fill_model_name,
+                            "perturbation": perturbation.to_dict(),
+                            "error": str(exc),
+                        }
+                    )
+            _write_json(output_dir / "ablation_summary.json", {"rows": ablation_rows, "candidate_promoted": False})
+            failed_ablation_rows = [row for row in ablation_rows if row.get("status") == "fail"]
+            if failed_ablation_rows:
+                checks.append(_fail("ablation", "one or more ablation rows failed", row_count=len(ablation_rows), artefact="ablation_summary.json"))
+            else:
+                checks.append(_pass("ablation", row_count=len(ablation_rows), artefact="ablation_summary.json"))
+        except Exception as exc:
+            _write_json(output_dir / "ablation_summary.json", {"rows": ablation_rows, "error": str(exc), "candidate_promoted": False})
+            checks.append(_fail("ablation", str(exc), completed_rows=len(ablation_rows), artefact="ablation_summary.json"))
+    else:
+        checks.append(_skip("ablation", "missing trader"))
 
     try:
         checks.append(synthetic_round4_check(data_dir, days))
     except Exception as exc:
         checks.append(_fail("synthetic_round4", str(exc)))
 
-    if skip_mc or not trader_path.is_file():
-        checks.append(CheckResult(name="mc_smoke", status="skip", error="skipped by request or missing trader"))
+    mc_validation_status = "skip"
+    if skip_mc:
+        checks.append(_skip("mc_validation", "skipped by request"))
+        checks.append(_skip("mc_smoke", "skipped by request"))
+    elif not trader_path.is_file():
+        checks.append(_skip("mc_validation", "missing trader"))
+        checks.append(_skip("mc_smoke", "missing trader"))
     else:
-        sessions = 16 if full else 4
+        try:
+            mc_validation = run_round4_mc_validation(
+                data_dir=data_dir,
+                output_dir=output_dir / "mc_validation",
+                days=days,
+                preset="full" if full else "fast",
+            )
+            mc_validation_status = str(mc_validation.get("status"))
+            status = mc_validation_status
+            if status == "fail":
+                checks.append(_fail("mc_validation", "MC validation failed", artefact="mc_validation/mc_validation_report.json"))
+            elif status == "warn":
+                checks.append(CheckResult(name="mc_validation", status="warn", detail={"artefact": "mc_validation/mc_validation_report.json"}, error="MC validation has resemblance warnings"))
+            else:
+                checks.append(_pass("mc_validation", artefact="mc_validation/mc_validation_report.json"))
+        except Exception as exc:
+            checks.append(_fail("mc_validation", str(exc)))
+        sessions = 8 if full else 2
         try:
             a = run_monte_carlo(
                 trader_spec=TraderSpec(name=trader_path.stem, path=trader_path),
@@ -234,11 +404,13 @@ def run_verify_round4(
                 days=(days[0],),
                 data_dir=data_dir,
                 fill_model_name="base",
-                perturbation=PerturbationConfig(synthetic_tick_limit=160, counterparty_edge_strength=0.25),
+                perturbation=PerturbationConfig(synthetic_tick_limit=300 if full else 120, counterparty_edge_strength=0.25),
                 output_dir=output_dir / "mc_smoke_a",
                 base_seed=20260426,
                 run_name="r4_mc_smoke_a",
                 round_number=4,
+                monte_carlo_backend="classic",
+                write_bundle=False,
             )
             b = run_monte_carlo(
                 trader_spec=TraderSpec(name=trader_path.stem, path=trader_path),
@@ -247,30 +419,59 @@ def run_verify_round4(
                 days=(days[0],),
                 data_dir=data_dir,
                 fill_model_name="base",
-                perturbation=PerturbationConfig(synthetic_tick_limit=160, counterparty_edge_strength=0.25),
+                perturbation=PerturbationConfig(synthetic_tick_limit=300 if full else 120, counterparty_edge_strength=0.25),
                 output_dir=output_dir / "mc_smoke_b",
                 base_seed=20260426,
                 run_name="r4_mc_smoke_b",
                 round_number=4,
+                monte_carlo_backend="classic",
+                write_bundle=False,
             )
             pnl_a = [session.summary["final_pnl"] for session in a]
             pnl_b = [session.summary["final_pnl"] for session in b]
+            _write_json(output_dir / "mc_smoke_summary.json", {"pnl_a": pnl_a, "pnl_b": pnl_b, "sessions": sessions})
             if pnl_a != pnl_b:
                 checks.append(_fail("mc_smoke", "identical seed MC runs differ", pnl_a=pnl_a, pnl_b=pnl_b))
             else:
-                checks.append(_pass("mc_smoke", sessions=sessions, mean=sum(pnl_a) / len(pnl_a), min=min(pnl_a), max=max(pnl_a)))
+                checks.append(_pass("mc_smoke", sessions=sessions, mean=sum(pnl_a) / len(pnl_a), min=min(pnl_a), max=max(pnl_a), artefact="mc_smoke_summary.json"))
         except Exception as exc:
             checks.append(_fail("mc_smoke", str(exc)))
 
     passed = sum(1 for check in checks if check.status == "pass")
     failed = sum(1 for check in checks if check.status == "fail")
     skipped = sum(1 for check in checks if check.status == "skip")
+    warnings = sum(1 for check in checks if check.status == "warn")
+    decision_grade_blockers: List[str] = []
+    if failed:
+        decision_grade_blockers.append("one or more verification checks failed")
+    if skipped:
+        decision_grade_blockers.append("one or more verification checks were skipped")
+    if warnings:
+        decision_grade_blockers.append("one or more verification checks produced warnings")
+    if skip_mc:
+        decision_grade_blockers.append("MC validation was skipped")
+    if mc_validation_status != "pass":
+        decision_grade_blockers.append("MC validation did not pass cleanly")
+    decision_grade = not decision_grade_blockers
+    known_limitations = [
+        "Passive fills are inferred from trade price versus contemporaneous visible book; hidden queue priority is not observable.",
+        "Counterparty names are metadata and are not treated as aggressor-side proof.",
+        "MC validation checks reproducibility and resemblance, but cannot prove equivalence to the official simulator.",
+        "No trading strategy is promoted by this harness.",
+    ]
     report: Dict[str, object] = {
         "generated_at": started.isoformat(),
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "data_dir": str(data_dir),
         "output_dir": str(output_dir),
         "days": [int(day) for day in days],
+        "mode": mode,
+        "replay_scope": {
+            "days": [int(day) for day in replay_days],
+            "historical_tick_limit": replay_tick_limit,
+            "truncated": replay_tick_limit is not None,
+        },
+        "strict": bool(strict),
         "python_executable": sys.executable,
         "provenance": capture_provenance(start=repo_root),
         "summary": {
@@ -278,8 +479,17 @@ def run_verify_round4(
             "passed": passed,
             "failed": failed,
             "skipped": skipped,
+            "warnings": warnings,
         },
         "checks": [check.to_dict() for check in checks],
+        "replay_summary": candidate_replay_payload,
+        "known_limitations": known_limitations,
+        "final_decision": {
+            "backtester_decision_grade": decision_grade,
+            "decision_grade_blockers": decision_grade_blockers,
+            "candidate_promoted": False,
+            "strategy_promotion_decision": "no",
+        },
     }
     (output_dir / "verification_report.json").write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
     (output_dir / "verification_report.md").write_text(render_markdown(report), encoding="utf-8")
