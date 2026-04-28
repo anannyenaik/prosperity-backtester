@@ -12,6 +12,7 @@ Result: the active Round 4 strategy files are limited to the current candidate a
 - Accepted reference: `strategies/archive/round4/accepted/r4_hydro_velvet_m4_candidate.py`
 - Research reference: `strategies/archive/round4/research/r4_voucher_bs_candidate.py`
 - Rejected reference: `strategies/archive/round4/rejected/r4_mark22_5400_candidate.py`
+- Rejected reference: `strategies/archive/round4/rejected/r4_voucher_central_deep_hardened_candidate.py`
 
 ## Latest Accepted Modules
 
@@ -26,4 +27,5 @@ Result: the active Round 4 strategy files are limited to the current candidate a
 - `r4_hydro_velvet_m4_candidate.py` is a frozen accepted Hydro + VELVET M4 reference, superseded by the voucher-risk-hardened candidate.
 - `r4_voucher_bs_candidate.py` remains research-only: BS diagnostics accepted, BS trading rejected.
 - `r4_mark22_5400_candidate.py` remains research-only/rejected: Mark22 interception rejected.
-- No Hydro, VELVET, voucher, BS, Mark22, risk, parameter, or trading logic changed in this hygiene pass.
+- `r4_voucher_central_deep_hardened_candidate.py` remains research-only/rejected: central/deep voucher hardening failed acceptance gates.
+- No Hydro, VELVET, voucher, BS, Mark22, central/deep, risk, parameter, or trading logic changed in this hygiene pass.

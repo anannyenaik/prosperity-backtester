@@ -17,8 +17,11 @@ Result: archived Round 4 strategy files are retained for comparison only and are
 - `rejected/r4_combined_velvet_candidate.py`: first combined VELVET attempt, rejected after forensic review.
 - `rejected/r4_velvet_phase3_candidate.py`: Phase-3 VELVET diagnostic candidate, superseded by the accepted M4 reference.
 - `rejected/r4_mark22_5400_candidate.py`: Mark22 interception research candidate, rejected.
+- `rejected/r4_voucher_central_deep_hardened_candidate.py`: central/deep voucher hardening research candidate, rejected. It is research-only and not an active submission file.
 
 ## Active Root Files
 
 - `strategies/r4_voucher_risk_hardened_candidate.py`: active current candidate.
 - `strategies/r4_trader.py`: untouched baseline and control.
+
+No strategy logic changed in the hygiene pass that archived the rejected central/deep voucher candidate.
